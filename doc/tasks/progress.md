@@ -23,12 +23,12 @@
 
 ## UI 模块
 
-- [ ] **UI-01 — 设计令牌 + 基础组件** (20 项子任务) — [查看详情](../ui-design/tasks/ui-01-design-foundation.md)
-- [ ] **UI-02 — 像素资源（角色+图标+字体）** (14 项子任务) — [查看详情](../ui-design/tasks/ui-02-pixel-assets.md)
-- [ ] **UI-03 — 打卡主界面** (23 项子任务) — [查看详情](../ui-design/tasks/ui-03-checkin-page.md)
-- [ ] **UI-04 — 历史页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-04-history-page.md)
-- [ ] **UI-05 — 对赌页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-05-bet-page.md)
-- [ ] **UI-06 — 设置页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-06-settings-page.md)
+- [x] **UI-01 — 设计令牌 + 基础组件** (20 项子任务) — [查看详情](../ui-design/tasks/ui-01-design-foundation.md)
+- [x] **UI-02 — 像素资源（角色+图标+字体）** (14 项子任务) — [查看详情](../ui-design/tasks/ui-02-pixel-assets.md)
+- [x] **UI-03 — 打卡主界面** (23 项子任务) — [查看详情](../ui-design/tasks/ui-03-checkin-page.md)
+- [x] **UI-04 — 历史页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-04-history-page.md)
+- [x] **UI-05 — 对赌页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-05-bet-page.md)
+- [x] **UI-06 — 设置页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-06-settings-page.md)
 - [ ] **UI-07 — 引导流程 + 全局整合** (30 项子任务) — [查看详情](../ui-design/tasks/ui-07-integration.md)
 
 ---

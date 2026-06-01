@@ -36,12 +36,16 @@ class BetService:
 
     # ── 任务管理 ──
 
-    def create_task(self, week_start: str, task_desc: str) -> BetTask:
-        task = BetTask(week_start=week_start, task_desc=task_desc)
+    def create_task(self, week_start: str, task_desc: str, target_qty: int = 1) -> BetTask:
+        task = BetTask(week_start=week_start, task_desc=task_desc, target_qty=target_qty)
         return self._bet_repo.create_task(task)
 
     def complete_task(self, task_id: int) -> BetTask | None:
         return self._bet_repo.complete_task(task_id)
+
+    def update_task_progress(self, task_id: int, current_qty: int) -> BetTask | None:
+        """更新任务进度，自动判断是否完成。"""
+        return self._bet_repo.update_task_progress(task_id, current_qty)
 
     def delete_task(self, task_id: int) -> None:
         self._bet_repo.delete_task(task_id)
@@ -144,10 +148,29 @@ class BetService:
         tasks = self._bet_repo.get_tasks_by_week(week_start)
         config = self._bet_repo.get_config(week_start)
         completed = sum(1 for t in tasks if t.is_completed)
+        extra_count = sum(1 for t in tasks if t.is_extra and t.is_completed)
+        total_tasks = len(tasks)
+        completion_rate = (completed / total_tasks * 100) if total_tasks > 0 else 0.0
+
+        base_reward = config.base_reward if config else float(self._get_setting("bet_base_reward"))
+        extra_reward = config.extra_reward if config else float(self._get_setting("bet_extra_reward"))
+        penalty_amt = config.penalty if config else float(self._get_setting("bet_penalty"))
+
+        uncompleted = total_tasks - completed
+        total_reward_estimate = 0.0
+        if uncompleted == 0 and completed > 0:
+            total_reward_estimate = base_reward + extra_reward * extra_count
+        elif uncompleted > 0:
+            total_reward_estimate = -penalty_amt
+
         return {
             "week_start": week_start,
-            "total_tasks": len(tasks),
+            "total_tasks": total_tasks,
             "completed": completed,
+            "completed_count": completed,
+            "extra_count": extra_count,
+            "completion_rate": completion_rate,
+            "total_reward": total_reward_estimate,
             "config": config,
         }
 

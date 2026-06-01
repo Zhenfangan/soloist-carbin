@@ -35,6 +35,8 @@ class BetTask:
     """对赌任务 — 对应 bet_tasks 表"""
     week_start: str
     task_desc: str
+    target_qty: int = 1
+    current_qty: int = 0
     is_completed: int = 0
     is_extra: int = 0
     id: int | None = None

@@ -15,9 +15,10 @@ class BetRepo(BaseRepo):
 
     def create_task(self, task: BetTask) -> BetTask:
         rid = self._insert(
-            """INSERT INTO bet_tasks (week_start, task_desc, is_completed, is_extra)
-               VALUES (?, ?, ?, ?)""",
-            (task.week_start, task.task_desc, task.is_completed, task.is_extra),
+            """INSERT INTO bet_tasks (week_start, task_desc, target_qty, current_qty, is_completed, is_extra)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (task.week_start, task.task_desc, task.target_qty, task.current_qty,
+             task.is_completed, task.is_extra),
         )
         task.id = rid
         return task
@@ -31,6 +32,20 @@ class BetRepo(BaseRepo):
     def complete_task(self, task_id: int) -> BetTask | None:
         self._execute(
             "UPDATE bet_tasks SET is_completed = 1 WHERE id = ?", (task_id,)
+        )
+        row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
+        return self._row_to_task(row) if row else None
+
+    def update_task_progress(self, task_id: int, current_qty: int) -> BetTask | None:
+        """更新任务进度，如果 current_qty >= target_qty 则自动标记完成。"""
+        task_row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
+        if not task_row:
+            return None
+        target = task_row["target_qty"]
+        is_completed = 1 if current_qty >= target else task_row["is_completed"]
+        self._execute(
+            "UPDATE bet_tasks SET current_qty = ?, is_completed = ? WHERE id = ?",
+            (current_qty, is_completed, task_id),
         )
         row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
         return self._row_to_task(row) if row else None
@@ -74,6 +89,8 @@ class BetRepo(BaseRepo):
             id=row["id"],
             week_start=row["week_start"],
             task_desc=row["task_desc"],
+            target_qty=row["target_qty"],
+            current_qty=row["current_qty"],
             is_completed=row["is_completed"],
             is_extra=row["is_extra"],
         )

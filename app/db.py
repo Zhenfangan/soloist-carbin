@@ -46,6 +46,8 @@ DDL_STATEMENTS = [
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         week_start    TEXT NOT NULL,
         task_desc     TEXT NOT NULL,
+        target_qty    INTEGER DEFAULT 1,
+        current_qty   INTEGER DEFAULT 0,
         is_completed  INTEGER DEFAULT 0,
         is_extra      INTEGER DEFAULT 0,
         created_at    TEXT DEFAULT CURRENT_TIMESTAMP
