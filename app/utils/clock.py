@@ -41,6 +41,9 @@ class SystemClock(Clock):
         return self.now().strftime("%H:%M:%S")
 
 
+RealClock = SystemClock  # 便捷别名，供应用层使用
+
+
 class SimulatedClock(Clock):
     """测试环境：可手动控制的时间"""
 

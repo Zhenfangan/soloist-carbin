@@ -29,7 +29,7 @@
 - [x] **UI-04 — 历史页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-04-history-page.md)
 - [x] **UI-05 — 对赌页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-05-bet-page.md)
 - [x] **UI-06 — 设置页** (16 项子任务) — [查看详情](../ui-design/tasks/ui-06-settings-page.md)
-- [ ] **UI-07 — 引导流程 + 全局整合** (30 项子任务) — [查看详情](../ui-design/tasks/ui-07-integration.md)
+- [x] **UI-07 — 引导流程 + 全局整合** (30 项子任务) — [查看详情](../ui-design/tasks/ui-07-integration.md)
 
 ---
 
