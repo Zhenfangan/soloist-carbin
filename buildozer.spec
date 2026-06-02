@@ -14,6 +14,7 @@ android.minapi = 24
 android.allow_backup = True
 android.logcat_filters = *:S python:D
 p4a.branch = master
+android.accept_sdk_license = True
 android.presplash_color = #FFF8E8
 android.splash_color = #FFF8E8
 
