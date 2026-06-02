@@ -1,0 +1,52 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            python3-pip python3-dev build-essential \
+            autoconf automake libtool libffi-dev \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libssl-dev libsqlite3-dev \
+            openjdk-17-jdk-headless zip unzip git \
+            libltdl-dev cmake
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install buildozer cython pillow
+
+      - name: Fix main.py entry point
+        run: |
+          # Ensure android.txt module requirements are satisfied
+          echo "Cython" > requirements.txt
+          echo "pillow" >> requirements.txt
+
+      - name: Build APK
+        run: |
+          buildozer android debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: soloist-carbin-apk
+          path: bin/*.apk
+          retention-days: 30
