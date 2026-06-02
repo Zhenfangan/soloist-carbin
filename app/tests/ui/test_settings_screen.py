@@ -509,9 +509,14 @@ class TestSettingsScreen:
         """开发面板显示所有设置项。"""
         svc = MockSettingsService()
         screen = SettingsScreen(settings_service=svc)
+        # verify no exception
         screen._show_dev_panel()
-        # ModalView 已打开，确认不崩溃
-        # 开发面板会显示 JSON 格式的设置数据
+        # 验证版本点击计数器已重置
+        assert screen._version_clicks == 0
+        # 确认 settings_service.get_all 返回了数据
+        data = svc.get_all()
+        assert len(data) > 0
+        assert "morning_start" in data
 
 
 # ============================================================

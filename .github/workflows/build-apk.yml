@@ -8,8 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout code
@@ -34,10 +32,23 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install buildozer cython pillow
+          pip install buildozer cython
+
+      - name: Cache Buildozer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-
 
       - name: Build APK
         run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          export ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
           buildozer android debug
         timeout-minutes: 30
 

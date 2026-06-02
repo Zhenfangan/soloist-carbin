@@ -9,15 +9,20 @@ from __future__ import annotations
 from typing import Any
 
 from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
 from app.ui.tokens import (
+    BORDER_WIDTH,
     CARD_PADDING,
+    CARD_WHITE,
+    COLORS,
     FONT_SIZE_BODY,
     GRID_UNIT,
+    SHADOW_BLACK,
     TEXT_BROWN,
 )
 
@@ -101,6 +106,10 @@ class CollapsibleGroup(FloatLayout):  # type: ignore[misc]
         # 初始高度
         self._update_height()
 
+        # 绑定重绘
+        self.bind(pos=self._redraw, size=self._redraw)
+        self._redraw()
+
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
         h = hex_color.lstrip("#")
@@ -173,6 +182,30 @@ class CollapsibleGroup(FloatLayout):  # type: ignore[misc]
     def _update_height(self, *args: Any) -> None:
         visible_content = self._content_box.height if not self._collapsed else 0
         self.height = self._header_height + visible_content
+        self._redraw()
+
+    def _redraw(self, *args: Any) -> None:
+        """绘制像素卡片背景 + 凸起边框 + 阴影。"""
+        self.canvas.before.clear()
+        x, y = self.pos
+        w, h = self.size
+        bw = BORDER_WIDTH
+
+        with self.canvas.before:
+            # 阴影
+            Color(*self._to_rgba(SHADOW_BLACK))
+            Rectangle(pos=(x + 2, y - 2), size=(w, h))
+            # 卡片背景
+            Color(*self._to_rgba(CARD_WHITE))
+            Rectangle(pos=(x, y), size=(w, h))
+            # 凸起边框: 亮面 top+left
+            Color(*self._to_rgba("#FFFFFF"))
+            Rectangle(pos=(x, y + h - bw), size=(w, bw))
+            Rectangle(pos=(x, y), size=(bw, h))
+            # 暗面 bottom+right
+            Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
+            Rectangle(pos=(x, y), size=(w, bw))
+            Rectangle(pos=(x + w - bw, y), size=(bw, h))
 
     def _on_header_touch(self, instance: Any, touch: Any) -> bool:
         if self._header.collide_point(*touch.pos):

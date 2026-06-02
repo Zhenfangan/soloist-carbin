@@ -27,7 +27,7 @@ from app.services.history_service import HistoryService  # noqa: E402
 from app.services.settings_service import SettingsService  # noqa: E402
 from app.services.sync_service import SyncService  # noqa: E402
 from app.ui.assets.loader import preload_all  # noqa: E402
-from app.ui.fonts import load_pixel_fonts  # noqa: E402
+from app.ui.fonts import apply_global_font  # noqa: E402
 from app.ui.navigation import AppScreenManager, BottomTabBar  # noqa: E402
 from app.ui.screens.bet_screen import BetScreen  # noqa: E402
 from app.ui.screens.checkin_screen import CheckinScreen  # noqa: E402
@@ -55,8 +55,8 @@ class SoloistApp(App):  # type: ignore[misc]
         # 初始化数据库
         init_db(self.DB_PATH)
 
-        # 加载字体 + 预加载资源
-        load_pixel_fonts()
+        # 加载字体 (全局生效) + 预加载资源
+        apply_global_font()
         preload_all()
 
         # 创建 Service

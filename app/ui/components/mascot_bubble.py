@@ -48,7 +48,7 @@ class MascotBubble(FloatLayout):  # type: ignore[misc]
         self._message = message
         self._bubble_position = position
 
-        # 角色 sprite 占位 (阶段 2 替换为实际 sprite)
+        # 角色 sprite
         self._sprite = Image(
             size_hint=(None, None),
             size=(SPRITE_SIZE, SPRITE_SIZE),
@@ -56,6 +56,7 @@ class MascotBubble(FloatLayout):  # type: ignore[misc]
             allow_stretch=True,
             keep_ratio=False,
         )
+        self._load_sprite_texture(mascot_id)
 
         # 对话气泡
         self._bubble_label = Label(
@@ -92,6 +93,17 @@ class MascotBubble(FloatLayout):  # type: ignore[misc]
     def set_mascot(self, mascot_id: str) -> None:
         """切换角色。"""
         self._mascot_id = mascot_id
+        self._load_sprite_texture(mascot_id)
+
+    def _load_sprite_texture(self, mascot_id: str) -> None:
+        """加载角色精灵第一帧作为静态展示。"""
+        try:
+            from app.ui.assets.loader import SpriteLoader
+            frame = SpriteLoader.load_frame(mascot_id, 0)
+            if frame and frame.texture:
+                self._sprite.texture = frame.texture
+        except Exception:
+            pass
 
     def _redraw(self, *args: Any) -> None:
         """重绘气泡的像素边框。"""

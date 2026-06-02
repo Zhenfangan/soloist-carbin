@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
@@ -24,6 +25,7 @@ from app.ui.components.settlement_dialog import SettlementDialog
 from app.ui.components.week_summary_header import WeekSummaryHeader
 from app.ui.tokens import (
     CARD_PADDING,
+    CARD_WHITE,
     COLORS,
     FONT_SIZE_SMALL,
     GRID_UNIT,
@@ -55,6 +57,12 @@ class BetScreen(ScrollView):  # type: ignore[misc]
             padding=[CARD_PADDING, GRID_UNIT, CARD_PADDING, GRID_UNIT * 2],
         )
         self._layout.bind(minimum_height=self._layout.setter("height"))
+
+        # 白色背景
+        with self._layout.canvas.before:
+            Color(*self._to_rgba(CARD_WHITE))
+            self._layout_bg = Rectangle(size=self._layout.size, pos=self._layout.pos)
+        self._layout.bind(size=self._update_layout_bg, pos=self._update_layout_bg)
 
         self.add_widget(self._layout)
 
@@ -252,3 +260,7 @@ class BetScreen(ScrollView):  # type: ignore[misc]
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
         h = hex_color.lstrip("#")
         return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0, alpha)
+
+    def _update_layout_bg(self, instance: Any, value: Any) -> None:
+        self._layout_bg.size = instance.size
+        self._layout_bg.pos = instance.pos

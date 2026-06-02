@@ -17,13 +17,19 @@ class TestTabButton:
         assert btn._label.text == "打卡"
 
     def test_tab_active_state(self) -> None:
+        from app.ui.navigation import _to_rgba
+        from app.ui.tokens import PRIMARY_YELLOW, TEXT_GRAY
+
         btn = TabButton(icon_name="tab_checkin", text="打卡")
         btn.set_active(True)
+        # active = 明黄色
+        expected_yellow = _to_rgba(PRIMARY_YELLOW)
+        assert list(btn._label.color) == list(expected_yellow)
 
-        # active = yellow
-        assert btn._label.color[:3] != (0, 0, 0)
         btn.set_active(False)
-        # inactive = gray
+        # inactive = 灰色
+        expected_gray = _to_rgba(TEXT_GRAY)
+        assert list(btn._label.color) == list(expected_gray)
 
 
 class TestBottomTabBar:

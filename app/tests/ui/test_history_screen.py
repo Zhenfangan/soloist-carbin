@@ -21,6 +21,7 @@ from app.ui.components.day_card import DayCard
 from app.ui.components.history_tabs import HistoryTabs
 from app.ui.components.month_card import MonthCard
 from app.ui.screens.history_screen import HistoryScreen
+from app.utils.clock import SimulatedClock
 
 # ================================================================
 # Mock HistoryService
@@ -433,5 +434,136 @@ class TestHistoryScreen:
         """月视图渲染日历格子。"""
         screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
         screen._switch_tab(1)
-        # 日历区域应有 widgets (header + weeks + summaries)
+        # 日历区域应有: 表头(1行) + 日历行(周数) + 汇总行(1)
+        children = screen._month_calendar.children
+        assert len(children) >= 3, f"expected >= 3 children (header + weeks + summary), got {len(children)}"
+        # 第一行应为星期表头
+        header_row = children[-1]  # Kivy children 倒序，最后一个是最早添加的
+        assert len(header_row.children) == 7, f"expected 7 day headers, got {len(header_row.children)}"
+
+
+# ================================================================
+# HistoryScreen 集成测试 (使用真实 Service + 内存数据库)
+# ================================================================
+
+
+class TestHistoryScreenIntegration:
+    """使用真实 HistoryService + 内存数据库的集成测试。"""
+
+    def test_screen_loads_week_data(self, temp_db: str, clock: SimulatedClock) -> None:
+        """验证 HistoryScreen 可以从真实数据库加载周数据。"""
+        from datetime import datetime
+
+        from app.db import get_db
+        from app.repositories.checkin_repo import CheckinRepo
+        from app.repositories.ledger_repo import LedgerRepo
+        from app.repositories.shooting_repo import ShootingRepo
+        from app.services.history_service import HistoryService
+
+        # 设置时钟到周一
+        clock.set_time(datetime(2026, 6, 1, 9, 0, 0))
+
+        # 插入打卡记录
+        conn = get_db(temp_db)
+        conn.execute(
+            "INSERT INTO checkins (checkin_date, period, checkin_time, checkout_time, status) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("2026-06-01", "morning", "09:00", "12:00", "normal"),
+        )
+        conn.execute(
+            "INSERT INTO checkins (checkin_date, period, checkin_time, checkout_time, status) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("2026-06-01", "afternoon", "14:00", "18:00", "normal"),
+        )
+        conn.execute(
+            "INSERT INTO checkins (checkin_date, period, checkin_time, checkout_time, status) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("2026-06-02", "morning", "09:30", "12:00", "late"),
+        )
+        # 插入账本记录
+        conn.execute(
+            "INSERT INTO ledger_entries (entry_date, type, amount, description) "
+            "VALUES (?, ?, ?, ?)",
+            ("2026-06-01", "reward", 50.0, "正常出勤奖励"),
+        )
+        conn.execute(
+            "INSERT INTO ledger_entries (entry_date, type, amount, description) "
+            "VALUES (?, ?, ?, ?)",
+            ("2026-06-02", "penalty", -20.0, "迟到罚款"),
+        )
+        conn.commit()
+
+        # 创建真实 Service
+        checkin_repo = CheckinRepo(temp_db)
+        ledger_repo = LedgerRepo(temp_db)
+        shooting_repo = ShootingRepo(temp_db)
+        history_service = HistoryService(checkin_repo, ledger_repo, shooting_repo)
+
+        # 创建页面
+        screen = HistoryScreen(history_service=history_service)
+        assert screen._service is history_service
+        assert screen._tab_index == 0
+
+        # 周视图应加载 DayCard 列表
+        assert len(screen._week_card_container.children) > 0
+
+        # 验证合计
+        assert "30" in screen._week_total_label.text or "+30" in screen._week_total_label.text
+
+    def test_screen_switches_to_month_view(self, temp_db: str, clock: SimulatedClock) -> None:
+        """验证从周视图切换到月视图使用真实数据。"""
+        from datetime import datetime
+
+        from app.db import get_db
+        from app.repositories.checkin_repo import CheckinRepo
+        from app.repositories.ledger_repo import LedgerRepo
+        from app.repositories.shooting_repo import ShootingRepo
+        from app.services.history_service import HistoryService
+
+        clock.set_time(datetime(2026, 6, 1, 9, 0, 0))
+
+        # 插入 6 月的打卡记录
+        conn = get_db(temp_db)
+        conn.execute(
+            "INSERT INTO checkins (checkin_date, period, checkin_time, checkout_time, status) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ("2026-06-01", "morning", "09:00", "12:00", "normal"),
+        )
+        conn.commit()
+
+        checkin_repo = CheckinRepo(temp_db)
+        ledger_repo = LedgerRepo(temp_db)
+        shooting_repo = ShootingRepo(temp_db)
+        history_service = HistoryService(checkin_repo, ledger_repo, shooting_repo)
+
+        screen = HistoryScreen(history_service=history_service)
+        screen._switch_tab(1)  # 切到月视图
+
+        assert screen._tab_index == 1
+        assert screen._month_view.opacity == 1.0
+        # 日历区域应有内容
         assert len(screen._month_calendar.children) > 0
+
+    def test_screen_navigates_year_view(self, temp_db: str, clock: SimulatedClock) -> None:
+        """验证年视图使用真实数据渲染 12 张 MonthCard。"""
+        from datetime import datetime
+
+        from app.repositories.checkin_repo import CheckinRepo
+        from app.repositories.ledger_repo import LedgerRepo
+        from app.repositories.shooting_repo import ShootingRepo
+        from app.services.history_service import HistoryService
+
+        clock.set_time(datetime(2026, 6, 1, 9, 0, 0))
+
+        checkin_repo = CheckinRepo(temp_db)
+        ledger_repo = LedgerRepo(temp_db)
+        shooting_repo = ShootingRepo(temp_db)
+        history_service = HistoryService(checkin_repo, ledger_repo, shooting_repo)
+
+        screen = HistoryScreen(history_service=history_service)
+        screen._switch_tab(2)  # 切到年视图
+
+        assert screen._tab_index == 2
+        assert screen._year_view.opacity == 1.0
+        # 应渲染 12 个月
+        assert len(screen._year_card_container.children) == 12

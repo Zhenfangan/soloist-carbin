@@ -81,38 +81,61 @@ class TestPixelTransitions:
     """7.3~7.5 过渡动画测试"""
 
     def test_pixel_expand_changes_height(self) -> None:
+        from kivy.clock import Clock
         from kivy.uix.widget import Widget
 
         w = Widget()
         w.height = 48
         pixel_expand(w, 16, duration=0.1)
-        # After scheduling, height should change eventually
-        # We just verify no exception
+
+        # 推进时钟让 schedule_once 回调执行
+        for _ in range(10):
+            Clock.tick()
+        # 展开后高度应增加
+        assert w.height > 48, f"expected height > 48, got {w.height}"
 
     def test_pixel_fade_in_sets_opacity(self) -> None:
+        from kivy.clock import Clock
         from kivy.uix.widget import Widget
 
         w = Widget()
-        w.opacity = 0
+        w.opacity = 0.0
         pixel_fade_in(w, duration=0.05)
-        # Animation scheduled, verify no exception
+
+        # 推进时钟让动画完成 (duration=0.05s)
+        for _ in range(10):
+            Clock.tick()
+        assert w.opacity > 0.0, f"expected opacity > 0, got {w.opacity}"
 
     def test_pixel_fade_out_sets_opacity(self) -> None:
+        from kivy.clock import Clock
         from kivy.uix.widget import Widget
 
         w = Widget()
-        w.opacity = 1
+        w.opacity = 1.0
         pixel_fade_out(w, duration=0.05)
-        # Animation scheduled, verify no exception
+
+        for _ in range(10):
+            Clock.tick()
+        assert w.opacity < 1.0, f"expected opacity < 1, got {w.opacity}"
 
     def test_pixel_slide_in_sets_position(self) -> None:
+        from kivy.clock import Clock
         from kivy.uix.widget import Widget
 
         w = Widget()
         w.size = (100, 50)
-        w.pos = (0, 0)
+        w.pos = (200, 100)
+
+        # pixel_slide_in 从右侧滑入: start_pos = (200 + 100, 100) = (300, 100)
         pixel_slide_in(w, direction="left", duration=0.05)
-        # Animation scheduled, verify no exception
+        # 立即验证起始位置被偏移
+        assert w.x == 300, f"expected x=300 (shifted right), got {w.x}"
+
+        for _ in range(10):
+            Clock.tick()
+        # 动画完成后应回到原位置
+        assert w.x < 300, f"expected x < 300 after slide, got {w.x}"
 
 
 class TestSpritePlayer:
@@ -126,5 +149,5 @@ class TestSpritePlayer:
             assert not player.animator.is_playing
             player.play()
             assert player.animator.is_playing
-            player.stop()
+            player.stop()  # type: ignore[unreachable]
             assert not player.animator.is_playing

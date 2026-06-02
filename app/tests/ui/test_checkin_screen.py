@@ -561,6 +561,10 @@ class TestCheckinScreen:
                            mock_report_service: MagicMock,
                            mock_shooting_service: MagicMock) -> None:
         """测试请假流程。"""
+        from app.utils.clock import SimulatedClock, set_clock
+        sim_clock = SimulatedClock(start_time=datetime(2026, 6, 1, 8, 0, 0))
+        set_clock(sim_clock)
+
         screen = CheckinScreen(
             checkin_service=mock_checkin_service,
             promise_service=mock_promise_service,
@@ -572,7 +576,8 @@ class TestCheckinScreen:
 
         screen._on_leave("morning")
         Clock.tick()
-        assert mock_checkin_service.apply_leave.called or True  # 至少不会报错
+        assert mock_checkin_service.apply_leave.called
+        mock_checkin_service.apply_leave.assert_called_with("2026-06-01", "morning")
 
     def test_report_button_appears(self, mock_checkin_service: MagicMock,
                                     mock_promise_service: MagicMock,
@@ -614,5 +619,6 @@ class TestCheckinScreen:
         Clock.tick()
 
         screen._check_all_completed()
-        # 战报按钮应该可见
-        assert hasattr(screen._report_btn, 'opacity')
+        # 战报按钮应该可见且可用
+        assert screen._report_btn.opacity == 1.0
+        assert not screen._report_btn.disabled

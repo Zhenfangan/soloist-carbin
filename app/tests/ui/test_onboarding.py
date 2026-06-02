@@ -25,6 +25,7 @@ class TestOnboardingScreen:
         assert screen._step == 0
         screen._next_step()
         assert screen._step == 1
+        assert screen._current_card is not None
         assert "上午" in screen._current_card._title
 
     def test_skip_button_visible(self) -> None:
@@ -60,4 +61,6 @@ class TestOnboardingScreen:
         for _ in range(8):
             screen._next_step()
         # 第9步 (index 8): 按钮应为 "进入主界面"
-        assert "进入" in screen._next_btn.text or screen._next_btn.text == "进入主界面"
+        assert screen._next_btn.text == "进入主界面", (
+            f"expected '进入主界面', got '{screen._next_btn.text}'"
+        )

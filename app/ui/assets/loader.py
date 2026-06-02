@@ -14,7 +14,7 @@ from kivy.core.image import Image as CoreImage
 from kivy.uix.image import Image as KivyImage
 from PIL import Image as PILImage
 
-_ASSETS_DIR = Path(__file__).parent
+_ASSETS_DIR = Path(__file__).parent.resolve()
 _SPRITE_CACHE: dict[str, list[CoreImage]] = {}
 
 # sprite 帧配置: {mascot_id: (filename, frame_width, frame_count)}
