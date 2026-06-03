@@ -5,7 +5,7 @@ package.domain = org.soloist
 source.dir = .
 source.include_exts = py,png,ttf,atlas,kv,db
 version = 1.0.0
-requirements = python3,kivy,pillow
+requirements = hostpython3==3.11.9,python3==3.11.9,kivy,pillow,cython==3.0.11
 orientation = portrait
 fullscreen = 0
 android.archs = arm64-v8a
