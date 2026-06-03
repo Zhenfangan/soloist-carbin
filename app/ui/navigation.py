@@ -48,7 +48,7 @@ class TabButton(Button):  # type: ignore[misc]
         self._icon.keep_ratio = True
 
         # 标签
-        self._label = Label(
+        self._tab_label = Label(
             text=text,
             font_size=FONT_SIZE_SMALL,
             color=_to_rgba(TEXT_GRAY),
@@ -61,14 +61,14 @@ class TabButton(Button):  # type: ignore[misc]
 
         layout = BoxLayout(orientation="vertical")
         layout.add_widget(self._icon)
-        layout.add_widget(self._label)
+        layout.add_widget(self._tab_label)
         self.add_widget(layout)
 
     def set_active(self, active: bool) -> None:
         if active:
-            self._label.color = _to_rgba(PRIMARY_YELLOW)
+            self._tab_label.color = _to_rgba(PRIMARY_YELLOW)
         else:
-            self._label.color = _to_rgba(TEXT_GRAY)
+            self._tab_label.color = _to_rgba(TEXT_GRAY)
 
     def set_color_icon(self, color: tuple[float, float, float, float]) -> None:
         self._icon.color = color
