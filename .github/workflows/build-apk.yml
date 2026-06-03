@@ -34,11 +34,22 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython
 
-      - name: Clean previous build cache
+      - name: Cache SDK & NDK (skip re-download)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer/android/platform/android-sdk
+            ~/.buildozer/android/platform/android-ndk-*
+            .buildozer/android/packages
+          key: ${{ runner.os }}-buildozer-sdk-v1-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-buildozer-sdk-v1-
+
+      - name: Clean build outputs only
         run: |
+          rm -rf .buildozer/android/platform/build-arm64-v8a/ 2>/dev/null || true
           rm -rf .buildozer/android/platform/python-for-android/ 2>/dev/null || true
-          rm -rf .buildozer/android/platform/build/ 2>/dev/null || true
-          rm -rf ~/.buildozer/android/platform/python-for-android/ 2>/dev/null || true
+          rm -rf .buildozer/android/app/ 2>/dev/null || true
 
       - name: Build APK
         run: |
