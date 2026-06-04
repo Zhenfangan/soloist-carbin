@@ -78,7 +78,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
 
         # ---- 复选框 (Label, 非 PixelCheckbox - 避免触摸冲突) ----
         self._check_label = Label(
-            text="☑" if task.is_completed else "☐",
+            text="[x]" if task.is_completed else "[ ]",
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(
                 DOPAMINE_COLORS["mint"]["light"] if task.is_completed else TEXT_BROWN
@@ -201,14 +201,14 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         self._desc_label.color = self._to_rgba(TEXT_GRAY if self._task.is_completed else TEXT_BROWN)
         self._progress_label.text = f"{self._task.current_qty}/{self._task.target_qty}"
 
-    # ---- 触摸处理 (Grab → 区分 tap / swipe) ----
+    # ---- 触摸处理 (延迟 Grab → 不阻断 ScrollView 垂直滚动) ----
 
     def on_touch_down(self, touch: Any) -> bool:
         if self.collide_point(*touch.pos):
             self._start_x = touch.x
             self._start_y = touch.y
             self._swiping = False
-            touch.grab(self)
+            # 不在 down 时 grab，让 ScrollView 先响应垂直滚动
             return True
         return cast(bool, super().on_touch_down(touch))
 
@@ -224,12 +224,25 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
                 self._content_offset = dx
                 self._update_swipe_position()
             return True
+
+        # 尚未 grab: 检测是否为横向滑动，是则 grab 并接管
+        if self.collide_point(*touch.pos):
+            dx = abs(touch.x - self._start_x)
+            dy = abs(touch.y - self._start_y)
+            if dx > 15 and dx > dy * 2:
+                touch.grab(self)
+                self._swiping = True
+                self._content_offset = touch.x - self._start_x
+                self._update_swipe_position()
+                return True
+
         return cast(bool, super().on_touch_move(touch))
 
     def on_touch_up(self, touch: Any) -> bool:
         if touch.grab_current is self:
             touch.ungrab(self)
             if self._completed_anim:
+                self._content_offset = 0
                 return True
 
             if not self._swiping:
@@ -243,37 +256,47 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
                 else:
                     self._snap_back()
             return True
+
+        # 未被 grab 的 touch_up: 视为 tap
+        if self.collide_point(*touch.pos):
+            self._handle_tap(touch)
+            return True
+
         return cast(bool, super().on_touch_up(touch))
 
     def _handle_tap(self, touch: Any) -> None:
         """处理点击事件 — 判断点击区域。"""
+        # 触摸点在 self 坐标系中的位置
+        tx = touch.x - self.x
+        ty = touch.y - self.y
+
         # [+1] 按钮区域
-        btn_x = self._plus_btn.x + self._content.x - self.x
-        btn_y = self._plus_btn.y + self._content.y - self.y + self._content.pos[1]
+        btn_x = self._plus_btn.x + self._content.x
+        btn_y = self._plus_btn.y + self._content.y
         if (
-            btn_x <= touch.x - self.x <= btn_x + self._plus_btn.width
-            and btn_y <= touch.y - self.y <= btn_y + self._plus_btn.height
+            btn_x <= tx <= btn_x + self._plus_btn.width
+            and btn_y <= ty <= btn_y + self._plus_btn.height
         ):
             self._do_increment()
             return
 
         # 复选框区域
-        cb_x = self._check_label.x + self._content.x - self.x
-        cb_y = self._check_label.y + self._content.y - self.y + self._content.pos[1]
+        cb_x = self._check_label.x + self._content.x
+        cb_y = self._check_label.y + self._content.y
         if (
-            cb_x <= touch.x - self.x <= cb_x + self._check_label.width
-            and cb_y <= touch.y - self.y <= cb_y + self._check_label.height
+            cb_x <= tx <= cb_x + self._check_label.width
+            and cb_y <= ty <= cb_y + self._check_label.height
         ):
             self._do_toggle_check()
             return
 
         # 删除按钮区域 (如果可见)
         if self._delete_visible:
-            db_x = self._delete_btn.x - self.x
-            db_y = self._delete_btn.y - self.y
+            db_x = self._delete_btn.x
+            db_y = self._delete_btn.y
             if (
-                db_x <= touch.x - self.x <= db_x + self._delete_btn.width
-                and db_y <= touch.y - self.y <= db_y + self._delete_btn.height
+                db_x <= tx <= db_x + self._delete_btn.width
+                and db_y <= ty <= db_y + self._delete_btn.height
             ):
                 self._do_delete()
                 return

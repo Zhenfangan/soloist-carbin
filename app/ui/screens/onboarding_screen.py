@@ -196,7 +196,7 @@ class OnboardingScreen(FloatLayout):  # type: ignore[misc]
     一次只显示一张卡片，底部有"下一步"/"跳过"按钮。
     """
 
-    MASCOTS = ["🐻", "🐝", "🐶", "🐼", "🐻", "🐶", "🐼", "🐱", "🐻🐶"]
+    MASCOTS = ["兜兜", "嗡嗡", "旺仔", "团团", "兜兜", "旺仔", "团团", "咪咕", "兜兜旺仔"]
 
     def __init__(self, on_finish: Any = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -273,15 +273,15 @@ class OnboardingScreen(FloatLayout):  # type: ignore[misc]
 
         steps = [
             # (mascot, title, subtitle, content_factory)
-            ("🐻", "欢迎来到\nSoloist Cabin Pro", "自律打卡，从今天开始", None),
-            ("🐝 嗡嗡", "设置上午时间", "上班和下班时间", lambda: _make_time_picker_row("上午上班", "09:00")),
-            ("🐶 旺仔", "设置下午时间", "上班和下班时间", lambda: _make_time_picker_row("下午上班", "14:00")),
-            ("🐼 团团", "选择工作日", "勾选需要打卡的日子", lambda: _make_weekday_picker(self._work_days)),
-            ("🐻 兜兜", "设置惩罚金额", "迟到 / 早退 / 旷工罚款", lambda: _make_amount_row("迟到罚款", "-10")),
-            ("🐶 旺仔", "设置全勤奖励", "每月全勤奖励金额", lambda: _make_amount_row("全勤奖励", "+100")),
-            ("🐼 团团", "男友奖励门槛", "每天工作满X小时触发", lambda: _make_amount_row("门槛时长", "8 小时")),
-            ("🐱 咪咕", "拍摄日奖励", "拍摄日额外奖励金额", lambda: _make_amount_row("拍摄奖励", "+30")),
-            ("🐻 兜兜 + 🐶 旺仔", "全部准备好了！", "开始你的自律之旅吧", None),
+            ("兜兜", "欢迎来到\nSoloist Cabin Pro", "自律打卡，从今天开始", None),
+            ("嗡嗡", "设置上午时间", "上班和下班时间", lambda: _make_time_picker_row("上午上班", "09:00")),
+            ("旺仔", "设置下午时间", "上班和下班时间", lambda: _make_time_picker_row("下午上班", "14:00")),
+            ("团团", "选择工作日", "勾选需要打卡的日子", lambda: _make_weekday_picker(self._work_days)),
+            ("兜兜", "设置惩罚金额", "迟到 / 早退 / 旷工罚款", lambda: _make_amount_row("迟到罚款", "-10")),
+            ("旺仔", "设置全勤奖励", "每月全勤奖励金额", lambda: _make_amount_row("全勤奖励", "+100")),
+            ("团团", "男友奖励门槛", "每天工作满X小时触发", lambda: _make_amount_row("门槛时长", "8 小时")),
+            ("咪咕", "拍摄日奖励", "拍摄日额外奖励金额", lambda: _make_amount_row("拍摄奖励", "+30")),
+            ("兜兜 + 旺仔", "全部准备好了！", "开始你的自律之旅吧", None),
         ]
 
         mascot, title, subtitle, content_factory = steps[index]

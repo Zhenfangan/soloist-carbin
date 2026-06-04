@@ -12,7 +12,7 @@ Config.set("graphics", "height", "750")
 
 from kivy.app import App  # noqa: E402
 from kivy.graphics import Color, Rectangle  # noqa: E402
-from kivy.uix.floatlayout import FloatLayout  # noqa: E402
+from kivy.uix.boxlayout import BoxLayout  # noqa: E402
 
 from app.db import init_db  # noqa: E402
 from app.repositories.bet_repo import BetRepo  # noqa: E402
@@ -34,7 +34,7 @@ from app.ui.screens.checkin_screen import CheckinScreen  # noqa: E402
 from app.ui.screens.history_screen import HistoryScreen  # noqa: E402
 from app.ui.screens.onboarding_screen import OnboardingScreen  # noqa: E402
 from app.ui.screens.settings_screen import SettingsScreen  # noqa: E402
-from app.ui.tokens import BG_CREAM  # noqa: E402
+from app.ui.tokens import BG_CREAM, NAV_HEIGHT  # noqa: E402
 from app.utils.clock import SystemClock, set_clock  # noqa: E402
 
 
@@ -48,7 +48,7 @@ class SoloistApp(App):  # type: ignore[misc]
 
     DB_PATH = "soloist.db"
 
-    def build(self) -> FloatLayout:
+    def build(self) -> BoxLayout:
         # 初始化时钟
         set_clock(SystemClock())
 
@@ -68,8 +68,8 @@ class SoloistApp(App):  # type: ignore[misc]
         bet_svc = BetService(BetRepo(self.DB_PATH), ledger_repo, settings_repo)
         history_svc = HistoryService(checkin_repo, ledger_repo, ShootingRepo(self.DB_PATH))
 
-        # 根布局
-        self._root = FloatLayout()
+        # 根布局 (垂直: 内容区 + 底部导航)
+        self._root = BoxLayout(orientation="vertical")
 
         # 背景色
         with self._root.canvas.before:
@@ -141,13 +141,9 @@ class SoloistApp(App):  # type: ignore[misc]
         sm = AppScreenManager(screens)
 
         # 底部导航栏
-        tab_bar = BottomTabBar(sm, pos_hint={"x": 0, "y": 0})
+        tab_bar = BottomTabBar(sm, size_hint=(1, None), height=NAV_HEIGHT)
 
-        # 内容区 (ScreenManager)
-        sm.size_hint = (1, 1)
-        sm.pos_hint = {"x": 0, "y": 0}
-        sm.padding = [0, 0, 0, 56]  # 给导航栏留空间
-
+        # 内容区占满剩余空间，导航栏固定在底部
         self._root.add_widget(sm)
         self._root.add_widget(tab_bar)
 

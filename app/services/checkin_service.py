@@ -26,19 +26,19 @@ from app.utils.config import (
 _PERIOD_START_KEY = {
     "morning": "morning_start",
     "afternoon": "afternoon_start",
-    "night": "",  # 加班无限制
+    "evening": "",  # 晚间弹性
 }
 _PERIOD_END_KEY = {
     "morning": "morning_end",
     "afternoon": "afternoon_end",
-    "night": "",  # 加班无限制
+    "evening": "",  # 晚间弹性
 }
 
 LEAVE_SCOPE_MORNING = "morning"
 LEAVE_SCOPE_AFTERNOON = "afternoon"
 LEAVE_SCOPE_ALL_DAY = "all_day"
 
-ALL_PERIODS = ["morning", "afternoon", "night"]
+ALL_PERIODS = ["morning", "afternoon", "evening"]
 
 
 class CheckinService:
@@ -82,11 +82,11 @@ class CheckinService:
 
         record = self._checkin_repo.get_by_date_period(date, period)
         if record is None:
-            record = Checkin(checkin_date=date, period=period)
+            raise ValueError(f"尚未签到，无法签退: {date} {period}")
         record.checkout_time = now_time
         record.checkout_type = CHECKOUT_TYPE_MANUAL
 
-        status = self._judge_checkout_status(date, period, now_time)
+        status = self._judge_checkout_status(date, period, now_time, record)
         record.status = status
         record = self._checkin_repo.upsert(record)
 
@@ -244,43 +244,64 @@ class CheckinService:
     # ── 内部方法 ──────────────────────────────────────────
 
     def _judge_checkin_status(self, date: str, period: str, checkin_time: str) -> str:
-        """判定签到状态"""
+        """判定签到状态 — 含时段窗口校验"""
         if self._is_shooting_day(date):
             return STATUS_SHOOTING
         if self._is_leave_day(date, period):
             return STATUS_LEAVE
-        if period == "night":
+        if period == "evening":
             return STATUS_NORMAL
 
-        start_key = _PERIOD_START_KEY[period]
+        start_key = _PERIOD_START_KEY.get(period, "")
         if not start_key:
             return STATUS_NORMAL
 
         configured_start = self._get_setting(start_key)
-        if checkin_time <= configured_start:
+        configured_end = self._get_setting(_PERIOD_END_KEY.get(period, ""))
+
+        # 时段窗口已关闭 → 旷工
+        if configured_end and self._time_to_minutes(checkin_time) > self._time_to_minutes(configured_end):
+            return (
+                STATUS_ABSENT_MORNING if period == "morning"
+                else STATUS_ABSENT_AFTERNOON
+            )
+
+        # 时段窗口内 → 正常或迟到（空配置视为不限制）
+        start_min = self._time_to_minutes(configured_start)
+        if start_min == 0 or self._time_to_minutes(checkin_time) <= start_min:
             return STATUS_NORMAL
         return STATUS_LATE
 
-    def _judge_checkout_status(self, date: str, period: str, checkout_time: str) -> str:
-        """判定签退状态"""
-        record = self._checkin_repo.get_by_date_period(date, period)
+    def _judge_checkout_status(
+        self, date: str, period: str, checkout_time: str, checkin_record: Checkin | None = None
+    ) -> str:
+        """判定签退状态 — 保留签到阶段的迟到/旷工标记"""
+        record = checkin_record or self._checkin_repo.get_by_date_period(date, period)
         if record and record.status in (STATUS_LEAVE, STATUS_SHOOTING):
             return record.status
         if self._is_shooting_day(date):
             return STATUS_SHOOTING
         if self._is_leave_day(date, period):
             return STATUS_LEAVE
-        if period == "night":
+        if period == "evening":
             return STATUS_NORMAL
 
-        end_key = _PERIOD_END_KEY[period]
+        # 签到阶段的"坏"状态不被签退覆盖
+        checkin_status = record.status if record else STATUS_PENDING
+        preserved = (
+            checkin_status
+            if checkin_status in (STATUS_LATE, STATUS_ABSENT_MORNING, STATUS_ABSENT_AFTERNOON)
+            else None
+        )
+
+        end_key = _PERIOD_END_KEY.get(period, "")
         if not end_key:
-            return STATUS_NORMAL
+            return preserved or STATUS_NORMAL
 
         configured_end = self._get_setting(end_key)
-        if checkout_time >= configured_end:
-            return STATUS_NORMAL
-        return STATUS_EARLY_LEAVE
+        if self._time_to_minutes(checkout_time) >= self._time_to_minutes(configured_end):
+            return preserved or STATUS_NORMAL
+        return preserved or STATUS_EARLY_LEAVE
 
     def _is_shooting_day(self, date: str) -> bool:
         records = self._checkin_repo.get_all_by_date(date)
@@ -313,8 +334,13 @@ class CheckinService:
 
     @staticmethod
     def _time_to_minutes(time_str: str) -> int:
+        if not time_str or ":" not in time_str:
+            return 0
         parts = time_str.split(":")
-        return int(parts[0]) * 60 + int(parts[1])
+        try:
+            return int(parts[0]) * 60 + int(parts[1])
+        except (ValueError, IndexError):
+            return 0
 
     def _make_result(self, record: Checkin) -> CheckinResult:
         labels: dict[str, str] = {

@@ -49,10 +49,8 @@ class CalendarCell(FloatLayout):  # type: ignore[misc]
         is_work_day: bool = True,
         **kwargs: Any,
     ) -> None:
-        super().__init__(
-            size_hint=(None, None),
-            **kwargs,
-        )
+        kwargs.setdefault("size_hint", (None, None))
+        super().__init__(**kwargs)
         self._day = day
         self._status = status
         self._is_work_day = is_work_day
@@ -91,7 +89,7 @@ class CalendarCell(FloatLayout):  # type: ignore[misc]
             self._label.text = "○"
             self._label.color = self._to_rgba(TEXT_GRAY)
         elif not self._is_work_day:
-            self._label.text = "🐼"
+            self._label.text = "R"
             self._label.color = self._to_rgba(TEXT_BROWN)
         else:
             self._label.text = str(self._day)

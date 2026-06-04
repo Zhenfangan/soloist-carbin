@@ -152,7 +152,7 @@ class PixelTimePicker(ModalView):  # type: ignore[misc]
             valign="middle",
         )
         hour_down_btn = PixelButton(
-            text="▼",
+            text="v",
             size_mode="small",
             size_hint=(1, None),
         )
@@ -192,7 +192,7 @@ class PixelTimePicker(ModalView):  # type: ignore[misc]
             valign="middle",
         )
         min_down_btn = PixelButton(
-            text="▼",
+            text="v",
             size_mode="small",
             size_hint=(1, None),
         )

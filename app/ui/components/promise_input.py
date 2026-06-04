@@ -94,7 +94,7 @@ class PromiseInput(ModalView):  # type: ignore[misc]
 
         # 🐻 标题
         title_label = Label(
-            text="\U0001f43b 设定今日奖励",
+            text="设定今日奖励",
             font_size=FONT_SIZE_TITLE,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),

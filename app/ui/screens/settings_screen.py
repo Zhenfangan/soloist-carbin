@@ -10,6 +10,7 @@ from typing import Any
 
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
+from kivy.logger import Logger
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
@@ -482,7 +483,8 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         try:
             self._sync_service.backup_full()
             self.show_toast("数据备份成功")
-        except Exception:
+        except Exception as e:
+            Logger.error(f"SettingsScreen: {e}")
             self.show_toast("备份失败，请重试")
 
     def _on_restore(self) -> None:
@@ -508,7 +510,8 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             if isinstance(data, dict):
                 self._sync_service.restore_full(data)
             self.show_toast("数据恢复成功")
-        except Exception:
+        except Exception as e:
+            Logger.error(f"SettingsScreen: {e}")
             self.show_toast("恢复失败，请重试")
 
     # ------------------------------------------------------------------

@@ -52,7 +52,7 @@ def checkin_success_sequence(
 
     # 创建勾号标签
     check_label = Label(
-        text="✅",
+        text="OK",
         font_size=24,
         size_hint=(None, None),
         size=(40, 40),
@@ -75,7 +75,7 @@ def checkin_success_sequence(
     except Exception:
         # 回退: 用文字
         mascot_img = Label(
-            text="\U0001f43b",
+            text="dudu",
             font_size=32,
             size_hint=(None, None),
             size=(SPRITE_SIZE, SPRITE_SIZE),

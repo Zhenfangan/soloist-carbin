@@ -88,14 +88,14 @@ SPRITE_SIZE: int = GRID["SPRITE_SIZE"]
 # ============================================================
 
 FONTS: Final[dict[str, object]] = {
-    "PIXEL": "press-start-2p",
-    "HANZI_PIXEL": "silkscreen",
+    "DEFAULT": "SmileySans",
+    "PIXEL": "SmileySans",
+    "HANZI_PIXEL": "SmileySans",
     "SIZE_TITLE": 18,
     "SIZE_BODY": 14,
     "SIZE_SMALL": 10,
     "FILES": {
-        "press-start-2p": "app/ui/assets/fonts/PressStart2P-Regular.ttf",
-        "silkscreen": "app/ui/assets/fonts/Silkscreen-Regular.ttf",
+        "SmileySans": "app/ui/assets/fonts/SmileySans-Oblique.ttf",
     },
 }
 

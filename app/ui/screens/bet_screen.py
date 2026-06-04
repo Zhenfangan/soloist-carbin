@@ -12,6 +12,7 @@ from typing import Any
 
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
+from kivy.logger import Logger
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
@@ -163,8 +164,8 @@ class BetScreen(ScrollView):  # type: ignore[misc]
 
             # 更新结算按钮
             self._update_settle_button()
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"BetScreen: {e}")
 
     def _rebuild_task_list(self, tasks: list[Any]) -> None:
         """清空并重建任务列表。"""
@@ -187,24 +188,24 @@ class BetScreen(ScrollView):  # type: ignore[misc]
         try:
             self._bet_service.update_task_progress(task_id, current_qty)
             self.refresh()
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"BetScreen: {e}")
 
     def _on_task_complete(self, task_id: int) -> None:
         """任务完成。"""
         try:
             self._bet_service.complete_task(task_id)
             self.refresh()
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"BetScreen: {e}")
 
     def _on_task_delete(self, task_id: int) -> None:
         """任务删除。"""
         try:
             self._bet_service.delete_task(task_id)
             self.refresh()
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"BetScreen: {e}")
 
     # ---- 添加任务 ----
 
@@ -218,8 +219,8 @@ class BetScreen(ScrollView):  # type: ignore[misc]
         try:
             self._bet_service.create_task(self._week_start, desc, qty)
             self.refresh()
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"BetScreen: {e}")
 
     # ---- 结算 ----
 
@@ -249,8 +250,8 @@ class BetScreen(ScrollView):  # type: ignore[misc]
                 on_settled=self._on_settled,
             )
             dialog.open()
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"BetScreen: {e}")
 
     def _on_settled(self) -> None:
         """结算完成回调。"""

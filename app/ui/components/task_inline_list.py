@@ -11,7 +11,6 @@ from typing import Any
 
 from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 
 from app.ui.components.pixel_checkbox import PixelCheckbox
@@ -29,10 +28,8 @@ from app.ui.tokens import (
 MAX_DISPLAY_TASKS = 5
 
 
-class TaskInlineList(FloatLayout):  # type: ignore[misc]
-    """嵌入打卡页的任务清单。
-
-    通常只显示 5 条，支持勾选标记完成。
+class TaskInlineList(BoxLayout):  # type: ignore[misc]
+    """嵌入打卡页的任务清单 — 垂直柱状排列。
 
     属性:
         tasks: 任务列表 [{"id": int, "desc": str, "done": bool}, ...]
@@ -47,9 +44,12 @@ class TaskInlineList(FloatLayout):  # type: ignore[misc]
         on_add: Callable[[], Any] | None = None,
         **kwargs: Any,
     ) -> None:
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("size_hint", (1, None))
+        kwargs.setdefault("height", 120)
+        kwargs.setdefault("padding", [CARD_PADDING, GRID_UNIT, CARD_PADDING, GRID_UNIT])
+        kwargs.setdefault("spacing", 2)
         super().__init__(**kwargs)
-        self.size_hint = (1, None)
-        self.height = 120
 
         self._tasks: list[dict[str, Any]] = tasks or []
         self._on_check_cb = on_check
@@ -63,18 +63,19 @@ class TaskInlineList(FloatLayout):  # type: ignore[misc]
             color=self._to_rgba(TEXT_GRAY),
             size_hint=(1, None),
             height=20,
-            pos_hint={"x": 0, "y": 0},
             halign="left",
             valign="middle",
         )
+        self.add_widget(self._title_label)
 
         # 任务列表容器
         self._list_layout = BoxLayout(
             orientation="vertical",
             size_hint=(1, None),
-            pos_hint={"x": 0, "y": 0},
             spacing=2,
         )
+        self._list_layout.bind(minimum_height=self._list_layout.setter("height"))
+        self.add_widget(self._list_layout)
 
         # 添加任务入口
         self._add_label = Label(
@@ -87,9 +88,6 @@ class TaskInlineList(FloatLayout):  # type: ignore[misc]
             valign="middle",
         )
         self._add_label.bind(on_touch_down=self._on_add_touch)
-
-        self.add_widget(self._list_layout)
-        self.add_widget(self._title_label)
         self.add_widget(self._add_label)
 
         self.bind(pos=self._redraw, size=self._redraw)
@@ -124,11 +122,6 @@ class TaskInlineList(FloatLayout):  # type: ignore[misc]
             self._checkboxes.append(cb)
             self._list_layout.add_widget(cb)
 
-        # 更新高度
-        row_count = max(1, len(self._tasks))
-        total_height = 20 + 30 + row_count * 30 + 28 + GRID_UNIT * 2
-        self.height = total_height
-
     def _on_check(self, task_id: int, checked: bool) -> None:
         """勾选回调。"""
         if self._on_check_cb:
@@ -150,24 +143,13 @@ class TaskInlineList(FloatLayout):  # type: ignore[misc]
         bw = BORDER_WIDTH
 
         with self.canvas.before:
-            # 阴影
             Color(*self._to_rgba(SHADOW_BLACK))
             Rectangle(pos=(x + 2, y - 2), size=(w, h))
-            # 背景
             Color(*self._to_rgba(CARD_WHITE))
             Rectangle(pos=(x, y), size=(w, h))
-            # 凸起边框
             Color(*self._to_rgba("#FFFFFF"))
             Rectangle(pos=(x, y + h - bw), size=(w, bw))
             Rectangle(pos=(x, y), size=(bw, h))
             Color(*self._to_rgba("#F0E8D0"))
             Rectangle(pos=(x, y), size=(w, bw))
             Rectangle(pos=(x + w - bw, y), size=(w, h))
-
-        # 更新子组件位置
-        self._title_label.pos = (x + CARD_PADDING, y + h - 24)
-        self._title_label.size = (w - CARD_PADDING * 2, 20)
-        self._list_layout.pos = (x + CARD_PADDING, y + 32)
-        self._list_layout.size = (w - CARD_PADDING * 2, max(1, len(self._tasks)) * 30)
-        self._add_label.pos = (x + CARD_PADDING, y + 4)
-        self._add_label.size = (w - CARD_PADDING * 2, 28)

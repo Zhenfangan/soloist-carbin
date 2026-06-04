@@ -51,11 +51,88 @@ class TestCheckIn:
         assert result.status == "early_leave"
         assert result.status_label == "早退"
 
-    def test_night_checkin_always_normal(self, svc: CheckinService) -> None:
+    def test_evening_checkin_always_normal(self, svc: CheckinService) -> None:
         clock = get_clock()
         assert isinstance(clock, SimulatedClock)
         clock.set_date_and_time("2026-06-01", "19:30")
-        result = svc.check_in("2026-06-01", "night")
+        result = svc.check_in("2026-06-01", "evening")
+        assert result.status == "normal"
+
+    def test_evening_period_in_day_status(self, svc: CheckinService) -> None:
+        """evening 记录应出现在 DayStatus.periods 中"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-01", "19:30")
+        svc.check_in("2026-06-01", "evening")
+        status = svc.get_today_status("2026-06-01")
+        evening = next((p for p in status.periods if p.period == "evening"), None)
+        assert evening is not None
+        assert evening.status == "normal"
+        assert evening.checkin_time == "19:30:00"
+
+    def test_morning_checkin_after_window_closed_is_absent(self, svc: CheckinService) -> None:
+        """18:23 签上午 → 时段窗口(12:00)已关闭 → 应判定为旷工(上午)"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-04", "18:23")
+        result = svc.check_in("2026-06-04", "morning")
+        assert result.status == "absent_morning", (
+            f"期望 absent_morning (窗口关闭)，实际 {result.status}"
+        )
+
+    def test_morning_checkin_before_start_is_normal(self, svc: CheckinService) -> None:
+        """08:30 签上午 → 时段未开始但提前到 → 正常"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-04", "08:30")
+        result = svc.check_in("2026-06-04", "morning")
+        assert result.status == "normal", f"期望 normal，实际 {result.status}"
+
+    def test_morning_checkin_at_1100_is_normal(self, svc: CheckinService) -> None:
+        """11:00 签上午 → 时段窗口内 > 09:00 → 迟到"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-04", "11:00")
+        result = svc.check_in("2026-06-04", "morning")
+        assert result.status == "late", f"期望 late，实际 {result.status}"
+
+    def test_checkout_preserves_late_status(self, svc: CheckinService) -> None:
+        """迟到签到 → 正常签退 → status 应保留 late"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-01", "09:10")
+        svc.check_in("2026-06-01", "morning")          # late checkin
+        clock.set_date_and_time("2026-06-01", "12:05")
+        result = svc.check_out("2026-06-01", "morning")  # normal checkout time
+        assert result.status == "late", (
+            f"迟到签到不应被正常签退覆盖，期望 late，实际 {result.status}"
+        )
+
+    def test_checkout_after_window_closed_normal(self, svc: CheckinService) -> None:
+        """签退时间超过下班时间 → 正常（加班）"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-01", "08:55")
+        svc.check_in("2026-06-01", "morning")
+        clock.set_date_and_time("2026-06-01", "18:30")
+        result = svc.check_out("2026-06-01", "morning")
+        assert result.status == "normal", f"超时签退应正常，实际 {result.status}"
+
+    def test_checkout_without_checkin_rejected(self, svc: CheckinService) -> None:
+        """无签到直接签退 → 应抛出异常"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-01", "12:05")
+        with pytest.raises(ValueError, match="尚未签到"):
+            svc.check_out("2026-06-01", "morning")
+
+    def test_evening_checkout_always_normal(self, svc: CheckinService) -> None:
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-01", "20:30")
+        svc.check_in("2026-06-01", "evening")
+        clock.set_date_and_time("2026-06-01", "22:00")
+        result = svc.check_out("2026-06-01", "evening")
         assert result.status == "normal"
 
     def test_day_finished_event(self, svc: CheckinService) -> None:

@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from kivy.clock import Clock
+from kivy.logger import Logger
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
@@ -85,8 +86,9 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             orientation="vertical",
             size_hint=(1, None),
             spacing=GRID_UNIT,
-            padding=[CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING + 20],
+            padding=[CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING],
         )
+        self._container.bind(minimum_height=self._container.setter("height"))
         self.add_widget(self._container)
 
         # 1. 日期头部
@@ -132,8 +134,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 size_hint=(1, None),
             )
             if period_name == "morning":
-                card.card_state = "expanded"
                 card.height = card._EXPANDED_HEIGHT
+                card.card_state = "expanded"
             return card
 
         # 上午卡
@@ -189,7 +191,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             spacing=GRID_UNIT // 2,
         )
         self._promise_title = Label(
-            text="\U0001f43b 兜兜：今日目标",
+            text="兜兜：今日目标",
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
@@ -269,7 +271,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             try:
                 streak = self._motivation_service.get_current_streak()
                 self._streak_label.text = f"已连续正常出勤 {streak} 天"
-            except Exception:
+            except Exception as e:
+                Logger.error(f"CheckinScreen: 获取连续出勤失败: {e}")
                 self._streak_label.text = ""
 
         # 今日状态
@@ -300,11 +303,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
                 # 检查是否应该显示战报按钮
                 self._check_all_completed()
-            except Exception:
-                pass
+            except Exception as e:
+                Logger.error(f"CheckinScreen: {e}")
 
-        # 设置容器总高度
-        self._update_container_height()
+        # 容器高度由 minimum_height 自动维护
 
     def _determine_current_period(self) -> None:
         """确定当前时段并展开对应卡片。"""
@@ -320,26 +322,35 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
         if not morning_completed:
             self._current_period_index = 0
+            self._period_cards["morning"].height = self._period_cards["morning"]._EXPANDED_HEIGHT
             self._period_cards["morning"].card_state = "expanded"
             self._period_cards["morning"].is_current = True
+            self._period_cards["afternoon"].height = self._period_cards["afternoon"]._COLLAPSED_HEIGHT
             self._period_cards["afternoon"].card_state = "collapsed"
             self._period_cards["afternoon"].is_current = False
+            self._period_cards["evening"].height = self._period_cards["evening"]._COLLAPSED_HEIGHT
             self._period_cards["evening"].card_state = "collapsed"
             self._period_cards["evening"].is_current = False
         elif not afternoon_completed:
             self._current_period_index = 1
+            self._period_cards["morning"].height = self._period_cards["morning"]._COLLAPSED_HEIGHT
             self._period_cards["morning"].card_state = "completed"
             self._period_cards["morning"].is_current = False
+            self._period_cards["afternoon"].height = self._period_cards["afternoon"]._EXPANDED_HEIGHT
             self._period_cards["afternoon"].card_state = "expanded"
             self._period_cards["afternoon"].is_current = True
+            self._period_cards["evening"].height = self._period_cards["evening"]._COLLAPSED_HEIGHT
             self._period_cards["evening"].card_state = "collapsed"
             self._period_cards["evening"].is_current = False
         else:
             self._current_period_index = 2
+            self._period_cards["morning"].height = self._period_cards["morning"]._COLLAPSED_HEIGHT
             self._period_cards["morning"].card_state = "completed"
             self._period_cards["morning"].is_current = False
+            self._period_cards["afternoon"].height = self._period_cards["afternoon"]._COLLAPSED_HEIGHT
             self._period_cards["afternoon"].card_state = "completed"
             self._period_cards["afternoon"].is_current = False
+            self._period_cards["evening"].height = self._period_cards["evening"]._EXPANDED_HEIGHT
             self._period_cards["evening"].card_state = "expanded"
             self._period_cards["evening"].is_current = True
 
@@ -368,10 +379,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
             self._morning_checked_in = True
 
-            # 打卡成功动画
+            # 打卡成功动画 — 加在内容容器而非 ScrollView (SV 只能有一个子组件)
             if card:
                 checkin_success_sequence(
-                    container=self,
+                    container=self._container,
                     animating_widget=card._action_btn,
                     on_mascot_show=lambda: None,
                     on_mascot_hide=lambda: self._after_checkin_animation(period),
@@ -380,8 +391,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
             # 重新加载状态
             self._refresh_status()
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
 
     def _on_checkout(self, period: str) -> None:
         """签退回调。"""
@@ -406,10 +417,11 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 next_period = period_order[current_idx + 1]
                 next_card = self._period_cards.get(next_period)
                 if next_card:
+                    next_card.height = next_card._EXPANDED_HEIGHT
                     next_card.card_state = "expanded"
                     next_card.is_current = True
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
 
     def _after_checkin_animation(self, period: str) -> None:
         """打卡动画完成后的处理。"""
@@ -421,6 +433,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             next_period = period_order[current_idx + 1]
             next_card = self._period_cards.get(next_period)
             if next_card:
+                next_card.height = next_card._EXPANDED_HEIGHT
                 next_card.card_state = "expanded"
                 next_card.is_current = True
 
@@ -437,8 +450,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             self._day_status = day_status
             self._periods_data = getattr(day_status, "periods", [])
             self._status_box.update_status(day_status)
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
 
     def _check_all_completed(self) -> None:
         """检查所有时段是否已完成。"""
@@ -467,8 +480,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             else:
                 self._report_btn.opacity = 0
                 self._report_btn.disabled = True
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
 
     # ── 请假 ────────────────────────────────────────────────
 
@@ -493,8 +506,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             else:
                 # 多选项弹窗
                 self._show_leave_options(options)
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
 
     def _show_leave_options(self, options: list[str]) -> None:
         """显示请假选项弹窗。"""
@@ -510,8 +523,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         try:
             self._checkin_service.apply_leave(self._date_str, scope)
             self._refresh_status()
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
 
     # ── 男友承诺 ────────────────────────────────────────────
 
@@ -527,8 +540,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     promise.reward_qty,
                 )
                 self._promise_shown = True
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
 
     def _show_promise_dialog(self) -> None:
         """弹出男友承诺输入弹窗。"""
@@ -542,8 +555,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 # 尝试获取设置的工作时长阈值
                 total_hours = self._promise_service.calculate_total_hours(self._date_str)
                 hours = max(4.0, total_hours + 4.0)
-            except Exception:
-                pass
+            except Exception as e:
+                Logger.error(f"CheckinScreen: {e}")
 
         dialog = PromiseInput(
             hours_threshold=hours,
@@ -568,14 +581,13 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     reward_qty,
                 )
                 self._show_promise_area(reward_desc, reward_qty)
-            except Exception:
-                pass
+            except Exception as e:
+                Logger.error(f"CheckinScreen: {e}")
 
     def _show_promise_area(self, reward_desc: str, reward_qty: int) -> None:
         """承诺区显示。"""
         self._promise_area.opacity = 1.0
-        self._promise_desc.text = f"如果今天工作满8小时，奖励：{reward_desc} x{reward_qty} 🐶"
-        self._update_container_height()
+        self._promise_desc.text = f"如果今天工作满8小时，奖励：{reward_desc} x{reward_qty}"
 
     # ── 任务 ────────────────────────────────────────────────
 
@@ -596,16 +608,6 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
         try:
             self._report_service.generate_and_save(self._date_str)
-        except Exception:
-            pass
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
 
-    # ── 高度管理 ────────────────────────────────────────────
-
-    def _update_container_height(self) -> None:
-        """更新容器总高度以支持 ScrollView。"""
-        total = 0
-        for child in self._container.children:
-            if hasattr(child, 'height'):
-                total += child.height
-            total += GRID_UNIT  # spacing
-        self._container.height = total + 100

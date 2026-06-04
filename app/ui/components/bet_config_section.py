@@ -215,7 +215,7 @@ class BetConfigSection(CollapsibleGroup):
         content.bind(minimum_height=content.setter("height"))
 
         super().__init__(
-            title="本周赏罚设置 ▶",
+            title="本周赏罚设置 [+]",
             content=content,
             collapsed=True,
             **kwargs,

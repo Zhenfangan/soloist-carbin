@@ -89,7 +89,10 @@ class BottomTabBar(BoxLayout):  # type: ignore[misc]
     """
 
     def __init__(self, screen_manager: ScreenManager, **kwargs: Any) -> None:
-        super().__init__(orientation="horizontal", size_hint=(1, None), height=NAV_HEIGHT, **kwargs)
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("size_hint", (1, None))
+        kwargs.setdefault("height", NAV_HEIGHT)
+        super().__init__(**kwargs)
         self._sm = screen_manager
         self._tabs: list[TabButton] = []
         self._active_index = 0
@@ -107,10 +110,11 @@ class BottomTabBar(BoxLayout):  # type: ignore[misc]
         """切换到指定 Tab 并显示对应页面。"""
         if index == self._active_index:
             return
+        old_index = self._active_index
         self._set_active(index)
         self._sm.current = TAB_CONFIG[index]["name"]
         # 页面切换动画
-        self._sm.transition.direction = "left" if index > self._active_index else "right"
+        self._sm.transition.direction = "left" if index > old_index else "right"
         self._sm.transition.duration = 0.2
 
     def _set_active(self, index: int) -> None:

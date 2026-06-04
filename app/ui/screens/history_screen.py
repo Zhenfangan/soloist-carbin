@@ -10,9 +10,11 @@ import calendar
 from datetime import datetime, timedelta
 from typing import Any, cast
 
+from kivy.logger import Logger
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
+from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 
 from app.models.history import CalendarCell as CalendarCellModel
@@ -68,21 +70,27 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         self.tabs = HistoryTabs(on_tab_change=self._switch_tab)
         root.add_widget(self.tabs)
 
-        # --- 内容区域（三个视图叠放，通过 opacity 控制显示） ---
-        self.content = FloatLayout(size_hint=(1, 1))
-        root.add_widget(self.content)
+        # --- 内容区域 (ScreenManager 承载周/月/年三视图) ---
+        self._sm = ScreenManager(size_hint=(1, 1))
+        root.add_widget(self._sm)
 
         # 周视图
         self._week_view = self._build_week_view()
-        self.content.add_widget(self._week_view)
+        week_screen = Screen(name="week")
+        week_screen.add_widget(self._week_view)
+        self._sm.add_widget(week_screen)
 
         # 月视图
         self._month_view = self._build_month_view()
-        self.content.add_widget(self._month_view)
+        month_screen = Screen(name="month")
+        month_screen.add_widget(self._month_view)
+        self._sm.add_widget(month_screen)
 
         # 年视图
         self._year_view = self._build_year_view()
-        self.content.add_widget(self._year_view)
+        year_screen = Screen(name="year")
+        year_screen.add_widget(self._year_view)
+        self._sm.add_widget(year_screen)
 
         # --- 初始加载：周视图，当前周 ---
         now = get_clock().now()
@@ -143,8 +151,12 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=BTN_HEIGHT,
-            halign="center",
+            halign="left",
             valign="middle",
+            padding=[GRID_UNIT * 2, 0],
+        )
+        self._week_total_label.bind(
+            width=lambda inst, w: setattr(inst, "text_size", (w, None))
         )
         layout.add_widget(self._week_total_label)
 
@@ -164,7 +176,8 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
 
         try:
             data: WeekViewData = self._service.get_week_view(week_start)
-        except Exception:
+        except Exception as e:
+            Logger.error(f"HistoryScreen: {e}")
             return
 
         # 更新标题
@@ -244,7 +257,8 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
 
         try:
             data: MonthViewData = self._service.get_month_view(year, month)
-        except Exception:
+        except Exception as e:
+            Logger.error(f"HistoryScreen: {e}")
             return
 
         # 更新标题
@@ -276,12 +290,24 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             except (IndexError, ValueError):
                 continue
 
+        # 构建按周的汇总映射
+        week_summaries: dict[int, str] = {}
+        for ws in data.weekly_summaries:
+            ws_start = cast(str, ws.get("week_start", ""))
+            ws_net = cast(float, ws.get("net", 0.0))
+            sign = "+" if ws_net >= 0 else ""
+            try:
+                ws_dt = datetime.strptime(ws_start, "%Y-%m-%d")
+                week_num = ws_dt.isocalendar()[1]  # ISO week number
+                week_summaries[week_num] = f"{ws_start} 小计: {sign}{ws_net}"
+            except (ValueError, KeyError):
+                pass
+
         cal_weeks = calendar.monthcalendar(year, month)
         for week in cal_weeks:
             row = BoxLayout(orientation="horizontal", size_hint=(1, None), height=36)
             for day_num in week:
                 if day_num == 0:
-                    # 空白占位
                     placeholder = BoxLayout(size_hint=(1, 1))
                     row.add_widget(placeholder)
                 else:
@@ -292,37 +318,44 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
                             day=day_num,
                             status=status,
                             is_work_day=True,
+                            size_hint=(1, 1),
                         )
                     else:
                         cell_widget = CalendarCell(
                             day=day_num,
                             status="future",
                             is_work_day=False,
+                            size_hint=(1, 1),
                         )
                     row.add_widget(cell_widget)
             self._month_calendar.add_widget(row)
 
-        # 按周汇总
-        for ws in data.weekly_summaries:
-            ws_start = cast(str, ws.get("week_start", ""))
-            ws_net = cast(float, ws.get("net", 0.0))
-            sign = "+" if ws_net >= 0 else ""
-            summary_row = BoxLayout(
-                orientation="horizontal",
-                size_hint=(1, None),
-                height=28,
-                padding=[GRID_UNIT, 0],
-            )
-            summary_label = Label(
-                text=f"{ws_start}  小计: {sign}{ws_net}",
-                font_size=FONT_SIZE_SMALL,
-                color=self._to_rgba(TEXT_BROWN),
-                size_hint=(1, 1),
-                halign="left",
-                valign="middle",
-            )
-            summary_row.add_widget(summary_label)
-            self._month_calendar.add_widget(summary_row)
+            # 嵌入周汇总于行末
+            days_in_week = [d for d in week if d != 0]
+            if days_in_week:
+                ref_dt = datetime(year, month, days_in_week[0])
+                iso_week = ref_dt.isocalendar()[1]
+                summary_text = week_summaries.get(iso_week, "")
+                if summary_text:
+                    summary_row = BoxLayout(
+                        orientation="horizontal",
+                        size_hint=(1, None),
+                        height=20,
+                        padding=[GRID_UNIT * 2, 0],
+                    )
+                    summary_label = Label(
+                        text=summary_text,
+                        font_size=FONT_SIZE_SMALL,
+                        color=self._to_rgba(TEXT_GRAY),
+                        size_hint=(1, 1),
+                        halign="right",
+                        valign="middle",
+                    )
+                    summary_label.bind(
+                        width=lambda inst, w: setattr(inst, "text_size", (w, None))
+                    )
+                    summary_row.add_widget(summary_label)
+                    self._month_calendar.add_widget(summary_row)
 
     @staticmethod
     def _model_color_to_status(color: str) -> str:
@@ -397,7 +430,8 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
 
         try:
             data: YearViewData = self._service.get_year_view(year)
-        except Exception:
+        except Exception as e:
+            Logger.error(f"HistoryScreen: {e}")
             return
 
         self._year_label.text = f"{year}年"
@@ -412,26 +446,20 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
     # ================================================================
 
     def _switch_tab(self, tab_index: int) -> None:
-        """Tab 切换：显示对应视图，隐藏其他。"""
+        """Tab 切换：通过 ScreenManager 切换视图，彻底杜绝触摸穿透。"""
         self._tab_index = tab_index
 
-        # 先刷新数据再切换
+        tab_names = ["week", "month", "year"]
+        if tab_index < len(tab_names):
+            self._sm.current = tab_names[tab_index]
+
+        # 刷新对应视图数据
         if tab_index == 0:
             self._refresh_week_view()
         elif tab_index == 1:
             self._refresh_month_view()
         elif tab_index == 2:
             self._refresh_year_view()
-
-        # 控制视图显示
-        self._week_view.opacity = 1.0 if tab_index == 0 else 0.0
-        self._month_view.opacity = 1.0 if tab_index == 1 else 0.0
-        self._year_view.opacity = 1.0 if tab_index == 2 else 0.0
-
-        # 禁用不可见视图的触摸
-        self._week_view.disabled = tab_index != 0
-        self._month_view.disabled = tab_index != 1
-        self._year_view.disabled = tab_index != 2
 
     # ================================================================
     # DayCard 点击

@@ -4,7 +4,7 @@
 DB_PATH = "app_data.db"
 
 # 时段定义
-PERIODS = ["morning", "afternoon", "night"]
+PERIODS = ["morning", "afternoon", "evening"]
 
 # 工作日默认 (1=周一, ..., 7=周日)
 DEFAULT_WORK_DAYS = "1,2,3,4,5"
