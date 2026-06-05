@@ -131,6 +131,27 @@ class TestComponentBackgrounds:
         # DayCard 使用 self.bind 但不是显式的 _redraw
         assert card._day is day
 
+    def test_pixel_stepper_right_border_is_thin(self) -> None:
+        """亮面 right 矩形宽度应为 BORDER_WIDTH。"""
+        from kivy.graphics import Rectangle
+        from app.ui.tokens import BORDER_WIDTH
+
+        stepper = PixelStepper(value=1)
+        stepper.size = (140, 32)
+        stepper.pos = (0, 0)
+        stepper._redraw()
+
+        rects = [c for c in stepper.canvas.before.children if isinstance(c, Rectangle)]
+        assert len(rects) == 5, f"expected 5 rectangles, got {len(rects)}"
+
+        right_border = rects[-1]
+        assert right_border.size[0] == BORDER_WIDTH, (
+            f"right border width should be {BORDER_WIDTH}, got {right_border.size[0]}"
+        )
+        assert right_border.size[1] == 32, (
+            f"right border height should be 32, got {right_border.size[1]}"
+        )
+
 
 class TestScreenLayouts:
     """验证页面级组件正确设置了背景。"""
@@ -167,24 +188,3 @@ class TestScreenLayouts:
         stepper = PixelStepper(value=5)
         stepper._redraw()
         assert _has_canvas_before(stepper), "PixelStepper 缺少 canvas.before 背景"
-
-    def test_pixel_stepper_right_border_is_thin(self) -> None:
-        """亮面 right 矩形宽度应为 BORDER_WIDTH。"""
-        from kivy.graphics import Rectangle
-        from app.ui.tokens import BORDER_WIDTH
-
-        stepper = PixelStepper(value=1)
-        stepper.size = (140, 32)
-        stepper.pos = (0, 0)
-        stepper._redraw()
-
-        rects = [c for c in stepper.canvas.before.children if isinstance(c, Rectangle)]
-        assert len(rects) == 5, f"expected 5 rectangles, got {len(rects)}"
-
-        right_border = rects[-1]
-        assert right_border.size[0] == BORDER_WIDTH, (
-            f"right border width should be {BORDER_WIDTH}, got {right_border.size[0]}"
-        )
-        assert right_border.size[1] == 32, (
-            f"right border height should be 32, got {right_border.size[1]}"
-        )
