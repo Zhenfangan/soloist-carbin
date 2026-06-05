@@ -100,4 +100,4 @@ class PixelInput(TextInput):  # type: ignore[misc]
             Color(*self._to_rgba(self._border_light))
             Rectangle(pos=(x, y), size=(w, bw))
             # 亮面 right
-            Rectangle(pos=(x + w - bw, y), size=(w, h))
+            Rectangle(pos=(x + w - bw, y), size=(bw, h))
