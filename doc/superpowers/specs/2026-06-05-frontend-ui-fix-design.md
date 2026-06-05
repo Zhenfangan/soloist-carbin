@@ -31,7 +31,7 @@
 | 1 | `PixelInput._redraw` 亮面 right 矩形 `size=(w, h)` 应为 `(bw, h)` | `app/ui/components/pixel_input.py:103` | 100% | 第一波 |
 | 2 | `PixelStepper._redraw` 同样的 `size=(w, h)` 应为 `(bw, h)` | `app/ui/components/pixel_stepper.py:151` | 100% | 第一波 |
 | 3 | `AddTaskDialog` 输入框 `pos_hint={"x": 0.5}` 应为 `center_x` → input 溢出 card 128px | `app/ui/components/add_task_dialog.py:117` | 100% | 第一波 |
-| 4 | 项目根 + `app/ui/assets/fonts/` 两个未使用的中文像素字体（`FZXS15.ttf`、`方正像素15.ttf`） | 文件系统 | 100% | 第一波 |
+| 4 | `app/ui/assets/fonts/` 两个未使用的中文像素字体（`FZXS15.ttf`、`方正像素15.ttf`） | 文件系统 | 100% | 第一波 |
 | 5 | 底部导航栏 3 张截图都只显示 1 个 tab，应 4 个 | `app/ui/navigation.py` | 90% | 第二波 |
 | 6 | "拍摄日奖励" / `PixelNumberDialog` 弹窗的"确认"按钮溢出窗口右边 | `pixel_number_dialog.py` 或 `pixel_button.py` | 80% | 第二波 |
 | 7 | 输入框点开后无法输入 / 不弹键盘 / 中文 IME 不工作 | `pixel_input.py` + ModalView + Windows IME | 60% | 第二波 |
@@ -116,8 +116,8 @@ ruff check app/ui/
 将删除：
 - `app/ui/assets/fonts/FZXS15.ttf`
 - `app/ui/assets/fonts/方正像素15.ttf`
-- 项目根 `FZXS15.ttf`
-- 项目根 `方正像素15.ttf`
+
+（注：之前 git status 显示项目根有同名文件，实际检查后只在 fonts/ 目录下；项目根无字体文件需要清理）
 
 如有对应测试需要相应调整（如 `pixel_input` 的视觉边框测试有像素断言），一并修改。
 
