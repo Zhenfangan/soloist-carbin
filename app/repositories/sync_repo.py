@@ -39,13 +39,14 @@ class SyncRepo(BaseRepo):
         return result
 
     def import_all_data(self, data: dict[str, list[dict[str, Any]]]) -> None:
-        """从 JSON 格式导入所有表数据"""
-        for table, rows in data.items():
-            for row in rows:
-                columns = ", ".join(row.keys())
-                placeholders = ", ".join("?" for _ in row)
-                values = tuple(row.values())
-                self._execute(
-                    f"INSERT OR REPLACE INTO {table} ({columns}) VALUES ({placeholders})",
-                    values,
-                )
+        """从 JSON 格式批量导入所有表数据（单事务包裹，避免逐行 commit）"""
+        with self.transaction():
+            for table, rows in data.items():
+                for row in rows:
+                    columns = ", ".join(row.keys())
+                    placeholders = ", ".join("?" for _ in row)
+                    values = tuple(row.values())
+                    self.conn.execute(
+                        f"INSERT OR REPLACE INTO {table} ({columns}) VALUES ({placeholders})",
+                        values,
+                    )

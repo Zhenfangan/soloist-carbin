@@ -90,6 +90,39 @@ class EventBus:
         finally:
             self._publish_depth -= 1
 
+    # ── 诊断与生命周期管理 ──
+
+    def subscriber_count(self, event_type: EventType | None = None) -> int:
+        """返回指定事件（或全部）的订阅者数量"""
+        if event_type is not None:
+            return len(self._subscribers[event_type])
+        return sum(len(v) for v in self._subscribers.values())
+
+    def list_subscribers(self, event_type: EventType) -> list[str]:
+        """列出指定事件的所有订阅者名称（用于审计）"""
+        result: list[str] = []
+        for h in self._subscribers[event_type]:
+            if hasattr(h, "__self__"):
+                cls = type(h.__self__).__name__
+                result.append(f"{cls}.{getattr(h, '__name__', '?')}")
+            else:
+                result.append(getattr(h, "__name__", str(h)))
+        return result
+
+    def unsubscribe_all_for(self, owner: object) -> int:
+        """移除指定对象的所有订阅（用于 Widget/Service 销毁时批量清理）。
+
+        返回移除的 handler 数量。
+        """
+        removed = 0
+        for handlers in self._subscribers.values():
+            to_remove = [h for h in handlers
+                         if hasattr(h, "__self__") and h.__self__ is owner]
+            for h in to_remove:
+                handlers.remove(h)
+                removed += 1
+        return removed
+
     def clear(self) -> None:
         """清除所有订阅（测试用）"""
         for event_type in EventType:
