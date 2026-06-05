@@ -50,7 +50,8 @@ DDL_STATEMENTS = [
         current_qty   INTEGER DEFAULT 0,
         is_completed  INTEGER DEFAULT 0,
         is_extra      INTEGER DEFAULT 0,
-        created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+        created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(week_start, task_desc)
     )""",
     """CREATE TABLE IF NOT EXISTS bet_configs (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,21 +100,31 @@ DDL_STATEMENTS = [
     )""",
 ]
 
-# 线程本地连接
+# 线程本地连接池 — 按路径存储，支持多数据库实例
 _local = threading.local()
+
+
+def _get_connections() -> dict[str, sqlite3.Connection]:
+    conns = getattr(_local, "connections", None)
+    if conns is None:
+        conns = {}
+        _local.connections = conns
+    return conns
 
 
 def get_db(path: str | None = None) -> sqlite3.Connection:
     """获取当前线程的 SQLite 连接（自动初始化表结构）"""
     db_path = path or DB_PATH
-    conn = getattr(_local, "conn", None)
+    conns = _get_connections()
+    conn = conns.get(db_path)
     if conn is None:
         conn = sqlite3.connect(db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
-        _local.conn = conn
+        conn.execute("PRAGMA busy_timeout=5000")
         _init_tables(conn)
+        conns[db_path] = conn
     return conn
 
 
@@ -130,9 +141,14 @@ def init_db(path: str | None = None) -> None:
     conn.commit()
 
 
-def close_db() -> None:
-    """关闭当前线程的数据库连接"""
-    conn: sqlite3.Connection | None = getattr(_local, "conn", None)
-    if conn is not None:
-        conn.close()
-        _local.conn = None
+def close_db(path: str | None = None) -> None:
+    """关闭当前线程的数据库连接（默认关闭全部）"""
+    conns = _get_connections()
+    if path:
+        conn = conns.pop(path, None)
+        if conn is not None:
+            conn.close()
+    else:
+        for conn in conns.values():
+            conn.close()
+        conns.clear()

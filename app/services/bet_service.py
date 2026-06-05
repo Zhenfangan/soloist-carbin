@@ -68,8 +68,20 @@ class BetService:
 
     def settle_week(self, week_start: str) -> WeeklySettlementResult:
         """周结算：完成→奖励 / 超额→额外 / 未完成→惩罚"""
-        tasks = self._bet_repo.get_tasks_by_week(week_start)
         config = self._bet_repo.get_config(week_start)
+        if config and config.status == "settled":
+            tasks = self._bet_repo.get_tasks_by_week(week_start)
+            return WeeklySettlementResult(
+                week_start=week_start,
+                tasks=tasks,
+                completed_count=sum(1 for t in tasks if t.is_completed),
+                extra_count=sum(1 for t in tasks if t.is_extra and t.is_completed),
+                total_reward=0.0,
+                total_penalty=0.0,
+                net=0.0,
+                ledger_entries=[],
+            )
+        tasks = self._bet_repo.get_tasks_by_week(week_start)
 
         base_reward = config.base_reward if config else float(self._get_setting("bet_base_reward"))
         extra_reward = config.extra_reward if config else float(self._get_setting("bet_extra_reward"))
@@ -120,13 +132,14 @@ class BetService:
         total_penalty = sum(e.amount for e in entries if e.amount < 0)
         net = total_reward + total_penalty
 
-        for entry in entries:
-            self._ledger_repo.insert(entry)
+        with self._bet_repo.transaction():
+            for entry in entries:
+                self._ledger_repo.insert(entry)
 
-        # Mark config as settled
-        if config:
-            config.status = "settled"
-            self._bet_repo.upsert_config(config)
+            # Mark config as settled
+            if config:
+                config.status = "settled"
+                self._bet_repo.upsert_config(config)
 
         result = WeeklySettlementResult(
             week_start=week_start,

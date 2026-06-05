@@ -2,6 +2,9 @@
 
 模块 A 触发模块 B 的行为时，通过 EventBus 发布事件，
 模块 B 订阅相关事件类型，不直接跨模块调用 Service。
+
+异常隔离：单个订阅者崩溃不影响后续订阅者，也不会向发布者传播。
+环形检测：同一事件链递归深度超过阈值时截断并告警。
 """
 
 from __future__ import annotations
@@ -9,6 +12,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
+
+# 最大递归发布深度，防止环形依赖无限循环
+MAX_PUBLISH_DEPTH = 5
 
 
 class EventType(Enum):
@@ -33,12 +39,13 @@ EventHandler = Callable[[EventType, dict[str, Any]], None]
 
 
 class EventBus:
-    """轻量级发布-订阅事件总线"""
+    """轻量级发布-订阅事件总线（带异常隔离与环形检测）"""
 
     def __init__(self) -> None:
         self._subscribers: dict[EventType, list[EventHandler]] = {
             event_type: [] for event_type in EventType
         }
+        self._publish_depth = 0
 
     def subscribe(self, event_type: EventType, handler: EventHandler) -> None:
         """订阅某类事件"""
@@ -51,10 +58,37 @@ class EventBus:
             self._subscribers[event_type].remove(handler)
 
     def publish(self, event_type: EventType, payload: dict[str, Any] | None = None) -> None:
-        """发布事件，通知所有订阅者"""
-        data = payload or {}
-        for handler in self._subscribers[event_type]:
-            handler(event_type, data)
+        """发布事件，通知所有订阅者。
+
+        每个 handler 包裹在独立 try/except 中。单个订阅者崩溃：
+        - 异常被捕获并输出日志
+        - 不影响后续订阅者
+        - 不向调用者传播
+        """
+        if self._publish_depth >= MAX_PUBLISH_DEPTH:
+            import logging
+            logging.getLogger("EventBus").warning(
+                "publish(%s) 被深度截断 (depth=%d)，可能存在环形依赖",
+                event_type.value,
+                self._publish_depth,
+            )
+            return
+
+        base = payload or {}
+        self._publish_depth += 1
+        try:
+            for handler in self._subscribers[event_type]:
+                try:
+                    handler(event_type, dict(base))  # 每个 handler 独立拷贝
+                except Exception:
+                    import logging
+                    logging.getLogger("EventBus").exception(
+                        "订阅者 %s 处理事件 %s 时崩溃，已隔离",
+                        getattr(handler, "__name__", handler),
+                        event_type.value,
+                    )
+        finally:
+            self._publish_depth -= 1
 
     def clear(self) -> None:
         """清除所有订阅（测试用）"""

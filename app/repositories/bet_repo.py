@@ -37,15 +37,12 @@ class BetRepo(BaseRepo):
         return self._row_to_task(row) if row else None
 
     def update_task_progress(self, task_id: int, current_qty: int) -> BetTask | None:
-        """更新任务进度，如果 current_qty >= target_qty 则自动标记完成。"""
-        task_row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
-        if not task_row:
-            return None
-        target = task_row["target_qty"]
-        is_completed = 1 if current_qty >= target else task_row["is_completed"]
+        """原子递增任务进度 — 使用 SET x = x + ? 消除丢失更新"""
         self._execute(
-            "UPDATE bet_tasks SET current_qty = ?, is_completed = ? WHERE id = ?",
-            (current_qty, is_completed, task_id),
+            "UPDATE bet_tasks SET current_qty = current_qty + ?,"
+            " is_completed = CASE WHEN current_qty + ? >= target_qty THEN 1 ELSE is_completed END"
+            " WHERE id = ?",
+            (current_qty, current_qty, task_id),
         )
         row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
         return self._row_to_task(row) if row else None
@@ -56,25 +53,23 @@ class BetRepo(BaseRepo):
     # ── 配置 CRUD ──
 
     def upsert_config(self, config: BetConfig) -> BetConfig:
-        existing = self._fetch_one(
+        """原子 upsert — 使用 INSERT ON CONFLICT 消除 TOCTOU 竞态"""
+        self._execute(
+            """INSERT INTO bet_configs (week_start, base_reward, extra_reward, penalty, status)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(week_start) DO UPDATE SET
+               base_reward = excluded.base_reward,
+               extra_reward = excluded.extra_reward,
+               penalty = excluded.penalty,
+               status = excluded.status""",
+            (config.week_start, config.base_reward, config.extra_reward,
+             config.penalty, config.status),
+        )
+        row = self._fetch_one(
             "SELECT * FROM bet_configs WHERE week_start = ?", (config.week_start,)
         )
-        if existing:
-            self._execute(
-                """UPDATE bet_configs SET base_reward = ?, extra_reward = ?,
-                   penalty = ?, status = ? WHERE week_start = ?""",
-                (config.base_reward, config.extra_reward, config.penalty,
-                 config.status, config.week_start),
-            )
-            config.id = existing["id"]
-        else:
-            rid = self._insert(
-                """INSERT INTO bet_configs (week_start, base_reward, extra_reward, penalty, status)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (config.week_start, config.base_reward, config.extra_reward,
-                 config.penalty, config.status),
-            )
-            config.id = rid
+        if row:
+            config.id = row["id"]
         return config
 
     def get_config(self, week_start: str) -> BetConfig | None:

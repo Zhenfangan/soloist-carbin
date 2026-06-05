@@ -20,42 +20,35 @@ class CheckinRepo(BaseRepo):
         return self._row_to_checkin(row) if row else None
 
     def upsert(self, checkin: Checkin) -> Checkin:
-        """插入或更新打卡记录"""
-        existing = self.get_by_date_period(checkin.checkin_date, checkin.period)
-        if existing:
-            self._execute(
-                """UPDATE checkins SET checkin_time = ?, checkout_time = ?,
-                   checkout_type = ?, status = ?, is_shooting = ?,
-                   updated_at = datetime('now')
-                   WHERE checkin_date = ? AND period = ?""",
-                (
-                    checkin.checkin_time,
-                    checkin.checkout_time,
-                    checkin.checkout_type,
-                    checkin.status,
-                    checkin.is_shooting,
-                    checkin.checkin_date,
-                    checkin.period,
-                ),
-            )
-            checkin.id = existing.id
-        else:
-            rid = self._insert(
-                """INSERT INTO checkins (checkin_date, period, checkin_time,
-                   checkout_time, checkout_type, status, is_shooting,
-                   created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))""",
-                (
-                    checkin.checkin_date,
-                    checkin.period,
-                    checkin.checkin_time,
-                    checkin.checkout_time,
-                    checkin.checkout_type,
-                    checkin.status,
-                    checkin.is_shooting,
-                ),
-            )
-            checkin.id = rid
+        """原子 upsert — 使用 INSERT ON CONFLICT 消除 TOCTOU 竞态"""
+        self._execute(
+            """INSERT INTO checkins (checkin_date, period, checkin_time,
+               checkout_time, checkout_type, status, is_shooting,
+               created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+               ON CONFLICT(checkin_date, period) DO UPDATE SET
+               checkin_time = excluded.checkin_time,
+               checkout_time = excluded.checkout_time,
+               checkout_type = excluded.checkout_type,
+               status = excluded.status,
+               is_shooting = excluded.is_shooting,
+               updated_at = datetime('now')""",
+            (
+                checkin.checkin_date,
+                checkin.period,
+                checkin.checkin_time,
+                checkin.checkout_time,
+                checkin.checkout_type,
+                checkin.status,
+                checkin.is_shooting,
+            ),
+        )
+        row = self._fetch_one(
+            "SELECT * FROM checkins WHERE checkin_date = ? AND period = ?",
+            (checkin.checkin_date, checkin.period),
+        )
+        if row:
+            checkin.id = row["id"]
         return checkin
 
     def get_all_by_date(self, date: str) -> list[Checkin]:
