@@ -152,6 +152,29 @@ class TestComponentBackgrounds:
             f"right border height should be 32, got {right_border.size[1]}"
         )
 
+    def test_pixel_button_dark_right_border_is_thin(self) -> None:
+        """PixelButton 凸起状态暗面 right 矩形必须是 bw 宽，不能覆盖整个按钮。"""
+        from kivy.graphics import Rectangle
+        from app.ui.components.pixel_button import PixelButton
+        from app.ui.tokens import BORDER_WIDTH
+
+        btn = PixelButton(text="测试")
+        btn.size = (200, 48)
+        btn.pos = (10, 20)
+        btn._is_pressed = False  # 凸起状态
+        btn._redraw()
+
+        rects = [c for c in btn.canvas.before.children if isinstance(c, Rectangle)]
+        # 顺序：light top, light left, dark bottom, dark right, bg fill
+        assert len(rects) == 5, f"Expected 5 rectangles, got {len(rects)}"
+        dark_right = rects[-2]  # 倒数第二个是暗面 right (最后一个是 bg fill)
+        assert dark_right.size[0] == BORDER_WIDTH, (
+            f"Dark right border width should be BORDER_WIDTH ({BORDER_WIDTH}), got {dark_right.size[0]}"
+        )
+        assert dark_right.size[1] == 48, (
+            f"Dark right border height should be 48, got {dark_right.size[1]}"
+        )
+
 
 class TestScreenLayouts:
     """验证页面级组件正确设置了背景。"""
