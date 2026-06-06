@@ -295,3 +295,6 @@ class TestAddTaskDialogLayout:
         assert "x" not in pos_hint, (
             f"_desc_input.pos_hint should NOT have 'x' key (would offset, not center), got {pos_hint}"
         )
+        assert pos_hint.get("y") == 0.58, (
+            f"_desc_input.pos_hint['y'] should be 0.58, got {pos_hint.get('y')}"
+        )
