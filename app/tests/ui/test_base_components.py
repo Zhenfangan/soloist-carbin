@@ -274,3 +274,24 @@ class TestMascotBubble:
         bubble = MascotBubble(mascot_id="dudu")
         bubble.set_mascot("wangzai")
         assert bubble._mascot_id == "wangzai"
+
+
+class TestAddTaskDialogLayout:
+    """AddTaskDialog 内部 widget 布局正确性。"""
+
+    def test_desc_input_uses_center_x_not_x(self) -> None:
+        """输入框 pos_hint 必须用 center_x，否则会溢出 card。"""
+        from app.ui.components.add_task_dialog import AddTaskDialog
+
+        dialog = AddTaskDialog()
+        pos_hint = dialog._desc_input.pos_hint
+
+        assert "center_x" in pos_hint, (
+            f"_desc_input.pos_hint should have center_x key, got {pos_hint}"
+        )
+        assert pos_hint["center_x"] == 0.5, (
+            f"_desc_input.pos_hint['center_x'] should be 0.5, got {pos_hint['center_x']}"
+        )
+        assert "x" not in pos_hint, (
+            f"_desc_input.pos_hint should NOT have 'x' key (would offset, not center), got {pos_hint}"
+        )

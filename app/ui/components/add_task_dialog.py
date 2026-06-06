@@ -113,7 +113,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
             hint_text="例如: 写 3 篇文章",
             size_hint=(None, None),
             size=(card_w - CARD_PADDING * 2, 40),
-            pos_hint={"x": 0.5, "y": 0.58},
+            pos_hint={"center_x": 0.5, "y": 0.58},
         )
 
         # 目标数量
