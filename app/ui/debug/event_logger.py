@@ -49,10 +49,15 @@ def _wrap_pixel_button() -> None:
     original = PixelButton.on_touch_down
 
     def wrapped_on_touch_down(self: Any, touch: Any) -> bool:
-        if not self.disabled and self.collide_point(*touch.pos):
-            Logger.info(
-                f"[EVT] PixelButton(text={self.text!r}) touch_down at {touch.pos} → hit"
-            )
+        if self.collide_point(*touch.pos):
+            if self.disabled:
+                Logger.info(
+                    f"[EVT] PixelButton(text={self.text!r}) touch_down at {touch.pos} → disabled (no-op)"
+                )
+            else:
+                Logger.info(
+                    f"[EVT] PixelButton(text={self.text!r}) touch_down at {touch.pos} → hit"
+                )
         return original(self, touch)
 
     PixelButton.on_touch_down = wrapped_on_touch_down  # type: ignore[method-assign]

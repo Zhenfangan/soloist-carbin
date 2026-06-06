@@ -10,8 +10,33 @@ class TestInstallEventLogger:
     """验证 install_event_logger 的开关 + 幂等行为。"""
 
     def setup_method(self) -> None:
-        """每个测试前 reset _INSTALLED 状态。"""
+        """每个测试前 reset _INSTALLED 状态 + 快照原方法。"""
+        from app.ui.components.pixel_button import PixelButton
+        from kivy.uix.modalview import ModalView
+        from kivy.uix.textinput import TextInput
         from app.ui.debug import event_logger
+
+        self._orig = (
+            PixelButton.on_touch_down,
+            ModalView.open,
+            ModalView.dismiss,
+            TextInput.__init__,
+        )
+        event_logger._INSTALLED = False
+
+    def teardown_method(self) -> None:
+        """每个测试后恢复原方法, 防止 monkey-patch 污染后续测试。"""
+        from app.ui.components.pixel_button import PixelButton
+        from kivy.uix.modalview import ModalView
+        from kivy.uix.textinput import TextInput
+        from app.ui.debug import event_logger
+
+        (
+            PixelButton.on_touch_down,
+            ModalView.open,
+            ModalView.dismiss,
+            TextInput.__init__,
+        ) = self._orig
         event_logger._INSTALLED = False
 
     def test_no_install_without_env_var(self) -> None:
