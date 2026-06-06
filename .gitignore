@@ -34,3 +34,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Superpowers brainstorm artifacts (visual companion mockup HTML)
+.superpowers/
