@@ -2,7 +2,7 @@
 
 > 日期: 2026-06-06
 > 作者: andy + Claude
-> 状态: 待审查
+> 状态: 已审查 (Open Questions 已确认)
 > 策略: A — 诊断驱动 (先写诊断工具找根因, 再按类型批量修同类 bug)
 
 ---
@@ -174,19 +174,12 @@ andy 重新跑全流程, 8 个 bug 全部确认修复, 一次性 commit (3-5 个
 - 字体方向调整
 - 颜色 / 视觉风格重设计
 
-## 8. Open Questions — 留给 andy 审查时回答
+## 8. Open Questions — andy 已确认
 
-1. **诊断工具是临时 (修完删除) 还是永久 (留在 codebase)?**
-   建议: **永久, 但 gated by env var/config**。`SOLOIST_DEBUG=1` 时启用, 默认 release 关闭。这样以后再有交互 bug 不用重写工具。
-
-2. **doc/wave2-traces/ 要不要纳入 git?**
-   建议: 加入 .gitignore。log 可能含照片名/时间戳等隐私信息, 不入库。
-
-3. **阶段 1 跑诊断时, 是否要 andy 用真实数据 (你自己的 morning_start/end) 还是 mock 数据?**
-   建议: 真实数据, 这样 layout 计算与 bug 复现更真实。
-
-4. **wave-camera 引入的 Camera/PhotoStrip 是否在 wave 2 LayoutContract 范围里?**
-   建议: 不在。LayoutContract 只针对当前已有的 dialog/layout; wave-camera 实施时另外按 contract 写。
+1. ✅ **诊断工具永久保留**, `SOLOIST_DEBUG=1` env var gated, release 默认关
+2. ✅ **`doc/wave2-traces/` 不入 git**, 已加 .gitignore
+3. ✅ **阶段 1 诊断使用真实数据**, 不 mock
+4. ✅ **wave-camera 不在 wave 2 LayoutContract 范围内**, 各自按 contract 实施
 
 ## 9. 排期内位置
 

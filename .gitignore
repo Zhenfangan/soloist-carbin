@@ -37,3 +37,6 @@ Thumbs.db
 
 # Superpowers brainstorm artifacts (visual companion mockup HTML)
 .superpowers/
+
+# Wave 2 诊断 log (用户操作 trace, 不入库)
+doc/wave2-traces/
