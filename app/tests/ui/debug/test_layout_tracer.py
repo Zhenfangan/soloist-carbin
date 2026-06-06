@@ -80,3 +80,20 @@ class TestTraceLayout:
         output = trace_layout(btn, label="MyTrace")
 
         assert "MyTrace" in output
+
+    def test_trace_handles_cycle_without_recursion_error(self) -> None:
+        """循环引用不应导致 RecursionError, 应输出 <CYCLE -> ClassName>."""
+        from app.ui.debug.layout_tracer import trace_layout
+
+        outer = BoxLayout()
+        inner = BoxLayout()
+        outer.add_widget(inner)
+        # 制造循环: 直接操纵 children list 绕过 Kivy add_widget 的 parent 递归
+        # (add_widget 自身会在 cycle 时栈溢出, 我们只测 trace_layout 的健壮性)
+        inner.children.append(outer)
+
+        # 不应抛 RecursionError
+        output = trace_layout(outer)
+
+        assert "<CYCLE" in output
+        assert "BoxLayout" in output

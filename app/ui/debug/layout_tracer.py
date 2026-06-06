@@ -37,8 +37,22 @@ def trace_layout(widget: Any, label: str = "") -> str:
     return "\n".join(lines)
 
 
-def _trace_recursive(widget: Any, depth: int, lines: list[str]) -> None:
-    """内部递归。每个 widget 一行, children 缩进 +2 空格。"""
+def _trace_recursive(
+    widget: Any,
+    depth: int,
+    lines: list[str],
+    visited: set[int] | None = None,
+) -> None:
+    """内部递归。每个 widget 一行, children 缩进 +2 空格。visited 用 id() 防 cycle。"""
+    if visited is None:
+        visited = set()
+    if id(widget) in visited:
+        indent = "  " * depth
+        cls_name = type(widget).__name__
+        lines.append(f"{indent}[LAY] <CYCLE -> {cls_name}>")
+        return
+    visited.add(id(widget))
+
     indent = "  " * depth
     cls_name = type(widget).__name__
     # Kivy 的 pos/size 是 ObservableList, repr 形如 [10, 20]。
@@ -61,7 +75,7 @@ def _trace_recursive(widget: Any, depth: int, lines: list[str]) -> None:
     if children:
         # Kivy children 列表是逆序的 (后加的在前), 倒一下保持视觉顺序
         for child in reversed(children):
-            _trace_recursive(child, depth + 1, lines)
+            _trace_recursive(child, depth + 1, lines, visited)
 
 
 def _to_tuple(value: Any) -> Any:
