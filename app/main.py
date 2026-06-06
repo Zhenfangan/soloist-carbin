@@ -43,12 +43,24 @@ def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, f
     return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0, alpha)
 
 
+def _setup_debug_hooks() -> None:
+    """启动诊断 — 仅在 SOLOIST_DEBUG=1 时安装事件日志。
+
+    必须在任何 UI 组件实例化之前调用 (否则装饰只对之后实例化的对象生效)。
+    """
+    from app.ui.debug.event_logger import install_event_logger
+    install_event_logger()
+
+
 class SoloistApp(App):  # type: ignore[misc]
     """Soloist Cabin Pro 主 APP。"""
 
     DB_PATH = "soloist.db"
 
     def build(self) -> BoxLayout:
+        # 诊断脚手架 (Wave 2 Phase 1) — 必须在任何 widget 实例化之前
+        _setup_debug_hooks()
+
         # 初始化时钟
         set_clock(SystemClock())
 

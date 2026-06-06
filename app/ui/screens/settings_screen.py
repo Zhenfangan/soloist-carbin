@@ -588,19 +588,42 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         )
         card.add_widget(data_label)
 
+        # Dump widget tree 按钮 (Wave 2 Phase 1 诊断)
+        dump_btn = PixelButton(
+            text="Dump widget tree",
+            color=COLORS["CARD_SHADOW"],
+            size_mode="small",
+            size_hint=(None, None),
+            size=(160, 36),
+            pos_hint={"center_x": 0.3, "y": 0.02},
+        )
+        dump_btn.bind(on_press=lambda _: self._on_dump_widget_tree())
+        card.add_widget(dump_btn)
+
         close_btn = PixelButton(
             text="关闭",
             color=COLORS["PRIMARY_YELLOW"],
             size_mode="small",
             size_hint=(None, None),
             size=(120, 36),
-            pos_hint={"center_x": 0.5, "y": 0.02},
+            pos_hint={"center_x": 0.75, "y": 0.02},
         )
         close_btn.bind(on_press=lambda _: dev_view.dismiss())
         card.add_widget(close_btn)
 
         dev_view.add_widget(card)
         dev_view.open()
+
+    def _on_dump_widget_tree(self) -> None:
+        """Dump 当前 widget 树到 Kivy Logger."""
+        from kivy.app import App
+        from app.ui.debug.layout_tracer import trace_layout
+
+        root = App.get_running_app().root
+        if root is None:
+            Logger.info("[LAY] root is None, nothing to dump")
+            return
+        Logger.info(trace_layout(root, label="dev_panel dump"))
 
     def _redraw_card_border(self, instance: Any, value: Any) -> None:
         """重绘卡片的像素边框。"""
