@@ -187,7 +187,7 @@ class PixelNumberDialog(ModalView):  # type: ignore[misc]
             Rectangle(pos=(x, y), size=(bw, h))
             Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
             Rectangle(pos=(x, y), size=(w, bw))
-            Rectangle(pos=(x + w - bw, y), size=(w, h))
+            Rectangle(pos=(x + w - bw, y), size=(bw, h))
 
     def _filter_numeric(self, instance: Any, text: str) -> None:
         """过滤非数字字符（允许空字符串和负号）。"""

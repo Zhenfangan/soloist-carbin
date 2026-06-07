@@ -75,7 +75,7 @@ def _build_inset_border(
     ig.add(Color(lr, lg, lb, la))
     ig.add(Rectangle(pos=(x, y), size=(w, bw)))
     # 亮面: right edge
-    ig.add(Rectangle(pos=(x + w - bw, y), size=(w, h)))
+    ig.add(Rectangle(pos=(x + w - bw, y), size=(bw, h)))
 
     return ig
 
