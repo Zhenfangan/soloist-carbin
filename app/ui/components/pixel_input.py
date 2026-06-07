@@ -52,7 +52,7 @@ class PixelInput(TextInput):  # type: ignore[misc]
         self.hint_text_color = self._to_rgba(TEXT_GRAY)
         self.cursor_color = self._to_rgba(TEXT_BROWN)
         self.font_size = FONT_SIZE_BODY
-        self.padding = [CARD_PADDING // 2, CARD_PADDING // 2]
+        self.padding = [CARD_PADDING // 2, CARD_PADDING // 2, CARD_PADDING // 2, CARD_PADDING // 2]
         self.multiline = False
 
         # 内凹边框色
