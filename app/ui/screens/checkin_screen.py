@@ -602,12 +602,23 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
     # ── 战报 ────────────────────────────────────────────────
 
     def _on_report(self) -> None:
-        """战报按钮回调。"""
+        """战报按钮回调 — 生成战报 + 弹出 ReportPreview。"""
         if not self._report_service:
+            Logger.warning("CheckinScreen: report_service 未注入, 无法弹出战报")
             return
 
         try:
             self._report_service.generate_and_save(self._date_str)
         except Exception as e:
-            Logger.error(f"CheckinScreen: {e}")
+            Logger.error(f"CheckinScreen: 生成战报失败 {e}")
+            return
+
+        from app.ui.components.report_preview import ReportPreview
+        preview = ReportPreview(
+            image_path="",
+            date_str=self._date_str,
+            on_save=lambda: Logger.info("ReportPreview: 保存至相册 (Android 端实现)"),
+            on_settle=lambda: Logger.info("ReportPreview: 退出并结算"),
+        )
+        preview.open()
 

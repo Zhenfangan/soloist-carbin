@@ -21,6 +21,7 @@ from app.models.history import CalendarCell as CalendarCellModel
 from app.models.history import DayCard as DayCardModel
 from app.models.history import MonthViewData, WeekViewData, YearViewData
 from app.services.history_service import HistoryService
+from app.services.report_service import ReportService
 from app.ui.components.calendar_cell import CalendarCell
 from app.ui.components.day_card import DayCard
 from app.ui.components.history_tabs import HistoryTabs
@@ -50,11 +51,13 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
     def __init__(
         self,
         history_service: HistoryService,
+        report_service: ReportService | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
 
         self._service: HistoryService = history_service
+        self._report_service: ReportService | None = report_service
 
         # 当前导航偏移
         self._tab_index: int = 0  # 0=周, 1=月, 2=年
@@ -466,8 +469,25 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
     # ================================================================
 
     def _on_day_click(self, day_summary: DayCardModel) -> None:
-        """DayCard 点击回调，暂用 print 替代 Toast。"""
-        print(f"[HistoryScreen] 点击日卡片: {day_summary.date}")
+        """DayCard 点击回调 — 生成 + 弹出该日战报 ReportPreview。"""
+        if not self._report_service:
+            Logger.warning("HistoryScreen: report_service 未注入, 无法弹出战报")
+            return
+
+        try:
+            self._report_service.generate_and_save(day_summary.date)
+        except Exception as e:
+            Logger.error(f"HistoryScreen: 生成战报失败 {e}")
+            return
+
+        from app.ui.components.report_preview import ReportPreview
+        preview = ReportPreview(
+            image_path="",
+            date_str=day_summary.date,
+            on_save=lambda: Logger.info("ReportPreview: 保存至相册 (Android 端实现)"),
+            on_settle=lambda: Logger.info("ReportPreview: 退出并结算"),
+        )
+        preview.open()
 
     # ================================================================
     # 工具方法

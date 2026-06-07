@@ -24,6 +24,7 @@ from app.repositories.sync_repo import SyncRepo  # noqa: E402
 from app.services.bet_service import BetService  # noqa: E402
 from app.services.checkin_service import CheckinService  # noqa: E402
 from app.services.history_service import HistoryService  # noqa: E402
+from app.services.report_service import ReportService  # noqa: E402
 from app.services.settings_service import SettingsService  # noqa: E402
 from app.services.sync_service import SyncService  # noqa: E402
 from app.ui.assets.loader import preload_all  # noqa: E402
@@ -78,7 +79,9 @@ class SoloistApp(App):  # type: ignore[misc]
         checkin_svc = CheckinService(checkin_repo, settings_repo)
         ledger_repo = LedgerRepo(self.DB_PATH)
         bet_svc = BetService(BetRepo(self.DB_PATH), ledger_repo, settings_repo)
-        history_svc = HistoryService(checkin_repo, ledger_repo, ShootingRepo(self.DB_PATH))
+        shooting_repo = ShootingRepo(self.DB_PATH)
+        history_svc = HistoryService(checkin_repo, ledger_repo, shooting_repo)
+        self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo)
 
         # 根布局 (垂直: 内容区 + 底部导航)
         self._root = BoxLayout(orientation="vertical")
@@ -144,8 +147,8 @@ class SoloistApp(App):  # type: ignore[misc]
 
         # 创建页面
         screens = {
-            "checkin": CheckinScreen(checkin_service=checkin_svc),
-            "history": HistoryScreen(history_service=history_svc),
+            "checkin": CheckinScreen(checkin_service=checkin_svc, report_service=self._report_svc),
+            "history": HistoryScreen(history_service=history_svc, report_service=self._report_svc),
             "bet": BetScreen(bet_service=bet_svc),
             "settings": SettingsScreen(settings_service=settings_svc, sync_service=SyncService(SyncRepo(self.DB_PATH))),
         }
