@@ -147,7 +147,7 @@ class SoloistApp(App):  # type: ignore[misc]
 
         # 创建页面
         screens = {
-            "checkin": CheckinScreen(checkin_service=checkin_svc, report_service=self._report_svc),
+            "checkin": CheckinScreen(checkin_service=checkin_svc, report_service=self._report_svc, bet_service=bet_svc),
             "history": HistoryScreen(history_service=history_svc, report_service=self._report_svc),
             "bet": BetScreen(bet_service=bet_svc),
             "settings": SettingsScreen(settings_service=settings_svc, sync_service=SyncService(SyncRepo(self.DB_PATH))),

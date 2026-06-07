@@ -60,6 +60,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         motivation_service: Any = None,
         report_service: Any = None,
         shooting_service: Any = None,
+        bet_service: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -72,6 +73,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         self._motivation_service = motivation_service
         self._report_service = report_service
         self._shooting_service = shooting_service
+        self._bet_service = bet_service
 
         # 状态
         self._date_str = ""
@@ -601,8 +603,23 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         pass  # 由 BetService 处理
 
     def _on_task_add(self) -> None:
-        """添加任务回调。"""
-        pass  # 后续实现
+        """添加任务回调 — 弹出 AddTaskDialog。"""
+        from app.ui.components.add_task_dialog import AddTaskDialog
+        dialog = AddTaskDialog(on_add=self._handle_task_add)
+        dialog.open()
+
+    def _handle_task_add(self, desc: str, qty: int) -> None:
+        """添加任务确认回调 — 调 bet_service 创建任务。"""
+        if not self._bet_service:
+            Logger.warning("CheckinScreen: bet_service 未注入, 任务仅本地显示")
+            return
+        try:
+            from datetime import datetime, timedelta
+            dt = datetime.strptime(self._date_str, "%Y-%m-%d")
+            week_start = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            self._bet_service.create_task(week_start, desc, qty)
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 添加任务失败 {e}")
 
     # ── 战报 ────────────────────────────────────────────────
 
