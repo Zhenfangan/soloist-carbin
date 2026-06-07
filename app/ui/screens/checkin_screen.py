@@ -442,7 +442,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             self._show_promise_dialog()
 
     def _refresh_status(self) -> None:
-        """刷新状态显示。"""
+        """刷新状态显示 — 拉取最新 day_status 并同步更新 StatusBox 与所有 PeriodCard。"""
         if not self._checkin_service:
             return
         try:
@@ -450,6 +450,11 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             self._day_status = day_status
             self._periods_data = getattr(day_status, "periods", [])
             self._status_box.update_status(day_status)
+            # 同步刷新所有 PeriodCard，确保签到/签退后卡片状态正确 (B10+B11)
+            for ps in self._periods_data:
+                card = self._period_cards.get(ps.period)
+                if card:
+                    card.set_status_from_period(ps)
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")
 
