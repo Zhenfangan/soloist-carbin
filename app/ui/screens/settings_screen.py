@@ -580,13 +580,28 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             text=json_text,
             font_size=FONT_SIZE_SMALL,
             color=self._to_rgba(TEXT_BROWN),
-            size_hint=(1, None),
-            pos_hint={"x": 0.05, "y": 0.15},
+            size_hint=(None, None),
             halign="left",
             valign="top",
-            text_size=(None, None),
         )
-        card.add_widget(data_label)
+
+        scroll = ScrollView(
+            size_hint=(0.9, 0.5),
+            pos_hint={"x": 0.05, "y": 0.15},
+            do_scroll_x=False,
+            do_scroll_y=True,
+        )
+        scroll.add_widget(data_label)
+        card.add_widget(scroll)
+
+        # data_label 的 text_size 跟随 scroll 宽度，实现自动换行
+        scroll.bind(
+            width=lambda _, w: setattr(data_label, 'text_size', (w * 0.95, None))
+        )
+        # Label 高度自适应内容
+        data_label.bind(
+            texture_size=lambda _, ts: setattr(data_label, 'size', ts)
+        )
 
         # Dump widget tree 按钮 (Wave 2 Phase 1 诊断)
         dump_btn = PixelButton(
