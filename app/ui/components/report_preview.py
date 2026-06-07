@@ -32,6 +32,12 @@ from app.ui.tokens import (
 if TYPE_CHECKING:
     from app.models.report import ReportData
 
+# 模块级颜色常量 — 战报专用语义色
+_COLOR_PENALTY = "#e74c3c"     # 红色, 罚款
+_COLOR_REWARD = "#27ae60"      # 绿色, 奖励
+_COLOR_OVERTIME = "#e67e22"    # 橙色, 加班/满8h鼓励
+_COLOR_PROMISE_BG = "#FFF8E0"  # 浅黄色, 承诺卡片背景
+
 
 def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
     h = hex_color.lstrip("#")
@@ -99,7 +105,6 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             size_hint=(1, None),
             pos_hint={"x": 0, "y": 0.12},
         )
-        self._scroll_view = scroll
         # 计算高度: 弹层90% - 标题48 - 底部按钮80
         panel.bind(size=lambda w, v: setattr(scroll, "height", w.height * 0.9 - 48 - 80))
 
@@ -181,6 +186,13 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             Color(*_to_rgba(BG_CREAM))
             Rectangle(pos=widget.pos, size=widget.size)
 
+    @staticmethod
+    def _draw_promise_bg(widget: Any) -> None:
+        """绘制承诺卡片黄色背景。"""
+        with widget.canvas.before:
+            Color(*_to_rgba(_COLOR_PROMISE_BG))
+            Rectangle(pos=widget.pos, size=widget.size)
+
     def _build_report_content(self, data: ReportData) -> None:
         """用 Kivy Label 渲染 ReportData 内容。
 
@@ -227,7 +239,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         _add(Label(
             text=f"  罚款: {data.penalty_total:.0f}",
             font_size=FONT_SIZE_BODY,
-            color=_to_rgba("#e74c3c"),
+            color=_to_rgba(_COLOR_PENALTY),
             size_hint_y=None,
             height=24,
             halign="left",
@@ -236,7 +248,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         _add(Label(
             text=f"  奖励: +{data.reward_total:.0f}",
             font_size=FONT_SIZE_BODY,
-            color=_to_rgba("#27ae60"),
+            color=_to_rgba(_COLOR_REWARD),
             size_hint_y=None,
             height=24,
             halign="left",
@@ -268,7 +280,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             _add(Label(
                 text=f"  加班: {data.overtime_hours:.1f}h",
                 font_size=FONT_SIZE_BODY,
-                color=_to_rgba("#e67e22"),
+                color=_to_rgba(_COLOR_OVERTIME),
                 size_hint_y=None,
                 height=24,
                 halign="left",
@@ -281,7 +293,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             _add(Label(
                 text="今天工作超过 8 小时，太棒了！给自己一个大大的赞！",
                 font_size=FONT_SIZE_BODY,
-                color=_to_rgba("#e67e22"),
+                color=_to_rgba(_COLOR_OVERTIME),
                 size_hint_y=None,
                 height=32,
                 halign="center",
@@ -292,15 +304,27 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         if data.promise:
             _add(self._spacer(4))
             fulfilled_text = "已兑现" if data.promise.fulfilled else "未达标"
-            _add(Label(
+            promise_box = BoxLayout(
+                size_hint=(1, None),
+                height=36,
+                padding=[CARD_PADDING, 4],
+            )
+            with promise_box.canvas.before:
+                Color(*_to_rgba(_COLOR_PROMISE_BG))
+                Rectangle(pos=promise_box.pos, size=promise_box.size)
+            promise_box.bind(
+                pos=lambda w, _: w.canvas.before.clear() or self._draw_promise_bg(w),
+                size=lambda w, _: w.canvas.before.clear() or self._draw_promise_bg(w),
+            )
+            promise_box.add_widget(Label(
                 text=f"男友承诺: {data.promise.reward_desc} x{data.promise.reward_qty}  ({fulfilled_text})",
                 font_size=FONT_SIZE_BODY,
                 color=brown,
-                size_hint_y=None,
-                height=28,
+                size_hint=(1, 1),
                 halign="center",
                 valign="middle",
             ))
+            _add(promise_box)
 
         # ── 完成任务 ──
         if data.completed_tasks:
@@ -310,7 +334,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
                 _add(Label(
                     text=f"  {task}",
                     font_size=FONT_SIZE_BODY,
-                    color=_to_rgba("#27ae60"),
+                    color=_to_rgba(_COLOR_REWARD),
                     size_hint_y=None,
                     height=24,
                     halign="left",
