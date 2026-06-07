@@ -613,7 +613,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             return
 
         try:
-            self._report_service.generate_and_save(self._date_str)
+            data = self._report_service.collect_data(self._date_str)
         except Exception as e:
             Logger.error(f"CheckinScreen: 生成战报失败 {e}")
             return
@@ -622,6 +622,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         preview = ReportPreview(
             image_path="",
             date_str=self._date_str,
+            report_data=data,
             on_save=lambda: Logger.info("ReportPreview: 保存至相册 (Android 端实现)"),
             on_settle=lambda: Logger.info("ReportPreview: 退出并结算"),
         )

@@ -475,7 +475,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             return
 
         try:
-            self._report_service.generate_and_save(day_summary.date)
+            data = self._report_service.collect_data(day_summary.date)
         except Exception as e:
             Logger.error(f"HistoryScreen: 生成战报失败 {e}")
             return
@@ -484,6 +484,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         preview = ReportPreview(
             image_path="",
             date_str=day_summary.date,
+            report_data=data,
             on_save=lambda: Logger.info("ReportPreview: 保存至相册 (Android 端实现)"),
             on_settle=lambda: Logger.info("ReportPreview: 退出并结算"),
         )
