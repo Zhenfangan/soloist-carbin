@@ -63,6 +63,7 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         # 三条状态行
         self._status_widgets: dict[str, Label] = {}
         self._label_widgets: dict[str, Label] = {}
+        self._rows: list[dict[str, Any]] = []
 
         for period in ["morning", "afternoon", "evening"]:
             period_label_text = PERIOD_LABELS_MAP.get(period, period)
@@ -70,7 +71,7 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
             row = BoxLayout(
                 orientation="horizontal",
                 size_hint=(1, None),
-                height=24,
+                height=28,
                 spacing=4,
             )
 
@@ -88,10 +89,14 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 text="等待签到...",
                 font_size=FONT_SIZE_BODY,
                 color=self._to_rgba(TEXT_GRAY),
-                size_hint=(1, 1),
+                size_hint=(1, None),
+                height=28,
                 halign="left",
                 valign="middle",
+                shorten=True,
+                shorten_from="right",
             )
+            status_w.bind(width=lambda w, _: setattr(w, 'text_size', (w.width, 28)))
 
             row.add_widget(label_w)
             row.add_widget(status_w)
@@ -99,6 +104,13 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
 
             self._label_widgets[period] = label_w
             self._status_widgets[period] = status_w
+
+            self._rows.append({
+                "row": row,
+                "label_w": label_w,
+                "status_w": status_w,
+                "period": period,
+            })
 
         self.bind(pos=self._redraw, size=self._redraw)
 
@@ -182,6 +194,18 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         if status in ("absent_morning", "absent_afternoon"):
             return SEMANTIC_COLORS["absent"]["icon"]
         return TEXT_GRAY
+
+    @property
+    def _period_rows(self) -> list[dict[str, Any]]:
+        """暴露 period 行数据供测试使用。"""
+        return self._rows
+
+    def _update_status_text_sizes(self) -> None:
+        """手动触发 status_w 的 text_size 更新。"""
+        for row_info in self._rows:
+            w = row_info["status_w"]
+            if w.width > 0:
+                w.text_size = (w.width, w.height)
 
     def _redraw(self, *args: Any) -> None:
         """重绘状态框像素边框。"""
