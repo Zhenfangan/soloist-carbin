@@ -63,6 +63,11 @@ class TabButton(Button):  # type: ignore[misc]
         layout.add_widget(self._icon)
         layout.add_widget(self._tab_label)
         self.add_widget(layout)
+        # Button 不是 Layout, 不会自动把 size/pos 派发给子 BoxLayout
+        # 必须显式 bind, 否则 layout 永远停在默认 (0,0) (100,100), 4 个 tab 视觉重叠在左下角
+        self.bind(size=layout.setter("size"), pos=layout.setter("pos"))
+        layout.size = self.size
+        layout.pos = self.pos
 
     def set_active(self, active: bool) -> None:
         if active:
