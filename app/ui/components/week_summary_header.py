@@ -40,7 +40,7 @@ class WeekSummaryHeader(FloatLayout):  # type: ignore[misc]
     def __init__(self, summary: dict[str, object] | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.size_hint_y = None
-        self.height = 96
+        self.height = 72
         self._summary: dict[str, object] = summary or {}
 
         # --- 左侧: 已完成 / 超额 ---
@@ -235,17 +235,19 @@ class WeekSummaryHeader(FloatLayout):  # type: ignore[misc]
         self._reposition_labels()
 
     def _reposition_labels(self, *args: Any) -> None:
-        """重新定位各 Label 的像素位置。"""
-        pad = self.PAGE_PADDING
+        """重排 3 个 label 位置, 确保无水平重叠。"""
         w = self.width
+        h = self.height
+        pad = 8  # 左右留白
 
-        # 左侧: completed / reward
-        self._completed_label.pos = (self.x + pad, self.y + self.height * 0.55)
-        self._completed_label.size = (w * 0.6, 24)
+        # completed_label: 左上
+        self._completed_label.pos = (self.x + pad, self.y + h * 0.7)
+        self._completed_label.size = (w * 0.55, 20)
 
-        self._reward_label.pos = (self.x + pad, self.y + self.height * 0.15)
-        self._reward_label.size = (w * 0.6, 24)
+        # rate_label: 右侧中部
+        self._rate_label.pos = (self.x + w * 0.65, self.y + h * 0.3)
+        self._rate_label.size = (w * 0.35 - pad, 24)
 
-        # 右侧: completion rate
-        self._rate_label.pos = (self.x + w * 0.5, self.y + self.height * 0.2)
-        self._rate_label.size = (w * 0.5 - pad, 40)
+        # reward_label: 左下, 确保右边界在 rate_label 左边界之前
+        self._reward_label.pos = (self.x + pad, self.y + h * 0.05)
+        self._reward_label.size = (w * 0.55, 24)
