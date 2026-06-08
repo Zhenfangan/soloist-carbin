@@ -609,7 +609,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         dialog.open()
 
     def _handle_task_add(self, desc: str, qty: int) -> None:
-        """添加任务确认回调 — 调 bet_service 创建任务。"""
+        """添加任务确认回调 — 调 bet_service 创建任务 + 刷新列表。"""
         if not self._bet_service:
             Logger.warning("CheckinScreen: bet_service 未注入, 任务仅本地显示")
             return
@@ -618,6 +618,12 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             dt = datetime.strptime(self._date_str, "%Y-%m-%d")
             week_start = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
             self._bet_service.create_task(week_start, desc, qty)
+            # 刷新 UI 列表 — 从 service 重新拉取保证一致性
+            tasks = self._bet_service.get_week_tasks(week_start)
+            self._task_list.set_tasks([
+                {"id": t.id, "desc": t.task_desc, "done": bool(t.is_completed)}
+                for t in tasks
+            ])
         except Exception as e:
             Logger.error(f"CheckinScreen: 添加任务失败 {e}")
 
