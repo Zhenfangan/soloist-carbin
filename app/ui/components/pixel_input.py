@@ -44,10 +44,11 @@ class PixelInput(TextInput):  # type: ignore[misc]
         self.hint_text = hint_text
         self._on_change_cb = on_change
 
-        # 外观
-        self.background_normal = ""
+        # 关键修复: 不再把 background_color 置透明
+        # 改成让 TextInput 用纯色背景, PixelInput 只在 canvas.before 画边框
+        self.background_normal = ""  # 不要图片背景
         self.background_active = ""
-        self.background_color = (0, 0, 0, 0)
+        self.background_color = self._to_rgba(CARD_WHITE)  # 用纯色做背景
         self.foreground_color = self._to_rgba(TEXT_BROWN)
         self.hint_text_color = self._to_rgba(TEXT_GRAY)
         self.cursor_color = self._to_rgba(TEXT_BROWN)
@@ -80,17 +81,13 @@ class PixelInput(TextInput):  # type: ignore[misc]
             self._on_change_cb(text)
 
     def _redraw(self, *args: Any) -> None:
-        """重绘内凹像素边框: 暗面 top+left, 亮面 bottom+right。"""
+        """只画 2px 内凹边框, 不画整面背景(避免盖住 TextInput 文字层)。"""
         self.canvas.before.clear()
         x, y = self.pos
         w, h = self.size
         bw = BORDER_WIDTH
 
         with self.canvas.before:
-            # 填充背景
-            Color(*self._to_rgba(CARD_WHITE))
-            Rectangle(pos=(x, y), size=(w, h))
-
             # 暗面 top
             Color(*self._to_rgba(self._border_dark))
             Rectangle(pos=(x, y + h - bw), size=(w, bw))

@@ -62,8 +62,8 @@ class TestComponentBackgrounds:
         inp._redraw()
 
         rects = [c for c in inp.canvas.before.children if isinstance(c, Rectangle)]
-        # 5 个矩形: 背景 + 暗面 top + 暗面 left + 亮面 bottom + 亮面 right
-        assert len(rects) == 5, f"expected 5 rectangles, got {len(rects)}"
+        # 4 个矩形: 暗面 top + 暗面 left + 亮面 bottom + 亮面 right (不再画整面背景)
+        assert len(rects) == 4, f"expected 4 rectangles, got {len(rects)}"
 
         right_border = rects[-1]  # _redraw 顺序最后画亮面 right
         assert right_border.size[0] == BORDER_WIDTH, (
