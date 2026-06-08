@@ -316,13 +316,24 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         if self._has_checked_in and not self._has_checked_out:
             self._action_btn.text = "签退"
             self._action_btn.set_color(DOPAMINE_COLORS["mint"]["light"])
+            self._action_btn.disabled = False
+            self._action_btn.opacity = 1
+            if self._action_btn.height == 0:
+                self._action_btn.height = 64
         elif self._has_checked_out:
-            self._action_btn.text = "[OK] 已签退"
+            # 修复: 已签退后隐藏大黄块按钮，状态由 _check_label 显示
+            self._action_btn.text = ""
             self._action_btn.disabled = True
+            self._action_btn.opacity = 0
+            self._action_btn.size_hint_y = None
+            self._action_btn.height = 0
         else:
             self._action_btn.text = "签到"
             self._action_btn.set_color(COLORS["PRIMARY_YELLOW"])
             self._action_btn.disabled = not self._is_current
+            self._action_btn.opacity = 1
+            if self._action_btn.height == 0:
+                self._action_btn.height = 64
 
         # 完成徽章
         if self._card_state == "completed":
