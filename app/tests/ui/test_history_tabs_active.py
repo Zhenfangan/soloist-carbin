@@ -8,19 +8,20 @@ from app.ui.components.history_tabs import HistoryTabs
 
 
 def _has_indicator(tab_widget: object) -> bool:
-    """tab widget 的 canvas.after 是否有 Rectangle 指示器（底边高亮）。"""
+    """tab widget 的 _indicator_group 是否有 Rectangle 指示器（底边高亮）。"""
     return _has_indicator_in_canvas_after(tab_widget)
 
 
 def _has_indicator_in_canvas_after(tab_widget: object) -> bool:
-    """tab widget 的 canvas.after 是否有 Rectangle 指示器。"""
-    c = getattr(tab_widget, "canvas", None)
-    if c is None:
+    """tab widget 的 _indicator_group 是否有 Rectangle 指示器。
+
+    指示器现在存放在 btn._indicator_group（InstructionGroup）中，
+    而非直接在 canvas.after 顶层，以避免清除其他指令。
+    """
+    group = getattr(tab_widget, "_indicator_group", None)
+    if group is None:
         return False
-    after = getattr(c, "after", None)
-    if after is None:
-        return False
-    children = getattr(after, "children", []) or []
+    children = getattr(group, "children", []) or []
     for instr in children:
         if isinstance(instr, Rectangle):
             return True
@@ -108,17 +109,12 @@ def test_active_tab_indicator_uses_yellow() -> None:
     expected_rgb = _to_rgb_tuple(PRIMARY_YELLOW)
 
     found_yellow = False
-    for canvas_attr in ["canvas.after"]:
-        c = btn
-        for part in canvas_attr.split("."):
-            c = getattr(c, part, None)
-            if c is None:
-                break
-        if c is None:
-            continue
-        # canvas children 顺序: Color 先于 Rectangle
+    # 指示器现在存放在 btn._indicator_group（InstructionGroup）中
+    group = getattr(btn, "_indicator_group", None)
+    if group is not None:
+        # _indicator_group.children 顺序: Color 先于 Rectangle
         last_color: tuple[float, float, float] | None = None
-        for instr in getattr(c, "children", []):
+        for instr in getattr(group, "children", []):
             if isinstance(instr, Color):
                 last_color = (instr.r, instr.g, instr.b)
             elif isinstance(instr, Rectangle) and last_color is not None:

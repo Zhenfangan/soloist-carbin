@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from kivy.animation import Animation
-from kivy.graphics import Color, Rectangle
+from kivy.graphics import Color, InstructionGroup, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 
@@ -59,6 +59,8 @@ class HistoryTabs(BoxLayout):  # type: ignore[misc]
                 size_hint=(1, 1),
             )
             btn.bind(on_press=lambda _btn, idx=i: self._select_tab(idx))
+            btn._indicator_group: InstructionGroup = InstructionGroup()
+            btn.canvas.after.add(btn._indicator_group)
             self._tab_buttons.append(btn)
             self.add_widget(btn)
 
@@ -148,17 +150,18 @@ class HistoryTabs(BoxLayout):  # type: ignore[misc]
                 Rectangle(pos=(x + w - bw, y), size=(bw, h))
 
     def _redraw_tab_indicators(self, *args: Any) -> None:
-        """在每个 tab button 的 canvas.after 绘制底边指示器。
+        """在每个 tab button 的 _indicator_group 绘制底边指示器。
 
-        active tab 绘制 4px 黄色底边矩形；inactive tab 清空 canvas.after。
+        active tab 绘制 4px 黄色底边矩形；inactive tab 清空 group。
+        使用 InstructionGroup 隔离，避免清除其他代码添加的 canvas.after 指令。
         """
         _INDICATOR_H = 4  # 底边指示器高度 (px)
 
         for i, btn in enumerate(self._tab_buttons):
-            btn.canvas.after.clear()
-            if i == self._active_tab:
-                x, y = btn.pos
-                w, _ = btn.size
-                with btn.canvas.after:
-                    Color(*self._to_rgba(PRIMARY_YELLOW))
-                    Rectangle(pos=(x, y), size=(w, _INDICATOR_H))
+            btn._indicator_group.clear()
+            if i == self._active_tab and btn.width > 1:  # 守卫：button 尚未完成布局时跳过
+                btn._indicator_group.add(Color(*self._to_rgba(PRIMARY_YELLOW)))
+                btn._indicator_group.add(Rectangle(
+                    pos=(btn.x, btn.y),
+                    size=(btn.width, _INDICATOR_H),
+                ))
