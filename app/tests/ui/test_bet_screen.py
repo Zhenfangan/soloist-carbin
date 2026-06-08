@@ -550,3 +550,43 @@ class TestBetScreenSettlement:
         tasks = svc.get_week_tasks("2026-06-01")
         assert len(tasks) == 1
         assert tasks[0].task_desc == "保留"
+
+
+# ============================================================
+# 5.17 底部 cream 区无残留 widget 测试 (Task 9)
+# ============================================================
+
+
+class TestBetScreenNoOrphanAfterSettleButton:
+    """周结算按钮之后不应有多余 widget（仅允许 _settle_hint）。"""
+
+    def test_no_widget_after_settle_button(self, temp_db: str) -> None:
+        """周结算按钮后只允许 settle_hint，不允许其他 widget 残留。"""
+        svc = create_bet_service(temp_db)
+        screen = BetScreen(bet_service=svc)
+        screen.refresh()
+
+        children_in_order = list(reversed(screen._layout.children))
+        settle_idx = next(
+            (
+                i
+                for i, w in enumerate(children_in_order)
+                if hasattr(w, "text") and "周结算" in (w.text or "")
+            ),
+            None,
+        )
+        assert settle_idx is not None, "未找到周结算按钮"
+        after = children_in_order[settle_idx + 1 :]
+        assert len(after) <= 1, (
+            f"周结算后多余 widget: {[type(w).__name__ for w in after]}"
+        )
+
+    def test_task_item_content_hidden_before_layout(self, temp_db: str) -> None:
+        """BetTaskItem._content 初始 opacity=0，防止 progress_label 在 (0,0) 闪现。"""
+        svc = create_bet_service(temp_db)
+        task = svc.create_task("2026-06-01", "测试任务", target_qty=3)
+        from app.ui.components.bet_task_item import BetTaskItem
+
+        item = BetTaskItem(task=task)
+        # _content 初始应为不可见
+        assert item._content.opacity == 0

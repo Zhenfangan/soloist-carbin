@@ -71,8 +71,10 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         self._content_offset: float = 0.0
 
         # ---- 内容容器 (swipe offset 动画) ----
+        # opacity=0 直到第一次 _redraw 完成布局，防止 Label 在 (0,0) 处闪现
         self._content = FloatLayout(
             size_hint=(1, 1),
+            opacity=0,
         )
         self._content.bind(pos=self._redraw_content)
 
@@ -450,6 +452,8 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             Rectangle(pos=(x + w - bw, y), size=(bw, h))
 
         self._layout_children()
+        # 确保内容首次布局后可见
+        self._content.opacity = 1
 
     def _redraw_content(self, *args: Any) -> None:
         """内容位置更新时重绘。"""
