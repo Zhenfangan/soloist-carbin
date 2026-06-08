@@ -23,3 +23,19 @@ def test_row_height_is_28() -> None:
     for row_info in box._period_rows:
         row = row_info["row"]
         assert row.height == 28, f"期望 row height=28, 实际 {row.height}"
+
+
+def test_long_status_text_does_not_overflow_row() -> None:
+    """长状态文字应该被 shorten 截断, texture 宽不超过 status_w 宽。"""
+    box = StatusBox()
+    box.size = (380, 130)
+    box.do_layout()
+
+    status_w = box._status_widgets["evening"]
+    status_w.text = "正常签到 16:12:41 / 签退 12:42 / 拍摄完成 / 还有更多"
+    status_w.width = 280
+    status_w.texture_update()
+
+    assert status_w.texture_size[0] <= 280, (
+        f"文字 texture 宽 {status_w.texture_size[0]} > status_w 宽 280, 未被 shorten"
+    )

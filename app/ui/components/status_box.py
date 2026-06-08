@@ -95,8 +95,13 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 valign="middle",
                 shorten=True,
                 shorten_from="right",
+                text_size=(None, 28),  # 初始即设
             )
-            status_w.bind(width=lambda w, _: setattr(w, 'text_size', (w.width, 28)))
+
+            def _bind_text_size(w: Any, _: Any) -> None:
+                w.text_size = (max(w.width - 4, 1), 28)
+
+            status_w.bind(width=_bind_text_size)
 
             row.add_widget(label_w)
             row.add_widget(status_w)
