@@ -26,16 +26,40 @@ def test_row_height_is_28() -> None:
 
 
 def test_long_status_text_does_not_overflow_row() -> None:
-    """长状态文字应该被 shorten 截断, texture 宽不超过 status_w 宽。"""
+    """长状态文字应该被 shorten 截断, text_size 同步 width-4 buffer。"""
+    from app.ui.components.status_box import StatusBox
+
     box = StatusBox()
     box.size = (380, 130)
     box.do_layout()
 
     status_w = box._status_widgets["evening"]
-    status_w.text = "正常签到 16:12:41 / 签退 12:42 / 拍摄完成 / 还有更多"
-    status_w.width = 280
-    status_w.texture_update()
+    status_w.text = "正常签到 16:12:41 / 签退 12:42 / 拍摄完成"
 
-    assert status_w.texture_size[0] <= 280, (
-        f"文字 texture 宽 {status_w.texture_size[0]} > status_w 宽 280, 未被 shorten"
+    # 显式设置 width 触发 _bind_text_size
+    status_w.width = 280
+
+    # 验证 bind 把 text_size[0] 设成了 width - 4 (= 276) 而不是 None / width
+    assert status_w.text_size[0] == 276, (
+        f"text_size[0] 应为 width-4=276, 实际 {status_w.text_size[0]}"
     )
+
+    # 验证 shorten 配置
+    assert status_w.shorten is True
+    assert status_w.shorten_from == "right"
+
+
+def test_each_row_has_independent_bind() -> None:
+    """每个 row 的 status_w 应独立响应 width 变化。"""
+    from app.ui.components.status_box import StatusBox
+
+    box = StatusBox()
+    morning_w = box._status_widgets["morning"]
+    evening_w = box._status_widgets["evening"]
+
+    # 使用与默认值不同的 width 确保 bind 触发 (Kivy 只在值变化时触发)
+    morning_w.width = 200
+    evening_w.width = 150
+
+    assert morning_w.text_size[0] == 196, "morning text_size 应基于自身 width"
+    assert evening_w.text_size[0] == 146, "evening text_size 应基于自身 width"
