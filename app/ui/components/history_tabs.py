@@ -62,7 +62,7 @@ class HistoryTabs(BoxLayout):  # type: ignore[misc]
             self._tab_buttons.append(btn)
             self.add_widget(btn)
 
-        self.bind(pos=self._redraw, size=self._redraw)
+        self.bind(pos=self._redraw_all, size=self._redraw_all)
 
     @property
     def active_tab(self) -> int:
@@ -74,23 +74,29 @@ class HistoryTabs(BoxLayout):  # type: ignore[misc]
         if 0 <= value <= 2 and value != self._active_tab:
             self._select_tab(value)
 
+    def set_active(self, index: int) -> None:
+        """公开方法：强制将指定 tab 设为 active，即使与当前 index 相同也刷新视觉。"""
+        old_index = self._active_tab
+        self._active_tab = index
+
+        # 150ms 渐隐渐显动画（只在切换时触发）
+        if old_index != index:
+            if old_index < len(self._tab_buttons):
+                anim_out = Animation(opacity=0.5, duration=0.15)
+                anim_out.start(self._tab_buttons[old_index])
+            if index < len(self._tab_buttons):
+                anim_in = Animation(opacity=1.0, duration=0.15)
+                anim_in.start(self._tab_buttons[index])
+
+        self._redraw()
+        self._redraw_tab_indicators()
+
     def _select_tab(self, tab_index: int) -> None:
         """选中指定 tab。"""
         if tab_index == self._active_tab:
             return
 
-        old_index = self._active_tab
-        self._active_tab = tab_index
-
-        # 150ms 渐隐渐显动画
-        if old_index < len(self._tab_buttons):
-            anim_out = Animation(opacity=0.5, duration=0.15)
-            anim_out.start(self._tab_buttons[old_index])
-        if tab_index < len(self._tab_buttons):
-            anim_in = Animation(opacity=1.0, duration=0.15)
-            anim_in.start(self._tab_buttons[tab_index])
-
-        self._redraw()
+        self.set_active(tab_index)
         if self._on_tab_change:
             self._on_tab_change(tab_index)
 
@@ -103,6 +109,11 @@ class HistoryTabs(BoxLayout):  # type: ignore[misc]
             int(h[4:6], 16) / 255.0,
             alpha,
         )
+
+    def _redraw_all(self, *args: Any) -> None:
+        """pos/size 变化时同时重绘背景和 tab 指示器。"""
+        self._redraw()
+        self._redraw_tab_indicators()
 
     def _redraw(self, *args: Any) -> None:
         """重绘各 tab 的像素背景。"""
@@ -135,3 +146,19 @@ class HistoryTabs(BoxLayout):  # type: ignore[misc]
                 Rectangle(pos=(x, y), size=(bw, h))
                 # right
                 Rectangle(pos=(x + w - bw, y), size=(bw, h))
+
+    def _redraw_tab_indicators(self, *args: Any) -> None:
+        """在每个 tab button 的 canvas.after 绘制底边指示器。
+
+        active tab 绘制 4px 黄色底边矩形；inactive tab 清空 canvas.after。
+        """
+        _INDICATOR_H = 4  # 底边指示器高度 (px)
+
+        for i, btn in enumerate(self._tab_buttons):
+            btn.canvas.after.clear()
+            if i == self._active_tab:
+                x, y = btn.pos
+                w, _ = btn.size
+                with btn.canvas.after:
+                    Color(*self._to_rgba(PRIMARY_YELLOW))
+                    Rectangle(pos=(x, y), size=(w, _INDICATOR_H))

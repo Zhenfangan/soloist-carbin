@@ -111,10 +111,11 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             font_size=FONT_SIZE_SMALL,
             color=self._to_rgba(DOPAMINE_COLORS["mint"]["light"]),
             size_hint=(1, None),
-            height=20,
+            height=0,  # 修复: 空数据时不占高度, text 变化时同步更新
             halign="center",
             valign="middle",
         )
+        self._streak_label.bind(text=self._update_streak_height)
         self._container.add_widget(self._streak_label)
 
         # 3. 三时段卡片
@@ -245,6 +246,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             return f"{year}年{month}月{day}日"
         except (IndexError, ValueError):
             return date_str
+
+    def _update_streak_height(self, *args: Any) -> None:
+        """text 变化时同步 height — 空 text height=0, 非空 height=20。"""
+        self._streak_label.height = 20 if self._streak_label.text else 0
 
     def _load_data(self) -> None:
         """加载今日数据。"""

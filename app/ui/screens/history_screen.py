@@ -32,6 +32,7 @@ from app.ui.tokens import (
     FONT_SIZE_BODY,
     FONT_SIZE_SMALL,
     GRID_UNIT,
+    NAV_HEIGHT,
     TEXT_BROWN,
     TEXT_GRAY,
 )
@@ -139,15 +140,14 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             orientation="vertical",
             size_hint_y=None,
             spacing=GRID_UNIT,
-            padding=[GRID_UNIT, GRID_UNIT],
+            # bottom padding 预留 navtab 高度，防止"本周合计"被遮挡
+            padding=[GRID_UNIT, GRID_UNIT, GRID_UNIT, NAV_HEIGHT + GRID_UNIT * 2],
         )
         self._week_card_container.bind(
             minimum_height=self._week_card_container.setter("height")
         )
-        self._week_scroll.add_widget(self._week_card_container)
-        layout.add_widget(self._week_scroll)
 
-        # 本周合计
+        # 本周合计 — 放入 ScrollView 内容容器，随内容一起滚动
         self._week_total_label = Label(
             text="",
             font_size=FONT_SIZE_BODY,
@@ -161,7 +161,10 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         self._week_total_label.bind(
             width=lambda inst, w: setattr(inst, "text_size", (w, None))
         )
-        layout.add_widget(self._week_total_label)
+        self._week_card_container.add_widget(self._week_total_label)
+
+        self._week_scroll.add_widget(self._week_card_container)
+        layout.add_widget(self._week_scroll)
 
         return layout
 
@@ -186,11 +189,13 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         # 更新标题
         self._week_label.text = f"{week_start} ~ {week_end}"
 
-        # 重建卡片
+        # 重建卡片 — 清空全部，按顺序添加卡片，最后追加 footer label
         self._week_card_container.clear_widgets()
         for day in data.days:
             card = DayCard(day_summary=day, on_click=self._on_day_click)
             self._week_card_container.add_widget(card)
+        # footer label 始终在卡片列表最下方
+        self._week_card_container.add_widget(self._week_total_label)
 
         # 更新合计
         net = data.weekly_net

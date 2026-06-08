@@ -388,9 +388,11 @@ class TestHistoryScreen:
         assert screen._year_view.opacity == 1.0
 
     def test_week_view_renders_day_cards(self) -> None:
-        """周视图渲染 DayCard 列表。"""
+        """周视图渲染 DayCard 列表（container 包含 3 张 DayCard + 1 个 footer label）。"""
         screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
-        assert len(screen._week_card_container.children) == 3
+        from app.ui.components.day_card import DayCard as DayCardWidget
+        day_cards = [c for c in screen._week_card_container.children if isinstance(c, DayCardWidget)]
+        assert len(day_cards) == 3
 
     def test_week_navigation_calls_service(self) -> None:
         """周箭头切换调用服务。"""
