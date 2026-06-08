@@ -44,11 +44,10 @@ class PixelInput(TextInput):  # type: ignore[misc]
         self.hint_text = hint_text
         self._on_change_cb = on_change
 
-        # 关键修复: 不再把 background_color 置透明
-        # 改成让 TextInput 用纯色背景, PixelInput 只在 canvas.before 画边框
-        self.background_normal = ""  # 不要图片背景
+        # 注: 背景填充由 _redraw 在 canvas.before 内嵌绘制, 而非用 TextInput 的 background_color
+        self.background_normal = ""
         self.background_active = ""
-        self.background_color = self._to_rgba(CARD_WHITE)  # 用纯色做背景
+        self.background_color = (0, 0, 0, 0)  # 透明; 背景由 _redraw 画
         self.foreground_color = self._to_rgba(TEXT_BROWN)
         self.hint_text_color = self._to_rgba(TEXT_GRAY)
         self.cursor_color = self._to_rgba(TEXT_BROWN)
@@ -81,13 +80,19 @@ class PixelInput(TextInput):  # type: ignore[misc]
             self._on_change_cb(text)
 
     def _redraw(self, *args: Any) -> None:
-        """只画 2px 内凹边框, 不画整面背景(避免盖住 TextInput 文字层)。"""
+        """画 2px 内凹边框 + 内嵌白色背景填充。
+
+        背景 Rectangle 比 widget 小 BORDER_WIDTH*2, 不与 TextInput 文字渲染冲突。
+        """
         self.canvas.before.clear()
         x, y = self.pos
         w, h = self.size
         bw = BORDER_WIDTH
 
         with self.canvas.before:
+            # 内嵌背景填充 (留出边框区域)
+            Color(*self._to_rgba(CARD_WHITE))
+            Rectangle(pos=(x + bw, y + bw), size=(max(w - 2 * bw, 0), max(h - 2 * bw, 0)))
             # 暗面 top
             Color(*self._to_rgba(self._border_dark))
             Rectangle(pos=(x, y + h - bw), size=(w, bw))
