@@ -32,7 +32,12 @@ from app.ui.tokens import (
 
 
 class AddTaskDialog(ModalView):  # type: ignore[misc]
-    """添加任务弹窗。
+    """添加任务弹窗 (像素风全屏 ModalView + 中央 320×280 卡片)。
+
+    设计:
+    - ModalView 占据整窗 (size_hint=(1, 1)) — 半透明遮罩覆盖背景
+    - 中央卡片 FloatLayout (320×280) 用 pos_hint center 居中
+    - auto_dismiss=True — 点击卡片外区域 dismiss
 
     用法:
         dialog = AddTaskDialog(on_add=lambda desc, qty: create_task(desc, qty))
