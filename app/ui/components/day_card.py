@@ -97,10 +97,16 @@ class DayCard(FloatLayout):  # type: ignore[misc]
         )
         self.add_widget(self._date_label)
 
-        # 状态标签 (上下午)
+        # 状态标签 (上午 → 下午 → 晚上，固定顺序)
+        _PERIOD_ORDER = {"morning": 0, "afternoon": 1, "evening": 2, "night": 2}
+        _PERIOD_CN = {"morning": "上午", "afternoon": "下午", "evening": "晚上", "night": "晚上"}
+        sorted_periods = sorted(
+            day_summary.periods,
+            key=lambda p: _PERIOD_ORDER.get(p.period, 99),
+        )
         status_parts: list[str] = []
-        for period in day_summary.periods:
-            period_label_cn = "上午" if period.period == "morning" else "下午"
+        for period in sorted_periods:
+            period_label_cn = _PERIOD_CN.get(period.period, period.period)
             status_cn = STATUS_LABELS.get(period.status, period.status)
             status_parts.append(f"{period_label_cn}: {status_cn}")
         status_text = "  ".join(status_parts) if status_parts else "暂无打卡记录"
