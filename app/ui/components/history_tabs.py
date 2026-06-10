@@ -61,10 +61,11 @@ class HistoryTabs(BoxLayout):  # type: ignore[misc]
             btn.bind(on_press=lambda _btn, idx=i: self._select_tab(idx))
             btn._indicator_group: InstructionGroup = InstructionGroup()
             btn.canvas.after.add(btn._indicator_group)
+            # 关键: bind 在 btn 自己的 pos/size, 而非 self —
+            # BoxLayout 重布局子按钮时 self.pos/size 不变, 但 btn.pos/size 才是实际位置
+            btn.bind(pos=self._redraw_all, size=self._redraw_all)
             self._tab_buttons.append(btn)
             self.add_widget(btn)
-
-        self.bind(pos=self._redraw_all, size=self._redraw_all)
 
     @property
     def active_tab(self) -> int:

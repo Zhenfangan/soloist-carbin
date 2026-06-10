@@ -1,4 +1,8 @@
-"""PixelInput 渲染回归测试 — 防止 _redraw 覆盖 TextInput 文字层。"""
+"""PixelInput 渲染回归测试 — 防止 _redraw 覆盖 TextInput 文字层。
+
+设计意图: 不操作 canvas.before, 保留 Kivy TextInput 自身的背景/文字渲染管线;
+边框画到 canvas.after 叠加在文字层之上 (仅 2px 边框, 不遮挡文字区)。
+"""
 
 from __future__ import annotations
 
@@ -6,7 +10,6 @@ import pytest
 from kivy.graphics import Rectangle
 
 from app.ui.components.pixel_input import PixelInput
-from app.ui.tokens import CARD_WHITE
 
 
 @pytest.fixture
@@ -44,17 +47,25 @@ def test_hint_text_is_set(pi: PixelInput) -> None:
     assert pi.hint_text == "测试 hint"
 
 
-def test_canvas_before_has_inset_background_fill(pi: PixelInput) -> None:
-    """canvas.before 应该有一个内嵌的 CARD_WHITE 背景填充 (比 widget 小 BORDER_WIDTH*2)。"""
-    from app.ui.tokens import BORDER_WIDTH
-    expected_size = (200 - 2 * BORDER_WIDTH, 40 - 2 * BORDER_WIDTH)
-    inset_fills = [
-        c for c in pi.canvas.before.children
-        if isinstance(c, Rectangle)
-        and c.size == expected_size
-        and c.pos == (BORDER_WIDTH, BORDER_WIDTH)
-    ]
-    assert len(inset_fills) == 1, (
-        f"canvas.before 应有 1 个内嵌 {expected_size} 背景填充, "
-        f"实际找到 {len(inset_fills)} 个"
+def test_canvas_after_has_4_border_rectangles(pi: PixelInput) -> None:
+    """canvas.after 应有 4 个边框 Rectangle (top/left 暗面 + bottom/right 亮面)。
+
+    边框走 canvas.after 是为了不破坏 TextInput 默认背景/文字渲染管线 —
+    文字仍由 Kivy 自身 pipeline 绘制在 canvas.before 与 canvas 中间层,
+    canvas.after 仅叠加 2px 边框, 不会遮挡文字。
+    """
+    rects = [c for c in pi.canvas.after.children if isinstance(c, Rectangle)]
+    assert len(rects) == 4, (
+        f"canvas.after 应有 4 个边框 Rectangle, 实际找到 {len(rects)} 个"
+    )
+
+
+def test_textinput_default_background_preserved(pi: PixelInput) -> None:
+    """不清空 canvas.before — 保留 Kivy TextInput 的默认 BorderImage 背景。"""
+    # 新方案使用默认 background_color 而非透明; background_normal 不应被置空
+    # 否则 TextInput 内部 cursor/text layout 坐标会出错
+    assert pi.background_color == [1, 1, 1, 1] or pi.background_color == (1, 1, 1, 1)
+    # canvas.before 至少有 Kivy 默认指令 (BorderImage 或 Color), 不为空
+    assert len(pi.canvas.before.children) > 0, (
+        "canvas.before 应保留 Kivy TextInput 默认渲染指令, 不能被清空"
     )

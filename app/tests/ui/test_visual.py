@@ -52,7 +52,10 @@ class TestComponentBackgrounds:
         assert _has_canvas_before(inp), "PixelInput 缺少 canvas.before 背景"
 
     def test_pixel_input_right_border_is_thin(self) -> None:
-        """亮面 right 矩形宽度应为 BORDER_WIDTH (2)，不是整个 widget 宽度。"""
+        """亮面 right 矩形宽度应为 BORDER_WIDTH (2)，不是整个 widget 宽度。
+
+        新方案: 边框画到 canvas.after 叠加在文字层之上 (保留 TextInput 默认背景)。
+        """
         from kivy.graphics import Rectangle
         from app.ui.tokens import BORDER_WIDTH
 
@@ -61,9 +64,9 @@ class TestComponentBackgrounds:
         inp.pos = (10, 20)
         inp._redraw()
 
-        rects = [c for c in inp.canvas.before.children if isinstance(c, Rectangle)]
-        # 5 个矩形: 内嵌背景填充 + 暗面 top + 暗面 left + 亮面 bottom + 亮面 right
-        assert len(rects) == 5, f"expected 5 rectangles, got {len(rects)}"
+        rects = [c for c in inp.canvas.after.children if isinstance(c, Rectangle)]
+        # 4 个矩形: 暗面 top + 暗面 left + 亮面 bottom + 亮面 right
+        assert len(rects) == 4, f"expected 4 rectangles in canvas.after, got {len(rects)}"
 
         right_border = rects[-1]  # _redraw 顺序最后画亮面 right
         assert right_border.size[0] == BORDER_WIDTH, (

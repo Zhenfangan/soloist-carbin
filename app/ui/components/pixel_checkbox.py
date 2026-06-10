@@ -96,28 +96,25 @@ class PixelCheckbox(FloatLayout):  # type: ignore[misc]
         return cast(bool, super().on_touch_down(touch))
 
     def _redraw(self, *args: Any) -> None:
-        """绘制像素勾选框。"""
+        """绘制像素勾选框 — Kivy canvas 用绝对窗口坐标, 必须加 self.x/self.y 偏移。"""
         self.canvas.before.clear()
         bw = BORDER_WIDTH
         box_size = 20
-        box_x = GRID_UNIT
-        box_y = (self.height - box_size) / 2
+        box_x = self.x + GRID_UNIT
+        box_y = self.y + (self.height - box_size) / 2
 
         with self.canvas.before:
-            # 外框
             Color(*self._to_rgba(TEXT_BROWN))
             Line(rectangle=(box_x, box_y, box_size, box_size), width=bw)
 
             if self._checked:
-                # 像素勾号: 用几条短线拼出 ✓
                 Color(*self._to_rgba("#50E8B0"))
-                # 斜线
                 Line(points=[
                     box_x + 4, box_y + 10,
-                    box_x + 8, box_y + 14,
-                    box_x + 16, box_y + 4,
+                    box_x + 8, box_y + 6,
+                    box_x + 16, box_y + 14,
                 ], width=2)
 
-        # 更新标签位置
-        self._label.pos = (box_x + box_size + GRID_UNIT, 0)
-        self._label.size = (self.width - box_x - box_size - GRID_UNIT, self.height)
+        # 标签位置同样需要绝对坐标
+        self._label.pos = (box_x + box_size + GRID_UNIT, self.y)
+        self._label.size = (self.width - (box_x - self.x) - box_size - GRID_UNIT, self.height)

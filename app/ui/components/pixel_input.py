@@ -44,10 +44,9 @@ class PixelInput(TextInput):  # type: ignore[misc]
         self.hint_text = hint_text
         self._on_change_cb = on_change
 
-        # 注: 背景填充由 _redraw 在 canvas.before 内嵌绘制, 而非用 TextInput 的 background_color
-        self.background_normal = ""
-        self.background_active = ""
-        self.background_color = (0, 0, 0, 0)  # 透明; 背景由 _redraw 画
+        # 用 Kivy 默认 BorderImage 渲染管线 (保留默认 textinput.png 但 tint 成纯白)
+        # 不在 canvas.before clear(), 避免破坏 TextInput 自身的文字渲染指令
+        self.background_color = (1, 1, 1, 1)
         self.foreground_color = self._to_rgba(TEXT_BROWN)
         self.hint_text_color = self._to_rgba(TEXT_GRAY)
         self.cursor_color = self._to_rgba(TEXT_BROWN)
@@ -80,19 +79,16 @@ class PixelInput(TextInput):  # type: ignore[misc]
             self._on_change_cb(text)
 
     def _redraw(self, *args: Any) -> None:
-        """画 2px 内凹边框 + 内嵌白色背景填充。
+        """画 2px 内凹边框 — 用 canvas.after 叠加在 TextInput 文字层之上。
 
-        背景 Rectangle 比 widget 小 BORDER_WIDTH*2, 不与 TextInput 文字渲染冲突。
+        不操作 canvas.before, 保留 Kivy TextInput 自己的背景/文字渲染管线完整。
         """
-        self.canvas.before.clear()
+        self.canvas.after.clear()
         x, y = self.pos
         w, h = self.size
         bw = BORDER_WIDTH
 
-        with self.canvas.before:
-            # 内嵌背景填充 (留出边框区域)
-            Color(*self._to_rgba(CARD_WHITE))
-            Rectangle(pos=(x + bw, y + bw), size=(max(w - 2 * bw, 0), max(h - 2 * bw, 0)))
+        with self.canvas.after:
             # 暗面 top
             Color(*self._to_rgba(self._border_dark))
             Rectangle(pos=(x, y + h - bw), size=(w, bw))

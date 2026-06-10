@@ -25,7 +25,7 @@ from app.ui.tokens import (
     TEXT_GRAY,
 )
 
-MAX_DISPLAY_TASKS = 5
+MAX_DISPLAY_TASKS = 20
 
 
 class TaskInlineList(BoxLayout):  # type: ignore[misc]
@@ -46,10 +46,11 @@ class TaskInlineList(BoxLayout):  # type: ignore[misc]
     ) -> None:
         kwargs.setdefault("orientation", "vertical")
         kwargs.setdefault("size_hint", (1, None))
-        kwargs.setdefault("height", 120)
         kwargs.setdefault("padding", [CARD_PADDING, GRID_UNIT, CARD_PADDING, GRID_UNIT])
         kwargs.setdefault("spacing", 2)
         super().__init__(**kwargs)
+        # 内容自适应高度 — 添加任务后面板自动撑高, 否则固定 120 会限制溢出
+        self.bind(minimum_height=self.setter("height"))
 
         self._tasks: list[dict[str, Any]] = tasks or []
         self._on_check_cb = on_check

@@ -582,11 +582,32 @@ class TestBetScreenNoOrphanAfterSettleButton:
         )
 
     def test_task_item_content_hidden_before_layout(self, temp_db: str) -> None:
-        """BetTaskItem._content 初始 opacity=0，防止 progress_label 在 (0,0) 闪现。"""
+        """BetTaskItem 子 label 初始 opacity=0，防止在 (0,0) 闪现。
+
+        新架构: 子 widget 直接挂在 self 上 (无 _content 中间层),
+        各 label 用 opacity=0 + _layout_initialized 标志位实现防闪烁;
+        首次 _redraw 拿到有效 size 后才置为 opacity=1。
+        """
         svc = create_bet_service(temp_db)
         task = svc.create_task("2026-06-01", "测试任务", target_qty=3)
         from app.ui.components.bet_task_item import BetTaskItem
 
         item = BetTaskItem(task=task)
-        # _content 初始应为不可见
-        assert item._content.opacity == 0
+        # 初始所有可见 label opacity=0
+        assert item._check_label.opacity == 0
+        assert item._desc_label.opacity == 0
+        assert item._qty_label.opacity == 0
+        assert item._progress_label.opacity == 0
+        assert item._plus_btn.opacity == 0
+        assert item._layout_initialized is False
+
+        # 首次 _redraw 给定有效 size 后, opacity 应被打开
+        item.size = (380, 56)
+        item.pos = (10, 100)
+        item._redraw()
+        assert item._layout_initialized is True
+        assert item._check_label.opacity == 1
+        assert item._desc_label.opacity == 1
+        assert item._qty_label.opacity == 1
+        assert item._progress_label.opacity == 1
+        assert item._plus_btn.opacity == 1

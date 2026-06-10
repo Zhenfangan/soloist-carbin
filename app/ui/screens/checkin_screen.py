@@ -120,7 +120,6 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
         # 3. 三时段卡片
         self._period_cards: dict[str, PeriodCard] = {}
-        self._container.add_widget(FloatLayout(size_hint=(1, None), height=GRID_UNIT))
 
         def make_period_card(
             period_name: str,
