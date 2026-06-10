@@ -128,6 +128,19 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             opacity=0,
         )
 
+        # ---- [-1] 按钮 (允许误操作回退) ----
+        self._minus_btn = Label(
+            text="-1",
+            font_size=FONT_SIZE_SMALL,
+            color=self._to_rgba(TEXT_BROWN),
+            size_hint=(None, None),
+            size=(28, 32),
+            halign="center",
+            valign="middle",
+            opacity=0,
+        )
+        self._minus_btn.bind(pos=self._redraw_minus_btn, size=self._redraw_minus_btn)
+
         # ---- [+1] 按钮 ----
         self._plus_btn = Label(
             text="+1",
@@ -169,6 +182,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         self.add_widget(self._desc_label)
         self.add_widget(self._qty_label)
         self.add_widget(self._progress_label)
+        self.add_widget(self._minus_btn)
         self.add_widget(self._plus_btn)
         self.add_widget(self._wangzai_img)
 
@@ -256,21 +270,27 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         return cast(bool, super().on_touch_up(touch))
 
     def _handle_tap(self, touch: Any) -> None:
-        """处理点击 — touch 转 self 坐标后直接比 bounding box。"""
-        lx, ly = self.to_local(touch.x, touch.y)
-        lx -= self._content_offset  # swipe 偏移
+        """处理点击 — touch 直接比子 widget 的绝对窗口 bounding box。"""
+        tx, ty = touch.x, touch.y
 
         # [+1] 按钮
         px, py = self._plus_btn.pos
         pw, ph = self._plus_btn.size
-        if px <= lx <= px + pw and py <= ly <= py + ph:
+        if px <= tx <= px + pw and py <= ty <= py + ph:
             self._do_increment()
+            return
+
+        # [-1] 按钮
+        mx, my = self._minus_btn.pos
+        mw, mh = self._minus_btn.size
+        if mx <= tx <= mx + mw and my <= ty <= my + mh:
+            self._do_decrement()
             return
 
         # 复选框
         cx, cy = self._check_label.pos
         cw, ch = self._check_label.size
-        if cx <= lx <= cx + cw and cy <= ly <= cy + ch:
+        if cx <= tx <= cx + cw and cy <= ty <= cy + ch:
             self._do_toggle_check()
             return
 
@@ -278,18 +298,20 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         if self._delete_visible:
             dx, dy = self._delete_btn.pos
             dw, dh = self._delete_btn.size
-            if dx <= lx <= dx + dw and dy <= ly <= dy + dh:
+            if dx <= tx <= dx + dw and dy <= ty <= dy + dh:
                 self._do_delete()
                 return
 
     def _do_increment(self) -> None:
-        """进度 +1。"""
-        if self._task.is_completed:
-            return
+        """进度 +1 (允许超额: 已完成的任务可继续递增)。
+
+        回调传 delta=+1, 与 service.update_task_progress 的增量语义对齐。
+        """
         cur = self._task.current_qty + 1
         target = self._task.target_qty
+        already_done = self._task.is_completed
         self._task.current_qty = cur
-        if cur >= target:
+        if cur >= target and not already_done:
             self._task.is_completed = 1
             self._refresh_desc()
             if self._on_complete_cb and self._task.id is not None:
@@ -297,7 +319,23 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         else:
             self._refresh_desc()
         if self._on_progress_cb and self._task.id is not None:
-            self._on_progress_cb(self._task.id, cur)
+            self._on_progress_cb(self._task.id, 1)
+
+    def _do_decrement(self) -> None:
+        """进度 -1 (下限 0; 若回退到低于 target 取消完成态)。
+
+        回调传 delta=-1, service SQL 自动 MAX(0, x-1) + 双向 is_completed 维护。
+        """
+        if self._task.current_qty <= 0:
+            return
+        cur = self._task.current_qty - 1
+        target = self._task.target_qty
+        self._task.current_qty = cur
+        if cur < target and self._task.is_completed:
+            self._task.is_completed = 0
+        self._refresh_desc()
+        if self._on_progress_cb and self._task.id is not None:
+            self._on_progress_cb(self._task.id, -1)
 
     def _do_toggle_check(self) -> None:
         """切换完成状态。"""
@@ -397,6 +435,9 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
 
         子 widget 不是 RelativeLayout 的孩子, pos 是窗口绝对坐标,
         必须加上 self.x / self.y 偏移; offset 是 swipe 水平动画位移。
+
+        布局: [check] desc... [×N] [N/M] [-1] [+1]
+                36   动态     40    48   28   32
         """
         sx = self.x
         sy = self.y
@@ -405,10 +446,12 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
 
         self._check_label.pos = (sx + offset + GRID_UNIT, sy + (h - 32) / 2)
         self._desc_label.pos = (sx + offset + GRID_UNIT + 40, sy + (h - 32) / 2)
-        self._desc_label.width = max(60, w * 0.40)
-        self._qty_label.pos = (sx + offset + w - 120, sy + (h - 20) / 2)
-        self._progress_label.pos = (sx + offset + w - 80, sy + (h - 20) / 2)
-        self._plus_btn.pos = (sx + offset + w - 36, sy + (h - 32) / 2)
+        # desc 宽度: 留出右侧 ×N(40)+N/M(48)+-1(28)+1(32)+ 间隔 ~ 160px
+        self._desc_label.width = max(60, w - 220)
+        self._qty_label.pos = (sx + offset + w - 152, sy + (h - 20) / 2)
+        self._progress_label.pos = (sx + offset + w - 110, sy + (h - 20) / 2)
+        self._minus_btn.pos = (sx + offset + w - 64, sy + (h - 32) / 2)
+        self._plus_btn.pos = (sx + offset + w - 34, sy + (h - 32) / 2)
 
     # ---- Canvas 绘制 ----
 
@@ -440,15 +483,24 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             self._desc_label.opacity = 1
             self._qty_label.opacity = 1
             self._progress_label.opacity = 1
+            self._minus_btn.opacity = 1
             self._plus_btn.opacity = 1
 
     def _redraw_plus_btn(self, *args: Any) -> None:
         """绘制 [+1] 按钮像素边框 — 用 plus_btn 绝对窗口坐标。"""
-        self._plus_btn.canvas.before.clear()
-        x, y = self._plus_btn.pos
-        w, h = self._plus_btn.size
+        self._draw_btn_border(self._plus_btn)
+
+    def _redraw_minus_btn(self, *args: Any) -> None:
+        """绘制 [-1] 按钮像素边框 — 同 [+1] 风格。"""
+        self._draw_btn_border(self._minus_btn)
+
+    def _draw_btn_border(self, btn: Label) -> None:
+        """通用像素按钮边框绘制 (内凹: 暗面 bottom/right, 亮面 top/left)。"""
+        btn.canvas.before.clear()
+        x, y = btn.pos
+        w, h = btn.size
         bw = BORDER_WIDTH
-        with self._plus_btn.canvas.before:
+        with btn.canvas.before:
             Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
             Rectangle(pos=(x, y), size=(w, h))
             Color(*self._to_rgba("#FFFFFF"))

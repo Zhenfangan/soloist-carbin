@@ -43,9 +43,9 @@ class BetService:
     def complete_task(self, task_id: int) -> BetTask | None:
         return self._bet_repo.complete_task(task_id)
 
-    def update_task_progress(self, task_id: int, current_qty: int) -> BetTask | None:
-        """更新任务进度，自动判断是否完成。"""
-        return self._bet_repo.update_task_progress(task_id, current_qty)
+    def update_task_progress(self, task_id: int, delta: int) -> BetTask | None:
+        """原子递增/递减任务进度 — delta 是增量 (+N 加, -N 减), 自动维护 is_completed。"""
+        return self._bet_repo.update_task_progress(task_id, delta)
 
     def delete_task(self, task_id: int) -> None:
         self._bet_repo.delete_task(task_id)

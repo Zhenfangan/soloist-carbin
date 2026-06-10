@@ -36,13 +36,20 @@ class BetRepo(BaseRepo):
         row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
         return self._row_to_task(row) if row else None
 
-    def update_task_progress(self, task_id: int, current_qty: int) -> BetTask | None:
-        """原子递增任务进度 — 使用 SET x = x + ? 消除丢失更新"""
+    def update_task_progress(self, task_id: int, delta: int) -> BetTask | None:
+        """原子递增/递减任务进度 — 使用 SET x = x + ? (delta 可正负) 消除丢失更新
+
+        is_completed 双向自动维护:
+            达到 target → 1, 低于 target → 0;
+            current_qty 下限 0 (MAX 防止减成负数)。
+        """
         self._execute(
-            "UPDATE bet_tasks SET current_qty = current_qty + ?,"
-            " is_completed = CASE WHEN current_qty + ? >= target_qty THEN 1 ELSE is_completed END"
+            "UPDATE bet_tasks SET current_qty = MAX(0, current_qty + ?),"
+            " is_completed = CASE"
+            "   WHEN MAX(0, current_qty + ?) >= target_qty THEN 1"
+            "   ELSE 0 END"
             " WHERE id = ?",
-            (current_qty, current_qty, task_id),
+            (delta, delta, task_id),
         )
         row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
         return self._row_to_task(row) if row else None

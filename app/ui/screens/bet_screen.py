@@ -183,10 +183,10 @@ class BetScreen(ScrollView):  # type: ignore[misc]
 
     # ---- 任务操作回调 ----
 
-    def _on_task_progress(self, task_id: int, current_qty: int) -> None:
-        """任务进度更新。"""
+    def _on_task_progress(self, task_id: int, delta: int) -> None:
+        """任务进度更新 — delta 是增量 (+1 / -1)。"""
         try:
-            self._bet_service.update_task_progress(task_id, current_qty)
+            self._bet_service.update_task_progress(task_id, delta)
             self.refresh()
         except Exception as e:
             Logger.error(f"BetScreen: {e}")

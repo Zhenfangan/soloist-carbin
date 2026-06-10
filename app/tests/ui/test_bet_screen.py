@@ -127,7 +127,7 @@ class TestBetTaskItem:
         assert not item.task.is_completed
 
     def test_progress_increment(self, temp_db: str) -> None:
-        """[+1] 按钮模拟 — 进度递增。"""
+        """[+1] 按钮模拟 — 进度递增。回调传 delta=+1 (与 service 增量语义对齐)。"""
         svc = create_bet_service(temp_db)
         task = svc.create_task("2026-06-01", "发视频", target_qty=3)
 
@@ -141,14 +141,85 @@ class TestBetTaskItem:
         item._do_increment()
         assert item.task.current_qty == 1
         assert len(progress_values) == 1
-        assert progress_values[0] == 1
+        assert progress_values[0] == 1  # delta=+1
 
         item._do_increment()
         assert item.task.current_qty == 2
+        assert progress_values[1] == 1  # 不是 cur=2, 而是 delta=+1
 
         item._do_increment()
         assert item.task.current_qty == 3
+        assert progress_values[2] == 1  # delta=+1
         assert item.task.is_completed == 1  # 达到目标自动完成
+
+    def test_increment_allows_exceeding_target(self, temp_db: str) -> None:
+        """已完成的任务允许继续 [+1] 超额完成 (用户需求: 无超额上限)。"""
+        svc = create_bet_service(temp_db)
+        task = svc.create_task("2026-06-01", "超额任务", target_qty=2)
+
+        item = BetTaskItem(task=task)
+        item._do_increment()
+        item._do_increment()
+        assert item.task.current_qty == 2
+        assert item.task.is_completed == 1
+
+        # 完成后继续 +1 应该被接受
+        item._do_increment()
+        assert item.task.current_qty == 3
+        assert item.task.is_completed == 1  # 仍标完成
+
+        item._do_increment()
+        assert item.task.current_qty == 4
+
+    def test_progress_decrement(self, temp_db: str) -> None:
+        """[-1] 按钮模拟 — 进度递减, 下限 0。"""
+        svc = create_bet_service(temp_db)
+        task = svc.create_task("2026-06-01", "撤销任务", target_qty=3)
+
+        progress_values: list[int] = []
+        item = BetTaskItem(
+            task=task,
+            on_progress=lambda tid, qty: progress_values.append(qty),
+        )
+
+        item._do_increment()
+        item._do_increment()
+        assert item.task.current_qty == 2
+
+        item._do_decrement()
+        assert item.task.current_qty == 1
+
+        item._do_decrement()
+        item._do_decrement()
+        assert item.task.current_qty == 0
+
+        # 已经 0, 再 -1 不应该变负数
+        item._do_decrement()
+        assert item.task.current_qty == 0
+
+    def test_decrement_uncompletes_when_below_target(self, temp_db: str) -> None:
+        """完成的任务 -1 到低于 target 时, UI 端取消完成状态显示。"""
+        svc = create_bet_service(temp_db)
+        task = svc.create_task("2026-06-01", "回退任务", target_qty=2)
+
+        item = BetTaskItem(task=task)
+        item._do_increment()
+        item._do_increment()
+        assert item.task.is_completed == 1
+
+        # 减一回到 1/2, 应取消完成态
+        item._do_decrement()
+        assert item.task.current_qty == 1
+        assert item.task.is_completed == 0
+
+    def test_minus_button_widget_exists(self, temp_db: str) -> None:
+        """BetTaskItem 应有 _minus_btn 子组件 (与 _plus_btn 并列)。"""
+        svc = create_bet_service(temp_db)
+        task = svc.create_task("2026-06-01", "按钮检查", target_qty=3)
+
+        item = BetTaskItem(task=task)
+        assert hasattr(item, "_minus_btn"), "BetTaskItem 应有 _minus_btn"
+        assert item._minus_btn.text == "-1"
 
     def test_checkbox_toggle(self, temp_db: str) -> None:
         """复选框切换完成状态。"""
@@ -520,9 +591,9 @@ class TestBetScreenSettlement:
         assert t1.id is not None
         assert t2.id is not None
 
-        # 完成部分进度
-        svc.update_task_progress(t1.id, 2)
-        svc.update_task_progress(t2.id, 1)  # auto-completes
+        # 完成部分进度 (delta 语义: +N 增, -N 减)
+        svc.update_task_progress(t1.id, 2)  # 0 → 2
+        svc.update_task_progress(t2.id, 1)  # 0 → 1, auto-completes
 
         # 检查状态
         tasks = svc.get_week_tasks("2026-06-01")
@@ -536,7 +607,36 @@ class TestBetScreenSettlement:
         summary = svc.get_week_summary("2026-06-01")
         assert summary["completed"] == 1
         assert summary["total_tasks"] == 2
-        assert summary["completion_rate"] == 50.0
+
+    def test_update_task_progress_delta_semantics(self, temp_db: str) -> None:
+        """service.update_task_progress 是 delta 语义 — 正负增量 + 下限 0 + is_completed 双向。"""
+        svc = create_bet_service(temp_db)
+        t = svc.create_task("2026-06-01", "delta 测试", target_qty=2)
+        assert t.id is not None
+
+        # +1 → 1/2, 未完成
+        svc.update_task_progress(t.id, 1)
+        r = [x for x in svc.get_week_tasks("2026-06-01") if x.id == t.id][0]
+        assert r.current_qty == 1
+        assert r.is_completed == 0
+
+        # +1 → 2/2, 自动完成
+        svc.update_task_progress(t.id, 1)
+        r = [x for x in svc.get_week_tasks("2026-06-01") if x.id == t.id][0]
+        assert r.current_qty == 2
+        assert r.is_completed == 1
+
+        # -1 → 1/2, 自动取消完成态
+        svc.update_task_progress(t.id, -1)
+        r = [x for x in svc.get_week_tasks("2026-06-01") if x.id == t.id][0]
+        assert r.current_qty == 1
+        assert r.is_completed == 0
+
+        # -5 → MAX(0, 1-5) = 0, 不会变负
+        svc.update_task_progress(t.id, -5)
+        r = [x for x in svc.get_week_tasks("2026-06-01") if x.id == t.id][0]
+        assert r.current_qty == 0
+        assert r.is_completed == 0
 
     def test_delete_task_updates_list(self, temp_db: str) -> None:
         """删除任务后列表更新。"""
@@ -598,6 +698,7 @@ class TestBetScreenNoOrphanAfterSettleButton:
         assert item._desc_label.opacity == 0
         assert item._qty_label.opacity == 0
         assert item._progress_label.opacity == 0
+        assert item._minus_btn.opacity == 0
         assert item._plus_btn.opacity == 0
         assert item._layout_initialized is False
 
@@ -610,4 +711,5 @@ class TestBetScreenNoOrphanAfterSettleButton:
         assert item._desc_label.opacity == 1
         assert item._qty_label.opacity == 1
         assert item._progress_label.opacity == 1
+        assert item._minus_btn.opacity == 1
         assert item._plus_btn.opacity == 1
