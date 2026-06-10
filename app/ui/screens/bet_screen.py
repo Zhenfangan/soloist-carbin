@@ -175,6 +175,7 @@ class BetScreen(ScrollView):  # type: ignore[misc]
             item = BetTaskItem(
                 task=task,
                 on_progress=self._on_task_progress,
+                on_edit=self._on_task_edit,
                 on_complete=self._on_task_complete,
                 on_delete=self._on_task_delete,
                 size_hint_y=None,
@@ -198,6 +199,31 @@ class BetScreen(ScrollView):  # type: ignore[misc]
             self.refresh()
         except Exception as e:
             Logger.error(f"BetScreen: {e}")
+
+    def _on_task_edit(self, task_id: int) -> None:
+        """打开编辑对话框, 预填当前任务的 desc 和 target_qty。"""
+        try:
+            tasks = self._bet_service.get_week_tasks(self._week_start)
+            target = next((t for t in tasks if t.id == task_id), None)
+            if not target:
+                return
+
+            from app.ui.components.add_task_dialog import AddTaskDialog
+
+            def _save(new_desc: str, new_qty: int) -> None:
+                self._bet_service.update_task(task_id, new_desc, new_qty)
+                self.refresh()
+
+            dialog = AddTaskDialog(
+                on_add=_save,
+                initial_desc=target.task_desc,
+                initial_qty=target.target_qty,
+                title_text="编辑任务",
+                confirm_text="保存",
+            )
+            dialog.open()
+        except Exception as e:
+            Logger.error(f"BetScreen edit: {e}")
 
     def _on_task_delete(self, task_id: int) -> None:
         """任务删除。"""

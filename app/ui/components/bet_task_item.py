@@ -31,7 +31,9 @@ from app.ui.tokens import (
 
 # 常量
 _SWIPE_THRESHOLD: float = 60.0
-_DELETE_BTN_WIDTH: float = 80.0
+_EDIT_BTN_WIDTH: float = 64.0
+_DELETE_BTN_WIDTH: float = 64.0
+_ACTION_AREA_WIDTH: float = _EDIT_BTN_WIDTH + _DELETE_BTN_WIDTH
 _ANIM_DURATION: float = 0.4
 _TASK_CARD_HEIGHT: float = 72.0
 
@@ -50,6 +52,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         self,
         task: BetTask,
         on_progress: Callable[[int, int], Any] | None = None,
+        on_edit: Callable[[int], Any] | None = None,
         on_complete: Callable[[int], Any] | None = None,
         on_delete: Callable[[int], Any] | None = None,
         **kwargs: Any,
@@ -59,6 +62,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         self.height = _TASK_CARD_HEIGHT
         self._task = task
         self._on_progress_cb = on_progress
+        self._on_edit_cb = on_edit
         self._on_complete_cb = on_complete
         self._on_delete_cb = on_delete
 
@@ -154,6 +158,19 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         )
         self._plus_btn.bind(pos=self._redraw_plus_btn, size=self._redraw_plus_btn)
 
+        # ---- 橙色编辑按钮 (隐藏，左滑显示) ----
+        self._edit_btn = Label(
+            text="编辑",
+            font_size=FONT_SIZE_BODY,
+            color=self._to_rgba("#FFFFFF"),
+            size_hint=(None, None),
+            size=(_EDIT_BTN_WIDTH, _TASK_CARD_HEIGHT),
+            halign="center",
+            valign="middle",
+        )
+        self._edit_btn.opacity = 0
+        self._edit_btn.bind(pos=self._redraw_edit_btn, size=self._redraw_edit_btn)
+
         # ---- 红色删除按钮 (隐藏，左滑显示) ----
         self._delete_btn = Label(
             text="删除",
@@ -177,6 +194,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         )
 
         # 添加所有子 widget (直接作为 self 的孩子，去掉 _content 中间层)
+        self.add_widget(self._edit_btn)
         self.add_widget(self._delete_btn)
         self.add_widget(self._check_label)
         self.add_widget(self._desc_label)
@@ -294,13 +312,28 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             self._do_toggle_check()
             return
 
-        # 删除按钮 (如果可见)
+        # 编辑/删除按钮 (左滑露出时可见)
         if self._delete_visible:
+            ex, ey = self._edit_btn.pos
+            ew, eh = self._edit_btn.size
+            if ex <= tx <= ex + ew and ey <= ty <= ey + eh:
+                self._do_edit()
+                return
             dx, dy = self._delete_btn.pos
             dw, dh = self._delete_btn.size
             if dx <= tx <= dx + dw and dy <= ty <= dy + dh:
                 self._do_delete()
                 return
+            # 露出状态点其他区域 -> snap 回收
+            self._snap_back()
+            return
+
+        # 描述区域 tap -> 编辑
+        dx, dy = self._desc_label.pos
+        dw, dh = self._desc_label.size
+        if dx <= tx <= dx + dw and dy <= ty <= dy + dh:
+            self._do_edit()
+            return
 
     def _do_increment(self) -> None:
         """进度 +1 (允许超额: 已完成的任务可继续递增)。
@@ -351,35 +384,55 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         if self.parent:
             self.parent.remove_widget(self)
 
+    def _do_edit(self) -> None:
+        """触发编辑回调 (由父组件 BetScreen 弹出 AddTaskDialog 编辑模式)。"""
+        if self._on_edit_cb and self._task.id is not None:
+            self._on_edit_cb(self._task.id)
+        # 编辑后通常 snap_back 回收按钮区
+        self._snap_back()
+
     # ---- Swipe 动画 ----
 
     def _update_swipe_position(self) -> None:
-        """根据 swipe offset 更新所有子 widget 的位置。"""
-        clamped = max(-_DELETE_BTN_WIDTH, min(150, self._content_offset))
+        """根据 swipe offset 更新所有子 widget 的位置 (左滑露出编辑+删除两按钮)。"""
+        clamped = max(-_ACTION_AREA_WIDTH, min(150, self._content_offset))
         self._layout_labels(clamped)
         if clamped < -10:
             self._delete_visible = True
+            self._edit_btn.opacity = 1
             self._delete_btn.opacity = 1
-            self._delete_btn.pos = (self.x + self.width + clamped, self.y)
+            # edit 在左, delete 在右
+            self._edit_btn.pos = (self.x + self.width + clamped, self.y)
+            self._delete_btn.pos = (
+                self.x + self.width + clamped + _EDIT_BTN_WIDTH,
+                self.y,
+            )
         else:
             self._delete_visible = False
+            self._edit_btn.opacity = 0
             self._delete_btn.opacity = 0
 
     def _snap_back(self) -> None:
         """弹回原位。"""
         self._content_offset = 0
         self._delete_visible = False
+        self._edit_btn.opacity = 0
         self._delete_btn.opacity = 0
         self._layout_labels(0)
 
     def _show_delete(self) -> None:
-        """左滑: 露出删除按钮。"""
+        """左滑: 露出编辑 + 删除两个按钮。"""
         self._delete_visible = True
+        self._edit_btn.opacity = 1
         self._delete_btn.opacity = 1
-        clamped = -_DELETE_BTN_WIDTH
+        clamped = -_ACTION_AREA_WIDTH
         self._content_offset = clamped
         self._layout_labels(clamped)
-        self._delete_btn.pos = (self.x + self.width + clamped, self.y)
+        self._edit_btn.pos = (self.x + self.width + clamped, self.y)
+        self._delete_btn.pos = (
+            self.x + self.width + clamped + _EDIT_BTN_WIDTH,
+            self.y,
+        )
 
     def _animate_complete(self) -> None:
         """右滑: 完成动画。"""
@@ -518,4 +571,14 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         if self._delete_visible:
             with self._delete_btn.canvas.before:
                 Color(*self._to_rgba("#FF5070"))
+                Rectangle(pos=(x, y), size=(w, h))
+
+    def _redraw_edit_btn(self, *args: Any) -> None:
+        """绘制编辑按钮橙色背景 — 用 edit_btn 绝对窗口坐标。"""
+        self._edit_btn.canvas.before.clear()
+        x, y = self._edit_btn.pos
+        w, h = self._edit_btn.size
+        if self._delete_visible:
+            with self._edit_btn.canvas.before:
+                Color(*self._to_rgba(DOPAMINE_COLORS["warm_orange"]["light"]))
                 Rectangle(pos=(x, y), size=(w, h))

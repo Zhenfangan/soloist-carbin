@@ -36,6 +36,23 @@ class BetRepo(BaseRepo):
         row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
         return self._row_to_task(row) if row else None
 
+    def update_task(
+        self, task_id: int, task_desc: str, target_qty: int
+    ) -> BetTask | None:
+        """编辑任务描述和目标数量 (不改 current_qty / is_completed)。
+
+        若改 target_qty 后已 current_qty 达到, 自动设 is_completed=1;
+        若未达到, 自动设 is_completed=0。
+        """
+        self._execute(
+            "UPDATE bet_tasks SET task_desc = ?, target_qty = ?,"
+            " is_completed = CASE WHEN current_qty >= ? THEN 1 ELSE 0 END"
+            " WHERE id = ?",
+            (task_desc, target_qty, target_qty, task_id),
+        )
+        row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
+        return self._row_to_task(row) if row else None
+
     def update_task_progress(self, task_id: int, delta: int) -> BetTask | None:
         """原子递增/递减任务进度 — 使用 SET x = x + ? (delta 可正负) 消除丢失更新
 

@@ -221,6 +221,29 @@ class TestBetTaskItem:
         assert hasattr(item, "_minus_btn"), "BetTaskItem 应有 _minus_btn"
         assert item._minus_btn.text == "-1"
 
+    def test_edit_button_widget_exists(self, temp_db: str) -> None:
+        """BetTaskItem 应有 _edit_btn 子组件 (左滑露出 编辑+删除 两个按钮)。"""
+        svc = create_bet_service(temp_db)
+        task = svc.create_task("2026-06-01", "编辑按钮检查", target_qty=3)
+
+        item = BetTaskItem(task=task)
+        assert hasattr(item, "_edit_btn"), "BetTaskItem 应有 _edit_btn"
+        assert item._edit_btn.text == "编辑"
+        assert hasattr(item, "_delete_btn"), "BetTaskItem 仍应有 _delete_btn"
+        assert item._delete_btn.text == "删除"
+
+    def test_do_edit_triggers_callback(self, temp_db: str) -> None:
+        """_do_edit 应该触发 on_edit 回调, 传 task_id。"""
+        svc = create_bet_service(temp_db)
+        task = svc.create_task("2026-06-01", "编辑回调", target_qty=2)
+        assert task.id is not None
+
+        edit_ids: list[int] = []
+        item = BetTaskItem(task=task, on_edit=lambda tid: edit_ids.append(tid))
+
+        item._do_edit()
+        assert edit_ids == [task.id]
+
     def test_checkbox_toggle(self, temp_db: str) -> None:
         """复选框切换完成状态。"""
         svc = create_bet_service(temp_db)
@@ -350,6 +373,20 @@ class TestAddTaskDialog:
         dialog._handle_confirm()
         assert len(results) == 1
         assert results[0] == ("写文章", 5)
+
+    def test_edit_mode_prefills_values(self) -> None:
+        """编辑模式: 初始 desc + 初始 qty + 标题/确认按钮文案可定制。"""
+        dialog = AddTaskDialog(
+            initial_desc="老任务",
+            initial_qty=7,
+            title_text="编辑任务",
+            confirm_text="保存",
+        )
+        assert dialog._desc_input.value == "老任务"
+        assert dialog._qty_stepper.value == 7
+        # 标题文案存入实例 (供 _title_label 读取)
+        assert dialog._title_text == "编辑任务"
+        assert dialog._confirm_text == "保存"
 
 
 # ============================================================
@@ -636,6 +673,27 @@ class TestBetScreenSettlement:
         svc.update_task_progress(t.id, -5)
         r = [x for x in svc.get_week_tasks("2026-06-01") if x.id == t.id][0]
         assert r.current_qty == 0
+        assert r.is_completed == 0
+
+    def test_update_task_edits_desc_and_target(self, temp_db: str) -> None:
+        """service.update_task 改 desc + target_qty, 保留 current_qty。"""
+        svc = create_bet_service(temp_db)
+        t = svc.create_task("2026-06-01", "原描述", target_qty=3)
+        assert t.id is not None
+        svc.update_task_progress(t.id, 2)  # 进度 0→2
+
+        # 编辑: 改描述 + 降低 target 到 2 → 应自动完成
+        svc.update_task(t.id, "新描述", 2)
+        r = [x for x in svc.get_week_tasks("2026-06-01") if x.id == t.id][0]
+        assert r.task_desc == "新描述"
+        assert r.target_qty == 2
+        assert r.current_qty == 2  # 进度保留
+        assert r.is_completed == 1  # 达到新 target 自动完成
+
+        # 再升高 target 到 5 → 应取消完成
+        svc.update_task(t.id, "新描述", 5)
+        r = [x for x in svc.get_week_tasks("2026-06-01") if x.id == t.id][0]
+        assert r.target_qty == 5
         assert r.is_completed == 0
 
     def test_delete_task_updates_list(self, temp_db: str) -> None:

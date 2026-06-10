@@ -47,6 +47,10 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
     def __init__(
         self,
         on_add: Callable[[str, int], Any] | None = None,
+        initial_desc: str = "",
+        initial_qty: int = 1,
+        title_text: str = "添加任务",
+        confirm_text: str = "确认",
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -54,6 +58,10 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
         self.background_color = (0, 0, 0, 0)
         self.auto_dismiss = True
         self._on_add = on_add
+        self._initial_desc = initial_desc
+        self._initial_qty = initial_qty
+        self._title_text = title_text
+        self._confirm_text = confirm_text
 
         root = FloatLayout()
         self.add_widget(root)
@@ -92,7 +100,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
 
         # 标题
         title_label = Label(
-            text="添加任务",
+            text=self._title_text,
             font_size=FONT_SIZE_TITLE,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
@@ -116,6 +124,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
 
         self._desc_input = PixelInput(
             hint_text="例如: 写 3 篇文章",
+            value=self._initial_desc,
             size_hint=(None, None),
             size=(card_w - CARD_PADDING * 2, 40),
             pos_hint={"center_x": 0.5, "y": 0.58},
@@ -134,7 +143,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
         )
 
         self._qty_stepper = PixelStepper(
-            value=1,
+            value=max(1, self._initial_qty),
             min_value=1,
             max_value=99,
             size_hint=(None, None),
@@ -172,7 +181,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
         cancel_btn.bind(on_press=lambda _: self._handle_cancel())
 
         confirm_btn = PixelButton(
-            text="确认",
+            text=self._confirm_text,
             color=COLORS["PRIMARY_YELLOW"],
             size_mode="small",
             size_hint=(1, None),
