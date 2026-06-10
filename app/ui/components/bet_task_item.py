@@ -322,7 +322,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         if clamped < -10:
             self._delete_visible = True
             self._delete_btn.opacity = 1
-            self._delete_btn.pos = (self.width + clamped, 0)
+            self._delete_btn.pos = (self.x + self.width + clamped, self.y)
         else:
             self._delete_visible = False
             self._delete_btn.opacity = 0
@@ -341,7 +341,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         clamped = -_DELETE_BTN_WIDTH
         self._content_offset = clamped
         self._layout_labels(clamped)
-        self._delete_btn.pos = (self.width + clamped, 0)
+        self._delete_btn.pos = (self.x + self.width + clamped, self.y)
 
     def _animate_complete(self) -> None:
         """右滑: 完成动画。"""
@@ -363,14 +363,14 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
 
         self._wangzai_img.size = (48, 48)
         self._wangzai_img.opacity = 1
-        self._wangzai_img.pos = (self.width, (self.height - 48) / 2)
+        self._wangzai_img.pos = (self.x + self.width, self.y + (self.height - 48) / 2)
 
         def _slide_in(dt: float, step: int) -> None:
             if not self._wangzai_img:
                 return
             progress = (step + 1) / 8
-            img_x = self.width - 48 * (1 - progress)
-            self._wangzai_img.pos = (img_x, (self.height - 48) / 2)
+            img_x = self.x + self.width - 48 * (1 - progress)
+            self._wangzai_img.pos = (img_x, self.y + (self.height - 48) / 2)
             try:
                 frames = SpriteLoader.load_sprite("wangzai")
                 if frames and len(frames) > 1:
@@ -393,16 +393,22 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
     # ---- 布局 ----
 
     def _layout_labels(self, offset: float) -> None:
-        """排列所有子 Label — 坐标相对于 self (父容器)。"""
+        """排列所有子 Label — 用绝对窗口坐标 (Kivy widget 默认坐标系)。
+
+        子 widget 不是 RelativeLayout 的孩子, pos 是窗口绝对坐标,
+        必须加上 self.x / self.y 偏移; offset 是 swipe 水平动画位移。
+        """
+        sx = self.x
+        sy = self.y
         h = self.height
         w = self.width
 
-        self._check_label.pos = (offset + GRID_UNIT, (h - 32) / 2)
-        self._desc_label.pos = (offset + GRID_UNIT + 40, (h - 32) / 2)
+        self._check_label.pos = (sx + offset + GRID_UNIT, sy + (h - 32) / 2)
+        self._desc_label.pos = (sx + offset + GRID_UNIT + 40, sy + (h - 32) / 2)
         self._desc_label.width = max(60, w * 0.40)
-        self._qty_label.pos = (offset + w - 120, (h - 20) / 2)
-        self._progress_label.pos = (offset + w - 80, (h - 20) / 2)
-        self._plus_btn.pos = (offset + w - 36, (h - 32) / 2)
+        self._qty_label.pos = (sx + offset + w - 120, sy + (h - 20) / 2)
+        self._progress_label.pos = (sx + offset + w - 80, sy + (h - 20) / 2)
+        self._plus_btn.pos = (sx + offset + w - 36, sy + (h - 32) / 2)
 
     # ---- Canvas 绘制 ----
 
@@ -437,25 +443,27 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             self._plus_btn.opacity = 1
 
     def _redraw_plus_btn(self, *args: Any) -> None:
-        """绘制 [+1] 按钮像素边框。"""
+        """绘制 [+1] 按钮像素边框 — 用 plus_btn 绝对窗口坐标。"""
         self._plus_btn.canvas.before.clear()
+        x, y = self._plus_btn.pos
         w, h = self._plus_btn.size
         bw = BORDER_WIDTH
         with self._plus_btn.canvas.before:
             Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
-            Rectangle(pos=(0, 0), size=(w, h))
+            Rectangle(pos=(x, y), size=(w, h))
             Color(*self._to_rgba("#FFFFFF"))
-            Rectangle(pos=(0, h - bw), size=(w, bw))
-            Rectangle(pos=(0, 0), size=(bw, h))
+            Rectangle(pos=(x, y + h - bw), size=(w, bw))
+            Rectangle(pos=(x, y), size=(bw, h))
             Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
-            Rectangle(pos=(0, 0), size=(w, bw))
-            Rectangle(pos=(w - bw, 0), size=(bw, h))
+            Rectangle(pos=(x, y), size=(w, bw))
+            Rectangle(pos=(x + w - bw, y), size=(bw, h))
 
     def _redraw_delete_btn(self, *args: Any) -> None:
-        """绘制删除按钮红色背景。"""
+        """绘制删除按钮红色背景 — 用 delete_btn 绝对窗口坐标。"""
         self._delete_btn.canvas.before.clear()
+        x, y = self._delete_btn.pos
         w, h = self._delete_btn.size
         if self._delete_visible:
             with self._delete_btn.canvas.before:
                 Color(*self._to_rgba("#FF5070"))
-                Rectangle(pos=(0, 0), size=(w, h))
+                Rectangle(pos=(x, y), size=(w, h))
