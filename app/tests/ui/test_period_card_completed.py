@@ -61,3 +61,53 @@ def test_state_transition_completed_to_pending_restores_button() -> None:
     assert card._action_btn.opacity == 1, "重置后按钮应恢复可见"
     assert card._action_btn.height == 64, "重置后按钮高度应恢复"
     assert card._action_btn.disabled is False, "当前时段按钮应可点击"
+
+
+def test_set_status_keeps_expanded_when_checked_in_not_out() -> None:
+    """已签到未签退 (status=pending + checkin_time 非空) 应保持 expanded
+    以便显示 签退 按钮。
+
+    Bug: 原 set_status_from_period 看到 status=='pending' 就强制
+    _card_state='collapsed', 把签到后等待签退的卡片折叠, 签退按钮被隐藏。
+    """
+    from types import SimpleNamespace
+
+    card = PeriodCard(period_name="morning", is_current=True)
+    card._card_state = "expanded"
+
+    # 模拟 service 返回: 已签到但 status 仍是 pending (后端未结算)
+    ps = SimpleNamespace(
+        period="morning",
+        status="pending",
+        checkin_time="09:00",
+        checkout_time=None,
+    )
+    card.set_status_from_period(ps)
+
+    assert card._has_checked_in is True
+    assert card._has_checked_out is False
+    assert card._card_state == "expanded", (
+        f"已签到未签退应保持 expanded, 实际: {card._card_state}"
+    )
+    assert card._action_btn.text == "签退"
+    assert card._action_btn.opacity == 1
+    assert card._action_btn.height == 64
+
+
+def test_set_status_collapses_when_truly_pending() -> None:
+    """完全未签到 (status=pending + checkin_time None) 才折叠。"""
+    from types import SimpleNamespace
+
+    card = PeriodCard(period_name="afternoon")
+    card._card_state = "expanded"
+
+    ps = SimpleNamespace(
+        period="afternoon",
+        status="pending",
+        checkin_time=None,
+        checkout_time=None,
+    )
+    card.set_status_from_period(ps)
+
+    assert card._has_checked_in is False
+    assert card._card_state == "collapsed"

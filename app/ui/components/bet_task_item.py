@@ -77,8 +77,9 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         self._layout_initialized: bool = False
 
         # ---- 复选框 (Label, 非 PixelCheckbox - 避免触摸冲突) ----
+        # 用 ASCII [ ]/[x] 替代 Unicode ☐/☑ — 像素字体下后者渲染不全 (退化为方框/小符号)
         self._check_label = Label(
-            text="☑" if task.is_completed else "☐",
+            text="[x]" if task.is_completed else "[ ]",
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(
                 DOPAMINE_COLORS["mint"]["light"] if task.is_completed else TEXT_BROWN
@@ -222,7 +223,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
 
     def _refresh_desc(self) -> None:
         """刷新 UI 显示以匹配 task 状态。"""
-        self._check_label.text = "☑" if self._task.is_completed else "☐"
+        self._check_label.text = "[x]" if self._task.is_completed else "[ ]"
         chk_color = DOPAMINE_COLORS["mint"]["light"] if self._task.is_completed else TEXT_BROWN
         self._check_label.color = self._to_rgba(chk_color)
         desc = self._task.task_desc

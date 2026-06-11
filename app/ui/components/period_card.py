@@ -387,9 +387,15 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._target_height = self._COLLAPSED_HEIGHT
             self.height = self._COLLAPSED_HEIGHT
         elif period_status.status == "pending":
-            self._card_state = "collapsed"
-            self._target_height = self._COLLAPSED_HEIGHT
-            self.height = self._COLLAPSED_HEIGHT
+            # 已签到未签退 → 保持 expanded 显示签退按钮; 完全未签到才折叠
+            if self._has_checked_in and not self._has_checked_out:
+                self._card_state = "expanded"
+                self._target_height = self._EXPANDED_HEIGHT
+                self.height = self._EXPANDED_HEIGHT
+            else:
+                self._card_state = "collapsed"
+                self._target_height = self._COLLAPSED_HEIGHT
+                self.height = self._COLLAPSED_HEIGHT
         self._update_display()
 
     # ── 像素边框 ──

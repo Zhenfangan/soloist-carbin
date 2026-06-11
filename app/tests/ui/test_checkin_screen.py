@@ -284,7 +284,7 @@ class TestStatusBox:
         ])
         box.update_status(day_status)
 
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         assert "等待签到" in morning_info["status_w"].text
 
     def test_normal_status(self) -> None:
@@ -297,7 +297,7 @@ class TestStatusBox:
         ])
         box.update_status(day_status)
 
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         assert "正常签到" in morning_info["status_w"].text
         assert "09:00" in morning_info["status_w"].text
 
@@ -311,7 +311,7 @@ class TestStatusBox:
         ])
         box.update_status(day_status)
 
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         assert "迟到" in morning_info["status_w"].text
 
     def test_leave_status(self) -> None:
@@ -324,7 +324,7 @@ class TestStatusBox:
         ])
         box.update_status(day_status)
 
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         assert "已请假" in morning_info["status_w"].text
 
     def test_absent_status(self) -> None:
@@ -337,7 +337,7 @@ class TestStatusBox:
         ])
         box.update_status(day_status)
 
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         assert "旷工" in morning_info["status_w"].text
 
     def test_shooting_status(self) -> None:
@@ -350,7 +350,7 @@ class TestStatusBox:
         ])
         box.update_status(day_status)
 
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         assert "拍摄" in morning_info["status_w"].text
 
     def test_color_mapping(self) -> None:
@@ -364,7 +364,7 @@ class TestStatusBox:
             self._make_period_status("evening", "pending"),
         ])
         box.update_status(day_status)
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         normal_color = SEMANTIC_COLORS["normal"]["icon"]
         expected = list(box._to_rgba(normal_color))
         assert list(morning_info["status_w"].color) == expected
@@ -379,7 +379,7 @@ class TestStatusBox:
         ])
         # morning 有 checkin_time 但无 checkout_time → 工作中
         box.update_status(day_status)
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         # 正常的 normal 状态已签到未签退显示完整信息
         assert "09:00" in morning_info["status_w"].text
 
@@ -392,7 +392,7 @@ class TestStatusBox:
             self._make_period_status("evening", "pending"),
         ])
         box.update_status(day_status)
-        morning_info = box._status_lines["morning"]
+        morning_info = {"status_w": box._status_widgets["morning"]}
         assert "旷工" in morning_info["status_w"].text
 
 
