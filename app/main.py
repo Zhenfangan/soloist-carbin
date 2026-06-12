@@ -24,6 +24,7 @@ from app.repositories.sync_repo import SyncRepo  # noqa: E402
 from app.services.bet_service import BetService  # noqa: E402
 from app.services.checkin_service import CheckinService  # noqa: E402
 from app.services.history_service import HistoryService  # noqa: E402
+from app.services.penalty_service import PenaltyService  # noqa: E402
 from app.services.report_service import ReportService  # noqa: E402
 from app.services.settings_service import SettingsService  # noqa: E402
 from app.services.sync_service import SyncService  # noqa: E402
@@ -82,6 +83,8 @@ class SoloistApp(App):  # type: ignore[misc]
         shooting_repo = ShootingRepo(self.DB_PATH)
         history_svc = HistoryService(checkin_repo, ledger_repo, shooting_repo)
         self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo)
+        # 实例化以触发 ATTENDANCE_JUDGED / DAY_FINISHED 事件订阅 (生成罚款/奖励流水)
+        self._penalty_svc = PenaltyService(checkin_repo, ledger_repo, settings_repo)
 
         # 根布局 (垂直: 内容区 + 底部导航)
         self._root = BoxLayout(orientation="vertical")

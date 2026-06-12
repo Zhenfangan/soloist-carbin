@@ -18,6 +18,24 @@ class TestAppEntry:
             app = SoloistApp()
             assert app.DB_PATH == "soloist.db"
 
+    def test_main_module_references_penalty_service(self) -> None:
+        """回归: main.py 必须实例化 PenaltyService — 否则 ATTENDANCE_JUDGED
+        事件无订阅者, 旷工/迟到不写 ledger → 战报罚款一直显示 0
+        (bug 报告: 2026-06-11)。
+        """
+        import inspect
+        from app.main import SoloistApp
+
+        source = inspect.getsource(SoloistApp)
+        assert "PenaltyService(" in source, (
+            "main.py 中 SoloistApp 必须实例化 PenaltyService, "
+            "否则旷工不会写罚款 ledger 条目"
+        )
+        # 实例必须挂在 self 上, 否则 __init__ 结束后被 GC, 订阅丢失
+        assert "self._penalty_svc" in source or "self.penalty_svc" in source, (
+            "PenaltyService 实例必须保存为 SoloistApp 属性 (避免 GC 清理订阅者)"
+        )
+
     def test_font_loading(self) -> None:
         """验证字体加载函数可调用。"""
         from app.ui.fonts import get_available_font_name, load_pixel_fonts
