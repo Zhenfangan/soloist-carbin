@@ -36,6 +36,27 @@ class TestAppEntry:
             "PenaltyService 实例必须保存为 SoloistApp 属性 (避免 GC 清理订阅者)"
         )
 
+    def test_main_module_references_motivation_service(self) -> None:
+        """回归: main.py 必须实例化 MotivationService 并传给 CheckinScreen —
+        否则连续出勤天数 streak 永不更新 + CheckinScreen 的 "已连续正常出勤 N 天"
+        标签永远是空 (bug 报告: 2026-06-12)。
+        """
+        import inspect
+        from app.main import SoloistApp
+
+        source = inspect.getsource(SoloistApp)
+        assert "MotivationService(" in source, (
+            "main.py 中 SoloistApp 必须实例化 MotivationService"
+        )
+        # 实例必须挂在 self 上, 否则 __init__ 结束后被 GC, DAY_FINISHED 订阅丢失
+        assert "self._motivation_svc" in source or "self.motivation_svc" in source, (
+            "MotivationService 实例必须保存为 SoloistApp 属性 (避免 GC 清理订阅者)"
+        )
+        # 必须实际传给 CheckinScreen, 否则 streak 显示永远是空
+        assert "motivation_service=" in source, (
+            "MotivationService 必须以 motivation_service= 关键字传给 CheckinScreen"
+        )
+
     def test_font_loading(self) -> None:
         """验证字体加载函数可调用。"""
         from app.ui.fonts import get_available_font_name, load_pixel_fonts

@@ -20,3 +20,16 @@ class Notifier(ABC):
     def cancel_all(self) -> None:
         """取消所有通知"""
         ...
+
+
+class NoOpNotifier(Notifier):
+    """桌面端 / 测试占位实现 — 通知栏只在 Android 上有意义"""
+
+    def show_ongoing(self, title: str, content: str) -> None:
+        pass
+
+    def send_reminder(self, title: str, content: str) -> None:
+        pass
+
+    def cancel_all(self) -> None:
+        pass

@@ -19,11 +19,14 @@ from app.repositories.bet_repo import BetRepo  # noqa: E402
 from app.repositories.checkin_repo import CheckinRepo  # noqa: E402
 from app.repositories.ledger_repo import LedgerRepo  # noqa: E402
 from app.repositories.settings_repo import SettingsRepo  # noqa: E402
+from app.interfaces.notifier import NoOpNotifier  # noqa: E402
 from app.repositories.shooting_repo import ShootingRepo  # noqa: E402
+from app.repositories.streak_repo import StreakRepo  # noqa: E402
 from app.repositories.sync_repo import SyncRepo  # noqa: E402
 from app.services.bet_service import BetService  # noqa: E402
 from app.services.checkin_service import CheckinService  # noqa: E402
 from app.services.history_service import HistoryService  # noqa: E402
+from app.services.motivation_service import MotivationService  # noqa: E402
 from app.services.penalty_service import PenaltyService  # noqa: E402
 from app.services.report_service import ReportService  # noqa: E402
 from app.services.settings_service import SettingsService  # noqa: E402
@@ -85,6 +88,10 @@ class SoloistApp(App):  # type: ignore[misc]
         self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo)
         # 实例化以触发 ATTENDANCE_JUDGED / DAY_FINISHED 事件订阅 (生成罚款/奖励流水)
         self._penalty_svc = PenaltyService(checkin_repo, ledger_repo, settings_repo)
+        # 实例化以触发 DAY_FINISHED 事件订阅 (更新 streak) + CheckinScreen 显示连续天数
+        self._motivation_svc = MotivationService(
+            checkin_repo, StreakRepo(self.DB_PATH), settings_repo, NoOpNotifier()
+        )
 
         # 根布局 (垂直: 内容区 + 底部导航)
         self._root = BoxLayout(orientation="vertical")
@@ -150,7 +157,12 @@ class SoloistApp(App):  # type: ignore[misc]
 
         # 创建页面
         screens = {
-            "checkin": CheckinScreen(checkin_service=checkin_svc, report_service=self._report_svc, bet_service=bet_svc),
+            "checkin": CheckinScreen(
+                checkin_service=checkin_svc,
+                report_service=self._report_svc,
+                bet_service=bet_svc,
+                motivation_service=self._motivation_svc,
+            ),
             "history": HistoryScreen(history_service=history_svc, report_service=self._report_svc),
             "bet": BetScreen(bet_service=bet_svc),
             "settings": SettingsScreen(settings_service=settings_svc, sync_service=SyncService(SyncRepo(self.DB_PATH))),
