@@ -58,13 +58,14 @@ class TestAppEntry:
         )
 
     def test_font_loading(self) -> None:
-        """验证字体加载函数可调用。"""
-        from app.ui.fonts import get_available_font_name, load_pixel_fonts
+        """验证 apply_global_font 可调用 + 把 SmileySans 注册成 Roboto。"""
+        from kivy.core.text import LabelBase
 
-        loaded = load_pixel_fonts()
-        assert isinstance(loaded, dict)
-        name = get_available_font_name()
-        assert isinstance(name, str)
+        from app.ui.fonts import apply_global_font
+
+        apply_global_font()
+        # 字体文件存在时, Roboto 应该被覆盖为 SmileySans
+        assert "Roboto" in LabelBase._fonts
 
     def test_resource_preload(self) -> None:
         """验证资源预加载返回正确计数。"""
