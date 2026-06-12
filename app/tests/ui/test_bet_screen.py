@@ -740,10 +740,10 @@ class TestBetScreenNoOrphanAfterSettleButton:
         )
 
     def test_task_item_content_hidden_before_layout(self, temp_db: str) -> None:
-        """BetTaskItem 子 label 初始 opacity=0，防止在 (0,0) 闪现。
+        """BetTaskItem 子 widget 初始 opacity=0，防止在 (0,0) 闪现。
 
         新架构: 子 widget 直接挂在 self 上 (无 _content 中间层),
-        各 label 用 opacity=0 + _layout_initialized 标志位实现防闪烁;
+        各 widget 用 opacity=0 + _layout_initialized 标志位实现防闪烁;
         首次 _redraw 拿到有效 size 后才置为 opacity=1。
         """
         svc = create_bet_service(temp_db)
@@ -751,8 +751,8 @@ class TestBetScreenNoOrphanAfterSettleButton:
         from app.ui.components.bet_task_item import BetTaskItem
 
         item = BetTaskItem(task=task)
-        # 初始所有可见 label opacity=0
-        assert item._check_label.opacity == 0
+        # 初始所有可见 widget opacity=0
+        assert item._check_box.opacity == 0
         assert item._desc_label.opacity == 0
         assert item._qty_label.opacity == 0
         assert item._progress_label.opacity == 0
@@ -765,9 +765,42 @@ class TestBetScreenNoOrphanAfterSettleButton:
         item.pos = (10, 100)
         item._redraw()
         assert item._layout_initialized is True
-        assert item._check_label.opacity == 1
+        assert item._check_box.opacity == 1
         assert item._desc_label.opacity == 1
         assert item._qty_label.opacity == 1
         assert item._progress_label.opacity == 1
         assert item._minus_btn.opacity == 1
         assert item._plus_btn.opacity == 1
+
+    def test_task_item_check_box_is_widget_not_ascii_label(self, temp_db: str) -> None:
+        """P1: 复选框不应是 ASCII [x]/[ ] 文本 Label, 应是 Widget + canvas 矩形 +
+        勾选 (跟主页 PixelCheckbox 视觉一致)。
+        """
+        from kivy.uix.label import Label
+        from kivy.uix.widget import Widget
+
+        svc = create_bet_service(temp_db)
+        task = svc.create_task("2026-06-01", "测试任务", target_qty=3)
+        from app.ui.components.bet_task_item import BetTaskItem
+
+        item = BetTaskItem(task=task)
+        assert hasattr(item, "_check_box"), "BetTaskItem 必须有 _check_box 属性"
+        assert isinstance(item._check_box, Widget), "_check_box 必须是 Widget"
+        # 必须不是 Label (排除 Label 子类)
+        assert not isinstance(item._check_box, Label), (
+            "_check_box 不应该是 Label — 应用 canvas 矩形画 checkbox"
+        )
+
+    def test_task_item_check_box_reflects_completion(self, temp_db: str) -> None:
+        """P1: BetTaskItem._check_box.checked 跟随 task.is_completed。"""
+        svc = create_bet_service(temp_db)
+        from app.ui.components.bet_task_item import BetTaskItem
+
+        task_done = svc.create_task("2026-06-01", "完成", target_qty=1)
+        task_done.is_completed = 1
+        item_done = BetTaskItem(task=task_done)
+        assert item_done._check_box.checked is True
+
+        task_pending = svc.create_task("2026-06-01", "待办", target_qty=3)
+        item_pending = BetTaskItem(task=task_pending)
+        assert item_pending._check_box.checked is False

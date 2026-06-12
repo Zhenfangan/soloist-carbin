@@ -10,10 +10,11 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from kivy.clock import Clock
-from kivy.graphics import Color, Rectangle
+from kivy.graphics import Color, Line, Rectangle
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
+from kivy.uix.widget import Widget
 
 from app.models.ledger import BetTask
 from app.ui.assets.loader import SpriteLoader
@@ -76,20 +77,16 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         # 防止首次布局前 Label 在 (0,0) 闪现 — opacity=0 直到第一次 _redraw
         self._layout_initialized: bool = False
 
-        # ---- 复选框 (Label, 非 PixelCheckbox - 避免触摸冲突) ----
-        # 用 ASCII [ ]/[x] 替代 Unicode ☐/☑ — 像素字体下后者渲染不全 (退化为方框/小符号)
-        self._check_label = Label(
-            text="[x]" if task.is_completed else "[ ]",
-            font_size=FONT_SIZE_BODY,
-            color=self._to_rgba(
-                DOPAMINE_COLORS["mint"]["light"] if task.is_completed else TEXT_BROWN
-            ),
+        # ---- 复选框 (Widget + canvas 矩形, 跟主页 PixelCheckbox 视觉一致;
+        # 不用 PixelCheckbox widget 因为 BetTaskItem on_touch_down 自己 consume,
+        # 触摸由 _handle_tap 统一处理) ----
+        self._check_box = Widget(
             size_hint=(None, None),
-            size=(36, 32),
-            halign="center",
-            valign="middle",
+            size=(20, 20),
             opacity=0,
         )
+        self._check_box.checked = bool(task.is_completed)
+        self._check_box.bind(pos=self._redraw_check_box, size=self._redraw_check_box)
 
         # ---- 任务描述 ----
         desc_text = task.task_desc
@@ -197,7 +194,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         # 添加所有子 widget (直接作为 self 的孩子，去掉 _content 中间层)
         self.add_widget(self._edit_btn)
         self.add_widget(self._delete_btn)
-        self.add_widget(self._check_label)
+        self.add_widget(self._check_box)
         self.add_widget(self._desc_label)
         self.add_widget(self._qty_label)
         self.add_widget(self._progress_label)
@@ -223,9 +220,8 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
 
     def _refresh_desc(self) -> None:
         """刷新 UI 显示以匹配 task 状态。"""
-        self._check_label.text = "[x]" if self._task.is_completed else "[ ]"
-        chk_color = DOPAMINE_COLORS["mint"]["light"] if self._task.is_completed else TEXT_BROWN
-        self._check_label.color = self._to_rgba(chk_color)
+        self._check_box.checked = bool(self._task.is_completed)
+        self._redraw_check_box()
         desc = self._task.task_desc
         self._desc_label.text = f"[s]{desc}[/s]" if self._task.is_completed else desc
         self._desc_label.color = self._to_rgba(TEXT_GRAY if self._task.is_completed else TEXT_BROWN)
@@ -306,10 +302,10 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             self._do_decrement()
             return
 
-        # 复选框
-        cx, cy = self._check_label.pos
-        cw, ch = self._check_label.size
-        if cx <= tx <= cx + cw and cy <= ty <= cy + ch:
+        # 复选框 (扩大命中区域 8px, 小目标好按)
+        cx, cy = self._check_box.pos
+        cw, ch = self._check_box.size
+        if cx - 8 <= tx <= cx + cw + 8 and cy - 6 <= ty <= cy + ch + 6:
             self._do_toggle_check()
             return
 
@@ -498,7 +494,8 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         h = self.height
         w = self.width
 
-        self._check_label.pos = (sx + offset + GRID_UNIT, sy + (h - 32) / 2)
+        # checkbox 20x20 在原 36x32 位置居中: x+8 让中心点对齐, y 居中
+        self._check_box.pos = (sx + offset + GRID_UNIT + 8, sy + (h - 20) / 2)
         self._desc_label.pos = (sx + offset + GRID_UNIT + 40, sy + (h - 32) / 2)
         # desc 宽度: 留出右侧 ×N(40)+N/M(48)+-1(28)+1(32)+ 间隔 ~ 160px
         self._desc_label.width = max(60, w - 220)
@@ -530,15 +527,33 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             Rectangle(pos=(x, y), size=(w, bw))
             Rectangle(pos=(x + w - bw, y), size=(bw, h))
 
-        # 首次布局完成后开启 label 可见性 (防止 (0,0) 闪现)
+        # 首次布局完成后开启 widget 可见性 (防止 (0,0) 闪现)
         if not self._layout_initialized and w > 0 and h > 0:
             self._layout_initialized = True
-            self._check_label.opacity = 1
+            self._check_box.opacity = 1
             self._desc_label.opacity = 1
             self._qty_label.opacity = 1
             self._progress_label.opacity = 1
             self._minus_btn.opacity = 1
             self._plus_btn.opacity = 1
+            self._redraw_check_box()
+
+    def _redraw_check_box(self, *args: Any) -> None:
+        """绘制 checkbox 矩形 + (选中时) 对勾 — 跟主页 PixelCheckbox 视觉一致。"""
+        self._check_box.canvas.before.clear()
+        if self._check_box.opacity <= 0:
+            return
+        x, y = self._check_box.pos
+        w, h = self._check_box.size
+        with self._check_box.canvas.before:
+            Color(*self._to_rgba(TEXT_BROWN))
+            Line(rectangle=(x, y, w, h), width=BORDER_WIDTH)
+            if self._check_box.checked:
+                Color(*self._to_rgba(DOPAMINE_COLORS["mint"]["light"]))
+                Line(
+                    points=[x + 4, y + 10, x + 8, y + 6, x + 16, y + 14],
+                    width=2,
+                )
 
     def _redraw_plus_btn(self, *args: Any) -> None:
         """绘制 [+1] 按钮像素边框 — 用 plus_btn 绝对窗口坐标。"""
