@@ -70,8 +70,8 @@ GRID: Final[dict[str, int]] = {
     "BTN_HEIGHT_LARGE": 64,
     "BTN_HEIGHT_SMALL": 36,
     "CARD_PADDING": 16,
-    "NAV_HEIGHT": 56,
-    "ICON_SIZE": 32,
+    "NAV_HEIGHT": 72,
+    "ICON_SIZE": 40,
     "SPRITE_SIZE": 64,
 }
 
@@ -82,6 +82,10 @@ CARD_PADDING: int = GRID["CARD_PADDING"]
 NAV_HEIGHT: int = GRID["NAV_HEIGHT"]
 ICON_SIZE: int = GRID["ICON_SIZE"]
 SPRITE_SIZE: int = GRID["SPRITE_SIZE"]
+
+# grass-front.png 顶端有色像素在 750px 窗口中距底部的距离（px）
+# = 181 * 750 / 1080，草地前景层覆盖范围的上界
+GRASS_INSET: int = 126
 
 # ============================================================
 # 1.5 像素字体常量

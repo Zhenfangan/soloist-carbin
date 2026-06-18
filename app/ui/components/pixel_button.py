@@ -59,6 +59,7 @@ class PixelButton(Button):  # type: ignore[misc]
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)  # 透明底，用 canvas 画
         self.color = self._to_rgba(TEXT_BROWN)
+        self.disabled_color = self._to_rgba(TEXT_BROWN)
         self.font_size = FONT_SIZE_BODY if size_mode != "small" else FONT_SIZE_SMALL
         self.disabled = disabled
         self.opacity = 1.0 if not disabled else 0.5

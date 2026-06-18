@@ -26,6 +26,7 @@ from app.ui.tokens import (
     FONT_SIZE_BODY,
     FONT_SIZE_SMALL,
     GRID_UNIT,
+    SEMANTIC_COLORS,
     SHADOW_BLACK,
     TEXT_BROWN,
     TEXT_GRAY,
@@ -52,6 +53,8 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
     _ANIMATION_DURATION = 0.3
     _EXPANDED_HEIGHT = 180
     _COLLAPSED_HEIGHT = 48
+    _MASCOT_SIZE = 96        # 1.5× SPRITE_SIZE(64) — 所有动画统一尺寸
+    _EXPANDED_HEIGHT_ANIM = 288  # 带吉祥物时的卡片高度 (8 的倍数)
 
     def __init__(
         self,
@@ -86,6 +89,7 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         start, end = PERIOD_TIME_RANGES.get(period_name, ("", ""))
         self._start_time = start
         self._end_time = end
+        self._mascot_active = False
 
         # ═══ 头部行 (始终 48px) ═══
         self._header = BoxLayout(
@@ -144,6 +148,13 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         )
         self._action_btn.bind(on_press=lambda _: self._on_action())
         self._content_area.add_widget(self._action_btn)
+
+        # 吉祥物动画插槽 — 平时 height=0 不占空间，动画时展开
+        self._mascot_row = BoxLayout(
+            size_hint=(1, None),
+            height=0,
+        )
+        self._content_area.add_widget(self._mascot_row)
 
         self._leave_label = Label(
             text="请假", font_size=FONT_SIZE_SMALL,
@@ -290,16 +301,31 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
 
     # ── 显示更新 ──
 
+    def _is_early_checkout(self) -> bool:
+        """签退时间早于时段结束时间。"""
+        if not self._checkout_time or not self._end_time:
+            return False
+        return self._checkout_time[:5] < self._end_time[:5]
+
+    def _is_violation(self) -> bool:
+        """有任何违规（迟到 / 早退）。"""
+        return self._status in ("late", "early_leave") or self._is_early_checkout()
+
     def _update_display(self) -> None:
         # 摘要文字
-        if self._card_state == "completed":
+        if self._card_state == "absent":
+            self._summary_label.text = "旷工"
+            self._summary_label.color = self._to_rgba(SEMANTIC_COLORS["absent"]["icon"])
+        elif self._card_state == "completed":
             parts = []
             if self._checkin_time:
                 parts.append(f"{self._get_status_text()} {self._checkin_time}")
             if self._checkout_time:
-                parts.append(f"签退 {self._checkout_time}")
-            self._summary_label.text = "  ".join(parts) if parts else "[OK] 已完成"
-            self._summary_label.color = self._to_rgba(DOPAMINE_COLORS["mint"]["light"])
+                checkout_label = "早退" if self._is_early_checkout() else "签退"
+                parts.append(f"{checkout_label} {self._checkout_time}")
+            self._summary_label.text = "  ".join(parts) if parts else "已完成"
+            color = COLORS["PRIMARY_YELLOW"] if self._is_violation() else DOPAMINE_COLORS["mint"]["light"]
+            self._summary_label.color = self._to_rgba(color)
         elif self._card_state == "expanded":
             self._summary_label.text = self._get_time_range_text()
             self._summary_label.color = self._to_rgba(TEXT_BROWN)
@@ -307,13 +333,20 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._summary_label.text = self._get_time_range_text()
             self._summary_label.color = self._to_rgba(TEXT_GRAY)
 
-        # 内容区可见性
+        # 内容区可见性 — 吉祥物动画期间不重置高度
         is_expanded = self._card_state == "expanded"
-        self._content_area.height = self._EXPANDED_HEIGHT - self._COLLAPSED_HEIGHT if is_expanded else 0
-        self._content_area.opacity = 1.0 if is_expanded else 0
+        if not self._mascot_active:
+            self._content_area.height = self._EXPANDED_HEIGHT - self._COLLAPSED_HEIGHT if is_expanded else 0
+            self._content_area.opacity = 1.0 if is_expanded else 0
 
-        # 按钮状态
-        if self._has_checked_in and not self._has_checked_out:
+        # 按钮状态 — 旷工时完全隐藏
+        if self._card_state == "absent":
+            self._action_btn.text = ""
+            self._action_btn.disabled = True
+            self._action_btn.opacity = 0
+            self._action_btn.size_hint_y = None
+            self._action_btn.height = 0
+        elif self._has_checked_in and not self._has_checked_out:
             self._action_btn.text = "签退"
             self._action_btn.set_color(DOPAMINE_COLORS["mint"]["light"])
             self._action_btn.disabled = False
@@ -334,9 +367,14 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._action_btn.size_hint_y = None
             self._action_btn.height = 64
 
-        # 完成徽章
+        # 完成徽章 — 全正常才显示 [OK]，违规只显示状态文字
         if self._card_state == "completed":
-            self._check_label.text = f"[OK] {self._get_status_text()}"
+            if self._is_violation():
+                self._check_label.text = self._get_status_text()
+                self._check_label.color = self._to_rgba(COLORS["PRIMARY_YELLOW"])
+            else:
+                self._check_label.text = "[OK]"
+                self._check_label.color = self._to_rgba(DOPAMINE_COLORS["mint"]["light"])
             self._check_label.opacity = 1.0
         else:
             self._check_label.opacity = 0
@@ -382,21 +420,53 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         self._checkout_time = period_status.checkout_time
         self._has_checked_in = period_status.checkin_time is not None
         self._has_checked_out = period_status.checkout_time is not None
-        if period_status.status in ("normal", "late", "early_leave", "leave", "shooting"):
+
+        # 优先级 1: 已签到未签退 → 保持 expanded 显示签退按钮
+        # (无论 service 判定为 normal/late, 只要还没签退就必须展开)
+        if (
+            self._has_checked_in
+            and not self._has_checked_out
+            and period_status.status not in ("leave", "shooting", "absent", "absent_morning", "absent_afternoon")
+        ):
+            self._card_state = "expanded"
+            self._target_height = self._EXPANDED_HEIGHT
+            self.height = self._EXPANDED_HEIGHT
+        # 优先级 2: 旷工 → 红框折叠
+        elif period_status.status in ("absent", "absent_morning", "absent_afternoon"):
+            self._card_state = "absent"
+            self._target_height = self._COLLAPSED_HEIGHT
+            self.height = self._COLLAPSED_HEIGHT
+        # 优先级 3: 已完成 (含签退/请假/拍摄) → 折叠绿框
+        elif period_status.status in ("normal", "late", "early_leave", "leave", "shooting"):
             self._card_state = "completed"
             self._target_height = self._COLLAPSED_HEIGHT
             self.height = self._COLLAPSED_HEIGHT
+        # 优先级 4: 未签到 → 折叠
         elif period_status.status == "pending":
-            # 已签到未签退 → 保持 expanded 显示签退按钮; 完全未签到才折叠
-            if self._has_checked_in and not self._has_checked_out:
-                self._card_state = "expanded"
-                self._target_height = self._EXPANDED_HEIGHT
-                self.height = self._EXPANDED_HEIGHT
-            else:
-                self._card_state = "collapsed"
-                self._target_height = self._COLLAPSED_HEIGHT
-                self.height = self._COLLAPSED_HEIGHT
+            self._card_state = "collapsed"
+            self._target_height = self._COLLAPSED_HEIGHT
+            self.height = self._COLLAPSED_HEIGHT
         self._update_display()
+
+    # ── 吉祥物动画 ──
+
+    def show_mascot_widget(self, widget: Any) -> None:
+        """在卡片内展示吉祥物动画 widget，同时扩展卡片高度。"""
+        self._mascot_active = True
+        self._mascot_row.clear_widgets()
+        self._mascot_row.add_widget(widget)
+        self._mascot_row.height = self._MASCOT_SIZE
+        self._content_area.height = self._EXPANDED_HEIGHT_ANIM - self._COLLAPSED_HEIGHT
+        self._content_area.opacity = 1.0
+        self.height = self._EXPANDED_HEIGHT_ANIM
+
+    def hide_mascot_widget(self) -> None:
+        """移除吉祥物 widget，卡片恢复正常展开高度。"""
+        self._mascot_row.clear_widgets()
+        self._mascot_row.height = 0
+        self._mascot_active = False
+        self._content_area.height = self._EXPANDED_HEIGHT - self._COLLAPSED_HEIGHT
+        self.height = self._EXPANDED_HEIGHT
 
     # ── 像素边框 ──
 
@@ -409,7 +479,12 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         if self._card_state == "expanded":
             border_light, border_dark = "#FFFFFF", COLORS["CARD_SHADOW"]
         elif self._card_state == "completed":
-            border_light, border_dark = DOPAMINE_COLORS["mint"]["light"], DOPAMINE_COLORS["mint"]["dark"]
+            if self._is_violation():
+                border_light, border_dark = COLORS["PRIMARY_YELLOW"], COLORS["PRIMARY_DARK"]
+            else:
+                border_light, border_dark = DOPAMINE_COLORS["mint"]["light"], DOPAMINE_COLORS["mint"]["dark"]
+        elif self._card_state == "absent":
+            border_light, border_dark = "#FF8090", "#CC2040"
         else:
             border_light, border_dark = "#FFFFFF", COLORS["CARD_SHADOW"]
 

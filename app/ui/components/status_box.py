@@ -174,12 +174,14 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
             return f"迟到 {checkin_time}" if checkin_time else "迟到"
         if status == "early_leave":
             return f"早退 {checkout_time}" if checkout_time else "早退"
-        if status == "absent":
-            return "旷工"
-        if status == "absent_morning":
-            return "旷工(上午)"
-        if status == "absent_afternoon":
-            return "旷工(下午)"
+        if status in ("absent", "absent_morning", "absent_afternoon"):
+            penalty = getattr(ps, "penalty_amount", None)
+            amount_str = f" {int(penalty)}" if penalty is not None else ""
+            if status == "absent_morning":
+                return f"未签到(上午){amount_str}"
+            if status == "absent_afternoon":
+                return f"未签到(下午){amount_str}"
+            return f"未签到{amount_str}"
         if status == "leave":
             return "已请假"
         if status == "shooting":

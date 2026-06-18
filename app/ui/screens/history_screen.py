@@ -31,6 +31,7 @@ from app.ui.tokens import (
     BTN_HEIGHT,
     FONT_SIZE_BODY,
     FONT_SIZE_SMALL,
+    GRASS_INSET,
     GRID_UNIT,
     NAV_HEIGHT,
     TEXT_BROWN,
@@ -140,8 +141,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             orientation="vertical",
             size_hint_y=None,
             spacing=GRID_UNIT,
-            # bottom padding 预留 navtab 高度，防止"本周合计"被遮挡
-            padding=[GRID_UNIT, GRID_UNIT, GRID_UNIT, NAV_HEIGHT + GRID_UNIT * 2],
+            padding=[GRID_UNIT, GRID_UNIT, GRID_UNIT, GRID_UNIT * 2],
         )
         self._week_card_container.bind(
             minimum_height=self._week_card_container.setter("height")

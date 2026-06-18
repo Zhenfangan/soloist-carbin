@@ -73,7 +73,8 @@ class TestAppEntry:
 
         result = preload_all()
         assert result["sprites"] == 5
-        assert result["icons"] == 16
+        assert result["icons"] == 24  # 16 原有 + 8 active/inactive tab icons
+        assert result["sequences"] == 5  # rabbit / bear / dog / pig / cat
 
     def test_clock_integration(self) -> None:
         """验证 SystemClock 可以正常使用。"""

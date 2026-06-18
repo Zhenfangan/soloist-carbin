@@ -16,6 +16,7 @@ class Checkin:
     checkout_type: str = "manual"  # manual / auto
     status: str = "pending"
     is_shooting: int = 0
+    photo_path: str | None = None
     id: int | None = None
 
 
@@ -49,3 +50,4 @@ class PeriodStatus:
     checkin_time: str | None = None
     checkout_time: str | None = None
     checkout_type: str = "manual"
+    penalty_amount: float | None = None

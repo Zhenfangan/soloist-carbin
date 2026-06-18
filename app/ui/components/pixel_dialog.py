@@ -21,6 +21,7 @@ from app.ui.tokens import (
     CARD_WHITE,
     COLORS,
     FONT_SIZE_BODY,
+    FONT_SIZE_SMALL,
     FONT_SIZE_TITLE,
     GRID_UNIT,
     TEXT_BROWN,
@@ -118,7 +119,7 @@ class ConfirmDialog(ModalView):  # type: ignore[misc]
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=60,
-            pos_hint={"x": 0, "y": 0.22},
+            pos_hint={"x": 0, "y": 0.32},
             halign="center",
             valign="top",
             text_size=(card_w - 2 * CARD_PADDING, None),
@@ -193,4 +194,147 @@ class ConfirmDialog(ModalView):  # type: ignore[misc]
     def _handle_cancel(self) -> None:
         if self._on_cancel:
             self._on_cancel()
+        self.dismiss()
+
+
+class TaskActionDialog(ModalView):  # type: ignore[misc]
+    """任务操作菜单弹窗 — 修改 / 删除 / 取消三选项。"""
+
+    def __init__(
+        self,
+        task_desc: str = "",
+        on_edit: Callable[[], Any] | None = None,
+        on_delete: Callable[[], Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.background = ""
+        self.background_color = (0, 0, 0, 0)
+        self.auto_dismiss = True
+
+        self._on_edit = on_edit
+        self._on_delete = on_delete
+
+        root = FloatLayout()
+        self.add_widget(root)
+
+        with root.canvas.before:
+            Color(0, 0, 0, 0.5)
+            self._mask_rect = Rectangle(size=root.size, pos=root.pos)
+        root.bind(size=self._update_mask, pos=self._update_mask)
+
+        card_w = 260
+        card_h = 210
+
+        card = FloatLayout(
+            size_hint=(None, None),
+            size=(card_w, card_h),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
+        )
+
+        with card.canvas.before:
+            Color(*self._to_rgba(COLORS["SHADOW_BLACK"]))
+            Rectangle(pos=(card.x + 2, card.y - 2), size=(card.width, card.height))
+            Color(*self._to_rgba(CARD_WHITE))
+            Rectangle(pos=(card.x, card.y), size=(card.width, card.height))
+            Color(*self._to_rgba("#FFFFFF"))
+            Rectangle(pos=(card.x, card.y + card_h - BORDER_WIDTH), size=(card_w, BORDER_WIDTH))
+            Rectangle(pos=(card.x, card.y), size=(BORDER_WIDTH, card_h))
+            Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
+            Rectangle(pos=(card.x, card.y), size=(card_w, BORDER_WIDTH))
+            Rectangle(pos=(card.x + card_w - BORDER_WIDTH, card.y), size=(BORDER_WIDTH, card_h))
+
+        card.bind(pos=self._redraw_card, size=self._redraw_card)
+        self._card = card
+
+        # 任务描述（顶部，截断显示）
+        short_desc = (task_desc[:24] + "…") if len(task_desc) > 24 else task_desc
+        desc_label = Label(
+            text=short_desc,
+            font_size=FONT_SIZE_SMALL,
+            color=self._to_rgba(TEXT_BROWN, 0.6),
+            size_hint=(1, None),
+            height=28,
+            pos_hint={"x": 0, "top": 1},
+            halign="center",
+            valign="middle",
+        )
+
+        # 三个按钮竖排
+        btn_layout = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, None),
+            height=178,
+            pos_hint={"x": 0, "y": 0},
+            padding=[CARD_PADDING, GRID_UNIT, CARD_PADDING, GRID_UNIT],
+            spacing=GRID_UNIT,
+        )
+
+        edit_btn = PixelButton(
+            text="修改",
+            color=COLORS["PRIMARY_YELLOW"],
+            size_mode="normal",
+            size_hint=(1, None),
+        )
+        edit_btn.bind(on_press=lambda _: self._handle_edit())
+
+        delete_btn = PixelButton(
+            text="删除",
+            color="#FF5070",
+            size_mode="small",
+            size_hint=(1, None),
+        )
+        delete_btn.bind(on_press=lambda _: self._handle_delete())
+
+        cancel_btn = PixelButton(
+            text="取消",
+            color=COLORS["CARD_SHADOW"],
+            size_mode="small",
+            size_hint=(1, None),
+        )
+        cancel_btn.bind(on_press=lambda _: self.dismiss())
+
+        btn_layout.add_widget(edit_btn)
+        btn_layout.add_widget(delete_btn)
+        btn_layout.add_widget(cancel_btn)
+
+        card.add_widget(desc_label)
+        card.add_widget(btn_layout)
+        root.add_widget(card)
+
+    @staticmethod
+    def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
+        h = hex_color.lstrip("#")
+        return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0, alpha)
+
+    def _update_mask(self, instance: Any, value: Any) -> None:
+        self._mask_rect.size = instance.size
+        self._mask_rect.pos = instance.pos
+
+    def _redraw_card(self, instance: Any, value: Any) -> None:
+        instance.canvas.before.clear()
+        bw = BORDER_WIDTH
+        x, y = instance.pos
+        w, h = instance.size
+
+        with instance.canvas.before:
+            Color(*self._to_rgba(COLORS["SHADOW_BLACK"]))
+            Rectangle(pos=(x + 2, y - 2), size=(w, h))
+            Color(*self._to_rgba(CARD_WHITE))
+            Rectangle(pos=(x, y), size=(w, h))
+            Color(*self._to_rgba("#FFFFFF"))
+            Rectangle(pos=(x, y + h - bw), size=(w, bw))
+            Rectangle(pos=(x, y), size=(bw, h))
+            Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
+            Rectangle(pos=(x, y), size=(w, bw))
+            Rectangle(pos=(x + w - bw, y), size=(bw, h))
+
+    def _handle_edit(self) -> None:
+        if self._on_edit:
+            self._on_edit()
+        self.dismiss()
+
+    def _handle_delete(self) -> None:
+        if self._on_delete:
+            self._on_delete()
         self.dismiss()

@@ -13,6 +13,9 @@ Config.set("graphics", "height", "750")
 from kivy.app import App  # noqa: E402
 from kivy.graphics import Color, Rectangle  # noqa: E402
 from kivy.uix.boxlayout import BoxLayout  # noqa: E402
+from kivy.uix.floatlayout import FloatLayout  # noqa: E402
+from kivy.uix.image import Image as KivyImage  # noqa: E402
+from kivy.core.window import Window  # noqa: E402
 
 from app.db import init_db  # noqa: E402
 from app.repositories.bet_repo import BetRepo  # noqa: E402
@@ -24,6 +27,7 @@ from app.repositories.shooting_repo import ShootingRepo  # noqa: E402
 from app.repositories.streak_repo import StreakRepo  # noqa: E402
 from app.repositories.sync_repo import SyncRepo  # noqa: E402
 from app.services.bet_service import BetService  # noqa: E402
+from app.services.camera_desktop_mock import DesktopCameraMock  # noqa: E402
 from app.services.checkin_service import CheckinService  # noqa: E402
 from app.services.history_service import HistoryService  # noqa: E402
 from app.services.motivation_service import MotivationService  # noqa: E402
@@ -31,6 +35,7 @@ from app.services.penalty_service import PenaltyService  # noqa: E402
 from app.services.report_service import ReportService  # noqa: E402
 from app.services.settings_service import SettingsService  # noqa: E402
 from app.services.sync_service import SyncService  # noqa: E402
+from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path  # noqa: E402
 from app.ui.assets.loader import preload_all  # noqa: E402
 from app.ui.fonts import apply_global_font  # noqa: E402
 from app.ui.navigation import AppScreenManager, BottomTabBar  # noqa: E402
@@ -39,13 +44,20 @@ from app.ui.screens.checkin_screen import CheckinScreen  # noqa: E402
 from app.ui.screens.history_screen import HistoryScreen  # noqa: E402
 from app.ui.screens.onboarding_screen import OnboardingScreen  # noqa: E402
 from app.ui.screens.settings_screen import SettingsScreen  # noqa: E402
-from app.ui.tokens import BG_CREAM, NAV_HEIGHT  # noqa: E402
+from app.ui.tokens import BG_CREAM, GRASS_INSET, NAV_HEIGHT  # noqa: E402
 from app.utils.clock import SystemClock, set_clock  # noqa: E402
 
 
 def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
     h = hex_color.lstrip("#")
     return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0, alpha)
+
+
+class _PassthroughImage(KivyImage):  # type: ignore[misc]
+    """触控穿透 Image — 与 report_preview._PassthroughImage 完全一致。"""
+
+    def collide_point(self, x: float, y: float) -> bool:  # type: ignore[override]
+        return False
 
 
 def _setup_debug_hooks() -> None:
@@ -62,12 +74,14 @@ class SoloistApp(App):  # type: ignore[misc]
 
     DB_PATH = "soloist.db"
 
-    def build(self) -> BoxLayout:
+    def build(self) -> FloatLayout:
         # 诊断脚手架 (Wave 2 Phase 1) — 必须在任何 widget 实例化之前
         _setup_debug_hooks()
 
-        # 初始化时钟
-        set_clock(SystemClock())
+        # 初始化时钟 (虚拟时间: 周日 08:00 用于调试)
+        from app.utils.clock import SimulatedClock
+        from datetime import datetime
+        set_clock(SimulatedClock(datetime(2026, 6, 14, 8, 0, 0)))
 
         # 初始化数据库
         init_db(self.DB_PATH)
@@ -81,11 +95,12 @@ class SoloistApp(App):  # type: ignore[misc]
         settings_svc = SettingsService(settings_repo)
         checkin_repo = CheckinRepo(self.DB_PATH)
         checkin_svc = CheckinService(checkin_repo, settings_repo)
+        self._camera_svc = DesktopCameraMock()
         ledger_repo = LedgerRepo(self.DB_PATH)
         bet_svc = BetService(BetRepo(self.DB_PATH), ledger_repo, settings_repo)
         shooting_repo = ShootingRepo(self.DB_PATH)
         history_svc = HistoryService(checkin_repo, ledger_repo, shooting_repo)
-        self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo)
+        self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo, settings_repo)
         # 实例化以触发 ATTENDANCE_JUDGED / DAY_FINISHED 事件订阅 (生成罚款/奖励流水)
         self._penalty_svc = PenaltyService(checkin_repo, ledger_repo, settings_repo)
         # 实例化以触发 DAY_FINISHED 事件订阅 (更新 streak) + CheckinScreen 显示连续天数
@@ -93,31 +108,19 @@ class SoloistApp(App):  # type: ignore[misc]
             checkin_repo, StreakRepo(self.DB_PATH), settings_repo, NoOpNotifier()
         )
 
-        # 根布局 (垂直: 内容区 + 底部导航)
-        self._root = BoxLayout(orientation="vertical")
-
-        # 背景色
-        with self._root.canvas.before:
-            Color(*_to_rgba(BG_CREAM))
-            self._bg_rect = Rectangle(size=self._root.size, pos=self._root.pos)
-        self._root.bind(size=self._update_bg, pos=self._update_bg)
+        # 根布局: FloatLayout，子 widget 按添加顺序从底到顶堆叠
+        self._root = FloatLayout()
 
         # 判断首次启动
         settings_svc.is_first_launch()
         is_first = settings_svc.get("app_version") == ""
 
         if is_first:
-            # 首次启动 → 引导流程
             self._show_onboarding(settings_svc, checkin_svc, bet_svc, history_svc)
         else:
-            # 非首次 → 直接进入主界面
             self._show_main(settings_svc, checkin_svc, bet_svc, history_svc)
 
         return self._root
-
-    def _update_bg(self, instance: object, value: object) -> None:
-        self._bg_rect.size = self._root.size
-        self._bg_rect.pos = self._root.pos
 
     def _show_onboarding(
         self,
@@ -152,16 +155,23 @@ class SoloistApp(App):  # type: ignore[misc]
         bet_svc: BetService,
         history_svc: HistoryService,
     ) -> None:
-        """显示主界面: 底部导航 + 4 个页面。"""
+        """显示主界面: 底部导航 + 4 个页面。
+
+        PS 图层逻辑 (从底到顶):
+          Layer 4 (最底): 天空背景 Image
+          Layer 3:       内容区 ScreenManager, 底部对齐草地像素上沿
+          Layer 2:       草地前景 Image (锯齿边)
+          Layer 1 (最顶): 底部导航栏
+        """
         self._root.clear_widgets()
 
-        # 创建页面
         screens = {
             "checkin": CheckinScreen(
                 checkin_service=checkin_svc,
                 report_service=self._report_svc,
                 bet_service=bet_svc,
                 motivation_service=self._motivation_svc,
+                camera_service=self._camera_svc,
             ),
             "history": HistoryScreen(history_service=history_svc, report_service=self._report_svc),
             "bet": BetScreen(bet_service=bet_svc),
@@ -169,17 +179,37 @@ class SoloistApp(App):  # type: ignore[misc]
         }
 
         sm = AppScreenManager(screens)
+        sm.size_hint = (1, None)
+        sm.pos_hint = {"x": 0, "top": 1}
+        sm.height = Window.height - GRASS_INSET
 
-        # 底部导航栏
-        tab_bar = BottomTabBar(sm, size_hint=(1, None), height=NAV_HEIGHT)
+        # Layer 4: 天空背景 — 与 report_preview 一致的渲染方式
+        _sky = _PassthroughImage(
+            source=BG_LANDSCAPE,
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+            fit_mode="fill",
+        )
 
-        # 内容区占满剩余空间，导航栏固定在底部
+        # Layer 2: 草地前景锯齿遮罩
+        _grass = _PassthroughImage(
+            source=get_grass_overlay_path(),
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+            fit_mode="fill",
+        )
+
+        # Layer 1: 底部导航
+        tab_bar = BottomTabBar(sm, size_hint=(1, None), height=NAV_HEIGHT, pos_hint={"x": 0, "y": 0})
+
+        # z-order 决定渲染顺序: 先添加=底层, 后添加=顶层
+        self._root.add_widget(_sky)
         self._root.add_widget(sm)
+        self._root.add_widget(_grass)
         self._root.add_widget(tab_bar)
 
     def on_stop(self) -> None:
         """应用退出时清理资源。"""
-        # EventBus 取消等清理工作
         pass
 
 

@@ -9,6 +9,7 @@ from jinja2 import Template
 from app.models.report import PeriodDetail, PromiseDetail, ReportData
 from app.repositories.checkin_repo import CheckinRepo
 from app.repositories.ledger_repo import LedgerRepo
+from app.repositories.settings_repo import SettingsRepo
 from app.repositories.shooting_repo import ShootingRepo
 from app.services.event_bus import EventType, get_event_bus
 
@@ -136,10 +137,12 @@ class ReportService:
         checkin_repo: CheckinRepo,
         ledger_repo: LedgerRepo,
         shooting_repo: ShootingRepo,
+        settings_repo: SettingsRepo | None = None,
     ) -> None:
         self._checkin_repo = checkin_repo
         self._ledger_repo = ledger_repo
         self._shooting_repo = shooting_repo
+        self._settings_repo = settings_repo
 
         get_event_bus().subscribe(EventType.DAY_CLOSED, self._on_day_closed)
 
@@ -202,6 +205,15 @@ class ReportService:
         task_repo = TaskRepo()
         completed_tasks = task_repo.get_completed(date)
 
+        threshold = 8.0
+        if self._settings_repo:
+            raw = self._settings_repo.get("boyfriend_hour_threshold")
+            if raw:
+                try:
+                    threshold = float(raw)
+                except ValueError:
+                    pass
+
         return ReportData(
             date=date,
             is_shooting_day=is_shooting,
@@ -213,7 +225,8 @@ class ReportService:
             overtime_hours=overtime,
             promise=promise_data,
             completed_tasks=completed_tasks,
-            encouragement=random.choice(ENCOURAGEMENTS),
+            encouragement=self._pick_encouragement(date),
+            threshold_hours=threshold,
         )
 
     def generate_html(self, data: ReportData) -> str:
@@ -232,6 +245,11 @@ class ReportService:
         date = str(payload.get("date", ""))
         if date:
             self.generate_and_save(date)
+
+    def _pick_encouragement(self, date: str) -> str:  # noqa: ARG002
+        # 扩展点：未来从用户自定义语录库（encouragement_repo）随机抽取，
+        # 合并 ENCOURAGEMENTS 作兜底；此处签名保持稳定。
+        return random.choice(ENCOURAGEMENTS)
 
     @staticmethod
     def _time_to_minutes(time_str: str) -> int:

@@ -8,8 +8,6 @@ from app.repositories.settings_repo import SettingsRepo
 from app.services.event_bus import EventType, get_event_bus
 from app.utils.clock import get_clock
 from app.utils.config import (
-    ABSENT_AFTERNOON_HOURS,
-    ABSENT_MORNING_HOURS,
     CHECKOUT_TYPE_AUTO,
     CHECKOUT_TYPE_MANUAL,
     STATUS_ABSENT_AFTERNOON,
@@ -50,12 +48,12 @@ class CheckinService:
 
     # ── 打卡动作 ──────────────────────────────────────────
 
-    def check_in(self, date: str, period: str) -> CheckinResult:
+    def check_in(self, date: str, period: str, photo_path: str | None = None) -> CheckinResult:
         """执行签到，判定出勤状态"""
         clock = get_clock()
         now_time = clock.current_time_str()
 
-        record = Checkin(checkin_date=date, period=period, checkin_time=now_time)
+        record = Checkin(checkin_date=date, period=period, checkin_time=now_time, photo_path=photo_path)
         record = self._checkin_repo.upsert(record)
 
         status = self._judge_checkin_status(date, period, now_time)
@@ -75,7 +73,7 @@ class CheckinService:
 
         return result
 
-    def check_out(self, date: str, period: str) -> CheckinResult:
+    def check_out(self, date: str, period: str, photo_path: str | None = None) -> CheckinResult:
         """执行签退，判定状态，检测是否当日所有时段完成"""
         clock = get_clock()
         now_time = clock.current_time_str()
@@ -85,6 +83,8 @@ class CheckinService:
             raise ValueError(f"尚未签到，无法签退: {date} {period}")
         record.checkout_time = now_time
         record.checkout_type = CHECKOUT_TYPE_MANUAL
+        if photo_path is not None:
+            record.photo_path = photo_path
 
         status = self._judge_checkout_status(date, period, now_time, record)
         record.status = status
@@ -157,16 +157,23 @@ class CheckinService:
         records = self._checkin_repo.get_all_by_date(date)
         day = DayStatus(date=date)
 
+        absent_statuses = {STATUS_ABSENT_MORNING, STATUS_ABSENT_AFTERNOON}
+
         for period in ALL_PERIODS:
             match = next((r for r in records if r.period == period), None)
             if match:
+                status = match.status or STATUS_PENDING
+                penalty: float | None = None
+                if status in absent_statuses:
+                    penalty = -abs(float(self._get_setting("absent_penalty") or "0"))
                 day.periods.append(
                     PeriodStatus(
                         period=period,
-                        status=match.status or STATUS_PENDING,
+                        status=status,
                         checkin_time=match.checkin_time,
                         checkout_time=match.checkout_time,
                         checkout_type=match.checkout_type,
+                        penalty_amount=penalty,
                     )
                 )
                 if match.is_shooting:
@@ -185,15 +192,15 @@ class CheckinService:
 
         results: list[CheckinResult] = []
 
-        for period, start_key, threshold_hours in [
-            ("morning", "morning_start", ABSENT_MORNING_HOURS),
-            ("afternoon", "afternoon_start", ABSENT_AFTERNOON_HOURS),
+        for period, end_key in [
+            ("morning", "morning_end"),
+            ("afternoon", "afternoon_end"),
         ]:
-            start = self._time_to_minutes(self._get_setting(start_key))
+            end = self._time_to_minutes(self._get_setting(end_key))
             current_min = self._time_to_minutes(now_time)
-            deadline = start + int(threshold_hours * 60)
 
-            if current_min < deadline:
+            # 只有过了时段结束时间还没签到，才判定旷工
+            if current_min < end:
                 continue
 
             record = self._checkin_repo.get_by_date_period(date, period)
@@ -324,6 +331,11 @@ class CheckinService:
         }
         required = {"morning", "afternoon"}
         return required <= (checked_out | leave_periods)
+
+    def get_period_end_time(self, period: str) -> str:
+        """返回时段结束时间字符串（HH:MM），晚间弹性时段返回空字符串。"""
+        key = _PERIOD_END_KEY.get(period, "")
+        return self._get_setting(key) if key else ""
 
     def _get_setting(self, key: str) -> str:
         val = self._settings_repo.get(key)

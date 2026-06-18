@@ -18,7 +18,7 @@ from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 
 from app.services.bet_service import BetService
-from app.ui.assets.loader import SpriteLoader
+from app.ui.assets.loader import SequenceLoader
 from app.ui.components.pixel_button import PixelButton
 from app.ui.tokens import (
     BORDER_WIDTH,
@@ -116,7 +116,8 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
             penalty_val = 50.0
 
         uncompleted = total_tasks - completed
-        if uncompleted == 0 and completed > 0:
+        self._is_success = uncompleted == 0 and completed > 0
+        if self._is_success:
             reward_total = base_reward_val
             extra_total = extra_reward_val * extra_count
             penalty_total = 0.0
@@ -199,7 +200,7 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
             row.add_widget(val)
             detail_box.add_widget(row)
 
-        # 团团动画区域 (隐藏)
+        # 结算动画区域 (隐藏)
         self._tuantuan_img = Image(
             size_hint=(None, None),
             size=(64, 64),
@@ -283,30 +284,31 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
             self._is_settling = False
             return
 
-        # 显示团团抱星星动画 (4帧, 每帧 375ms, 总 1500ms)
+        # 结算动画: 完成用小狗摘星星，失败用小猪倒下 (7帧, 每帧 400ms, 总 2800ms)
+        anim_id = "dog" if self._is_success else "pig"
         try:
-            frames = SpriteLoader.load_sprite("tuantuan")
+            frames = SequenceLoader.load_sequence(anim_id)
         except Exception:
             frames = []
 
         self._tuantuan_img.opacity = 1
 
-        if frames and len(frames) >= 4:
-            # 4帧动画: 冒出→抱星→转1→转2
-            frame_duration = 0.375
-            for i in range(4):
+        frame_duration = 0.4
+        if frames:
+            for i in range(len(frames)):
                 Clock.schedule_once(
                     lambda dt, idx=i: self._set_tuantuan_frame(frames, idx),
                     i * frame_duration,
                 )
 
-        # 结算完成后回调
+        # 结算完成后回调（等动画播完再关闭）
         def _on_settled(dt: float) -> None:
             if self._on_settled:
                 self._on_settled()
             self.dismiss()
 
-        Clock.schedule_once(_on_settled, 1.6)
+        total_duration = frame_duration * max(len(frames), 1) + 0.4
+        Clock.schedule_once(_on_settled, total_duration)
 
     def _set_tuantuan_frame(self, frames: list[Any], idx: int) -> None:
         if idx < len(frames):

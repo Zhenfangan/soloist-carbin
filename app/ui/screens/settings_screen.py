@@ -33,6 +33,7 @@ from app.ui.tokens import (
     FONT_SIZE_BODY,
     FONT_SIZE_SMALL,
     FONT_SIZE_TITLE,
+    GRASS_INSET,
     GRID_UNIT,
     SHADOW_BLACK,
     TEXT_BROWN,
@@ -90,12 +91,6 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         )
         content.bind(minimum_height=content.setter("height"))
 
-        # 白色背景
-        with content.canvas.before:
-            Color(*self._to_rgba(CARD_WHITE))
-            self._content_bg_rect = Rectangle(size=content.size, pos=content.pos)
-        content.bind(size=self._update_content_bg, pos=self._update_content_bg)
-
         # 标题
         title_label = Label(
             text="设置",
@@ -146,10 +141,6 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
 
         scroll.add_widget(content)
         self.add_widget(scroll)
-
-    def _update_content_bg(self, instance: Any, value: Any) -> None:
-        self._content_bg_rect.size = instance.size
-        self._content_bg_rect.pos = instance.pos
 
     # ------------------------------------------------------------------
     # Static helpers

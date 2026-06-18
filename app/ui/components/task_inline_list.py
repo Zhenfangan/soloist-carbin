@@ -42,6 +42,8 @@ class TaskInlineList(BoxLayout):  # type: ignore[misc]
         tasks: list[dict[str, Any]] | None = None,
         on_check: Callable[[int, bool], Any] | None = None,
         on_add: Callable[[], Any] | None = None,
+        on_edit: Callable[[int], Any] | None = None,
+        on_delete: Callable[[int], Any] | None = None,
         **kwargs: Any,
     ) -> None:
         kwargs.setdefault("orientation", "vertical")
@@ -55,6 +57,8 @@ class TaskInlineList(BoxLayout):  # type: ignore[misc]
         self._tasks: list[dict[str, Any]] = tasks or []
         self._on_check_cb = on_check
         self._on_add_cb = on_add
+        self._on_edit_cb = on_edit
+        self._on_delete_cb = on_delete
         self._checkboxes: list[PixelCheckbox] = []
 
         # 标题
@@ -113,15 +117,29 @@ class TaskInlineList(BoxLayout):  # type: ignore[misc]
             desc = task.get("desc", "")
             done = task.get("done", False)
 
+            label_tap = self._make_label_tap(task_id, desc) if (self._on_edit_cb or self._on_delete_cb) else None
+
             cb = PixelCheckbox(
                 checked=done,
                 label=desc,
                 on_toggle=lambda checked, tid=task_id: self._on_check(tid, checked),  # type: ignore[misc]
+                on_label_tap=label_tap,
                 size_hint=(1, None),
                 height=28,
             )
             self._checkboxes.append(cb)
             self._list_layout.add_widget(cb)
+
+    def _make_label_tap(self, task_id: int, task_desc: str) -> Callable[[], None]:
+        def _tap() -> None:
+            from app.ui.components.pixel_dialog import TaskActionDialog
+            dialog = TaskActionDialog(
+                task_desc=task_desc,
+                on_edit=lambda: self._on_edit_cb(task_id) if self._on_edit_cb else None,
+                on_delete=lambda: self._on_delete_cb(task_id) if self._on_delete_cb else None,
+            )
+            dialog.open()
+        return _tap
 
     def _on_check(self, task_id: int, checked: bool) -> None:
         """勾选回调。"""

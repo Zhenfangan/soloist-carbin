@@ -61,6 +61,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         report_service: Any = None,
         shooting_service: Any = None,
         bet_service: Any = None,
+        camera_service: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -74,6 +75,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         self._report_service = report_service
         self._shooting_service = shooting_service
         self._bet_service = bet_service
+        self._camera_service = camera_service
 
         # 状态
         self._date_str = ""
@@ -181,6 +183,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             size_hint=(1, None),
             on_check=self._on_task_check,
             on_add=self._on_task_add,
+            on_edit=self._on_task_edit,
+            on_delete=self._on_task_delete,
         )
         self._container.add_widget(self._task_list)
 
@@ -284,6 +288,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         # 今日状态
         if self._checkin_service:
             try:
+                self._checkin_service.mark_absent(self._date_str)
                 day_status = self._checkin_service.get_today_status(self._date_str)
                 self._day_status = day_status
                 self._periods_data = getattr(day_status, "periods", [])
@@ -312,21 +317,54 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             except Exception as e:
                 Logger.error(f"CheckinScreen: {e}")
 
-        # 容器高度由 minimum_height 自动维护
+        # 今日任务 — 从 bet_service 加载本周任务
+        if self._bet_service:
+            try:
+                from datetime import datetime, timedelta
+                dt = datetime.strptime(self._date_str, "%Y-%m-%d")
+                week_start = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+                tasks = self._bet_service.get_week_tasks(week_start)
+                self._task_list.set_tasks([
+                    {"id": t.id, "desc": t.task_desc, "done": bool(t.is_completed)}
+                    for t in tasks
+                ])
+            except Exception as e:
+                Logger.error(f"CheckinScreen: 加载任务失败 {e}")
 
     def _determine_current_period(self) -> None:
         """确定当前时段并展开对应卡片。"""
-        # 简化版：根据打卡情况推断
-        morning_completed = False
-        afternoon_completed = False
+        absent_statuses = {"absent", "absent_morning", "absent_afternoon"}
+        # 无需签退即视为完成的终态（旷工/请假/拍摄）
+        terminal_no_checkout = {"absent", "absent_morning", "absent_afternoon", "leave", "shooting"}
 
-        for ps in self._periods_data:
-            if ps.period == "morning" and ps.status not in ("pending",):
-                morning_completed = True
-            if ps.period == "afternoon" and ps.status not in ("pending",):
-                afternoon_completed = True
+        period_status_map: dict[str, str] = {
+            ps.period: ps.status for ps in self._periods_data
+        }
+        period_checkout_map: dict[str, Any] = {
+            ps.period: ps.checkout_time for ps in self._periods_data
+        }
 
-        if not morning_completed:
+        def _resolved_state(period: str) -> str:
+            """把 DB status 映射为 card_state。"""
+            s = period_status_map.get(period, "pending")
+            if s in absent_statuses:
+                return "absent"
+            if s == "pending":
+                return None  # type: ignore[return-value]
+            return "completed"
+
+        def _is_done(period: str) -> bool:
+            """该时段是否已完成（有签退时间 或 无需签退的终态）。"""
+            return (
+                period_checkout_map.get(period) is not None
+                or period_status_map.get(period, "pending") in terminal_no_checkout
+            )
+
+        morning_done = _is_done("morning")
+        afternoon_done = _is_done("afternoon")
+        evening_done = _is_done("evening")
+
+        if not morning_done:
             self._current_period_index = 0
             self._period_cards["morning"].height = self._period_cards["morning"]._EXPANDED_HEIGHT
             self._period_cards["morning"].card_state = "expanded"
@@ -337,10 +375,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             self._period_cards["evening"].height = self._period_cards["evening"]._COLLAPSED_HEIGHT
             self._period_cards["evening"].card_state = "collapsed"
             self._period_cards["evening"].is_current = False
-        elif not afternoon_completed:
+        elif not afternoon_done:
             self._current_period_index = 1
             self._period_cards["morning"].height = self._period_cards["morning"]._COLLAPSED_HEIGHT
-            self._period_cards["morning"].card_state = "completed"
+            self._period_cards["morning"].card_state = _resolved_state("morning") or "completed"
             self._period_cards["morning"].is_current = False
             self._period_cards["afternoon"].height = self._period_cards["afternoon"]._EXPANDED_HEIGHT
             self._period_cards["afternoon"].card_state = "expanded"
@@ -348,17 +386,29 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             self._period_cards["evening"].height = self._period_cards["evening"]._COLLAPSED_HEIGHT
             self._period_cards["evening"].card_state = "collapsed"
             self._period_cards["evening"].is_current = False
-        else:
+        elif not evening_done:
             self._current_period_index = 2
             self._period_cards["morning"].height = self._period_cards["morning"]._COLLAPSED_HEIGHT
-            self._period_cards["morning"].card_state = "completed"
+            self._period_cards["morning"].card_state = _resolved_state("morning") or "completed"
             self._period_cards["morning"].is_current = False
             self._period_cards["afternoon"].height = self._period_cards["afternoon"]._COLLAPSED_HEIGHT
-            self._period_cards["afternoon"].card_state = "completed"
+            self._period_cards["afternoon"].card_state = _resolved_state("afternoon") or "completed"
             self._period_cards["afternoon"].is_current = False
             self._period_cards["evening"].height = self._period_cards["evening"]._EXPANDED_HEIGHT
             self._period_cards["evening"].card_state = "expanded"
             self._period_cards["evening"].is_current = True
+        else:
+            # 三段全部完成 → 全部折叠
+            self._current_period_index = 3
+            self._period_cards["morning"].height = self._period_cards["morning"]._COLLAPSED_HEIGHT
+            self._period_cards["morning"].card_state = _resolved_state("morning") or "completed"
+            self._period_cards["morning"].is_current = False
+            self._period_cards["afternoon"].height = self._period_cards["afternoon"]._COLLAPSED_HEIGHT
+            self._period_cards["afternoon"].card_state = _resolved_state("afternoon") or "completed"
+            self._period_cards["afternoon"].is_current = False
+            self._period_cards["evening"].height = self._period_cards["evening"]._COLLAPSED_HEIGHT
+            self._period_cards["evening"].card_state = _resolved_state("evening") or "completed"
+            self._period_cards["evening"].is_current = False
 
     # ── 签到/签退 ──────────────────────────────────────────
 
@@ -371,13 +421,29 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         self._do_checkin(period)
 
     def _do_checkin(self, period: str) -> None:
-        """执行签到。"""
+        """执行签到 — 有相机服务时先拍照，照片获取后再写打卡记录。"""
         if not self._checkin_service:
             return
 
+        if self._camera_service:
+            self._camera_service.take_photo(
+                period=period,
+                action="in",
+                on_done=lambda path: self._finish_checkin(period, path),
+            )
+        else:
+            self._finish_checkin(period, None)
+
+    def _finish_checkin(self, period: str, photo_path: Any) -> None:
+        """拍照完成后执行实际签到写库。photo_path=None 且有相机服务 → 用户取消，不写记录。"""
+        if self._camera_service and photo_path is None:
+            return
+
         try:
-            result = self._checkin_service.check_in(self._date_str, period)
-            # 更新卡片
+            result = self._checkin_service.check_in(
+                self._date_str, period,
+                str(photo_path) if photo_path else None,
+            )
             card = self._period_cards.get(period)
             if card:
                 card.has_checked_in = True
@@ -385,64 +451,105 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
             self._morning_checked_in = True
 
-            # 打卡成功动画 — 加在内容容器而非 ScrollView (SV 只能有一个子组件)
             if card:
                 checkin_success_sequence(
-                    container=self._container,
+                    container=card,
                     animating_widget=card._action_btn,
                     on_mascot_show=lambda: None,
                     on_mascot_hide=lambda: self._after_checkin_animation(period),
                     on_complete=lambda: None,
+                    is_night=period in ("evening", "night"),
                 )
 
-            # 重新加载状态
             self._refresh_status()
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")
 
     def _on_checkout(self, period: str) -> None:
-        """签退回调。"""
+        """签退回调 — 若在时段结束时间前签退，先弹确认框。"""
         if not self._checkin_service:
             return
 
+        from app.utils.clock import get_clock
+        clock = get_clock()
+        current_time = clock.current_time_str()
+        end_time = self._checkin_service.get_period_end_time(period)
+
+        if end_time and current_time < end_time:
+            _PERIOD_LABELS = {"morning": "上午", "afternoon": "下午", "evening": "晚间"}
+            label = _PERIOD_LABELS.get(period, period)
+            from app.ui.components.pixel_dialog import ConfirmDialog
+            dialog = ConfirmDialog(
+                title="确认提前签退",
+                message=f"当前 {current_time}，{label}下班时间为 {end_time}，\n确定提前签退（记早退）吗？",
+                confirm_text="确定签退",
+                cancel_text="再等等",
+                on_confirm=lambda: self._do_checkout(period),
+            )
+            dialog.open()
+            return
+
+        self._do_checkout(period)
+
+    def _do_checkout(self, period: str) -> None:
+        """执行签退 — 有相机服务时先拍照，照片获取后再写签退记录。"""
+        if not self._checkin_service:
+            return
+
+        if self._camera_service:
+            self._camera_service.take_photo(
+                period=period,
+                action="out",
+                on_done=lambda path: self._finish_checkout(period, path),
+            )
+        else:
+            self._finish_checkout(period, None)
+
+    def _finish_checkout(self, period: str, photo_path: Any) -> None:
+        """拍照完成后执行实际签退写库。photo_path=None 且有相机服务 → 用户取消，不写记录。"""
+        if self._camera_service and photo_path is None:
+            return
+
         try:
-            result = self._checkin_service.check_out(self._date_str, period)
+            result = self._checkin_service.check_out(
+                self._date_str, period,
+                str(photo_path) if photo_path else None,
+            )
             card = self._period_cards.get(period)
             if card:
                 card.has_checked_out = True
                 card.checkout_time = result.checkout_time
 
-            # 标记完成
-            self._refresh_status()
-            self._check_all_completed()
+            def _after_checkout_anim() -> None:
+                self._refresh_status()
+                self._check_all_completed()
+                period_order = ["morning", "afternoon", "evening"]
+                current_idx = period_order.index(period) if period in period_order else -1
+                if current_idx < len(period_order) - 1:
+                    next_period = period_order[current_idx + 1]
+                    next_card = self._period_cards.get(next_period)
+                    if next_card:
+                        next_card.height = next_card._EXPANDED_HEIGHT
+                        next_card.card_state = "expanded"
+                        next_card.is_current = True
 
-            # 自动展开下一时段
-            period_order = ["morning", "afternoon", "evening"]
-            current_idx = period_order.index(period) if period in period_order else -1
-            if current_idx < len(period_order) - 1:
-                next_period = period_order[current_idx + 1]
-                next_card = self._period_cards.get(next_period)
-                if next_card:
-                    next_card.height = next_card._EXPANDED_HEIGHT
-                    next_card.card_state = "expanded"
-                    next_card.is_current = True
+            if card and hasattr(card, "_action_btn"):
+                checkin_success_sequence(
+                    container=card,
+                    animating_widget=card._action_btn,
+                    on_mascot_show=lambda: None,
+                    on_mascot_hide=lambda: None,
+                    on_complete=_after_checkout_anim,
+                    is_night=period in ("evening", "night"),
+                )
+            else:
+                _after_checkout_anim()
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")
 
     def _after_checkin_animation(self, period: str) -> None:
         """打卡动画完成后的处理。"""
-        # 折叠当前时段，展开下一时段
-        period_order = ["morning", "afternoon", "evening"]
-        current_idx = period_order.index(period) if period in period_order else -1
-
-        if current_idx < len(period_order) - 1:
-            next_period = period_order[current_idx + 1]
-            next_card = self._period_cards.get(next_period)
-            if next_card:
-                next_card.height = next_card._EXPANDED_HEIGHT
-                next_card.card_state = "expanded"
-                next_card.is_current = True
-
+        # 签到后留在当前时段显示签退按钮，下一时段等签退后再展开
         # 如果是上午签到，弹出承诺弹窗
         if period == "morning":
             self._show_promise_dialog()
@@ -452,6 +559,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         if not self._checkin_service:
             return
         try:
+            self._checkin_service.mark_absent(self._date_str)
             day_status = self._checkin_service.get_today_status(self._date_str)
             self._day_status = day_status
             self._periods_data = getattr(day_status, "periods", [])
@@ -630,6 +738,62 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             ])
         except Exception as e:
             Logger.error(f"CheckinScreen: 添加任务失败 {e}")
+
+    def _on_task_edit(self, task_id: int) -> None:
+        """编辑任务 — 弹出预填 AddTaskDialog。"""
+        if not self._bet_service:
+            return
+        try:
+            from datetime import datetime, timedelta
+            dt = datetime.strptime(self._date_str, "%Y-%m-%d")
+            week_start = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            tasks = self._bet_service.get_week_tasks(week_start)
+            target = next((t for t in tasks if t.id == task_id), None)
+            if not target:
+                return
+
+            from app.ui.components.add_task_dialog import AddTaskDialog
+
+            def _save(new_desc: str, new_qty: int) -> None:
+                self._bet_service.update_task(task_id, new_desc, new_qty)
+                self._reload_tasks()
+
+            dialog = AddTaskDialog(
+                on_add=_save,
+                initial_desc=target.task_desc,
+                initial_qty=target.target_qty,
+                title_text="编辑任务",
+                confirm_text="保存",
+            )
+            dialog.open()
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 编辑任务失败 {e}")
+
+    def _on_task_delete(self, task_id: int) -> None:
+        """删除任务并刷新列表。"""
+        if not self._bet_service:
+            return
+        try:
+            self._bet_service.delete_task(task_id)
+            self._reload_tasks()
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 删除任务失败 {e}")
+
+    def _reload_tasks(self) -> None:
+        """从 bet_service 重新拉取本周任务并刷新 UI。"""
+        if not self._bet_service or not self._date_str:
+            return
+        try:
+            from datetime import datetime, timedelta
+            dt = datetime.strptime(self._date_str, "%Y-%m-%d")
+            week_start = (dt - timedelta(days=dt.weekday())).strftime("%Y-%m-%d")
+            tasks = self._bet_service.get_week_tasks(week_start)
+            self._task_list.set_tasks([
+                {"id": t.id, "desc": t.task_desc, "done": bool(t.is_completed)}
+                for t in tasks
+            ])
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 刷新任务列表失败 {e}")
 
     # ── 战报 ────────────────────────────────────────────────
 

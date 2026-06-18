@@ -17,6 +17,7 @@ DDL_STATEMENTS = [
         checkout_type TEXT DEFAULT 'manual',
         status        TEXT,
         is_shooting   INTEGER DEFAULT 0,
+        photo_path    TEXT,
         created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at    TEXT DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(checkin_date, period)
@@ -129,10 +130,18 @@ def get_db(path: str | None = None) -> sqlite3.Connection:
 
 
 def _init_tables(conn: sqlite3.Connection) -> None:
-    """执行建表 DDL"""
+    """执行建表 DDL + 增量迁移"""
     for ddl in DDL_STATEMENTS:
         conn.execute(ddl)
+    _run_migrations(conn)
     conn.commit()
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """对已有数据库执行增量 ALTER TABLE 迁移。"""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(checkins)")}
+    if "photo_path" not in existing:
+        conn.execute("ALTER TABLE checkins ADD COLUMN photo_path TEXT")
 
 
 def init_db(path: str | None = None) -> None:

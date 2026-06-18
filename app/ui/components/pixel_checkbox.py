@@ -19,6 +19,7 @@ from app.ui.tokens import (
     FONT_SIZE_BODY,
     GRID_UNIT,
     TEXT_BROWN,
+    TEXT_GRAY,
 )
 
 
@@ -36,6 +37,7 @@ class PixelCheckbox(FloatLayout):  # type: ignore[misc]
         checked: bool = False,
         label: str = "",
         on_toggle: Callable[[bool], Any] | None = None,
+        on_label_tap: Callable[[], Any] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -45,6 +47,7 @@ class PixelCheckbox(FloatLayout):  # type: ignore[misc]
         self._checked = checked
         self._label_text = label
         self._on_toggle = on_toggle
+        self._on_label_tap = on_label_tap
 
         # 勾选框画布区域
         self._box = Widget(
@@ -53,14 +56,15 @@ class PixelCheckbox(FloatLayout):  # type: ignore[misc]
             pos_hint={"x": 0, "y": 0.5},
         )
 
-        # 文字标签
+        # 文字标签 — markup 支持 [s]...[/s] 删除线
         self._label = Label(
-            text=label,
+            text=self._format_label_text(),
             font_size=FONT_SIZE_BODY,
-            color=self._to_rgba(TEXT_BROWN),
+            color=self._to_rgba(TEXT_GRAY if checked else TEXT_BROWN),
             size_hint=(1, 1),
             halign="left",
             valign="middle",
+            markup=True,
         )
 
         self.add_widget(self._box)
@@ -80,18 +84,40 @@ class PixelCheckbox(FloatLayout):  # type: ignore[misc]
     @checked.setter
     def checked(self, value: bool) -> None:
         self._checked = value
+        self._sync_label_style()
         self._redraw()
 
     def toggle(self) -> None:
         """切换勾选状态。"""
         self._checked = not self._checked
+        self._sync_label_style()
         self._redraw()
         if self._on_toggle:
             self._on_toggle(self._checked)
 
+    def _format_label_text(self) -> str:
+        """打钩后文字加删除线 (Kivy markup)。"""
+        if self._checked and self._label_text:
+            return f"[s]{self._label_text}[/s]"
+        return self._label_text
+
+    def _sync_label_style(self) -> None:
+        """同步标签文本与颜色 — 打钩后变灰 + 删除线。"""
+        self._label.text = self._format_label_text()
+        self._label.color = self._to_rgba(TEXT_GRAY if self._checked else TEXT_BROWN)
+
     def on_touch_down(self, touch: Any) -> bool:
         if self.collide_point(*touch.pos):
-            self.toggle()
+            if self._on_label_tap:
+                # 仅勾选框矩形区域触发 toggle，其余区域打开操作菜单
+                box_x = self.x + GRID_UNIT
+                box_y = self.y + (self.height - 20) / 2
+                if box_x <= touch.x <= box_x + 20 and box_y <= touch.y <= box_y + 20:
+                    self.toggle()
+                else:
+                    self._on_label_tap()
+            else:
+                self.toggle()
             return True
         return cast(bool, super().on_touch_down(touch))
 

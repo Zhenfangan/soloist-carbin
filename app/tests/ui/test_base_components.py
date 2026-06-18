@@ -42,6 +42,12 @@ class TestPixelButton:
         btn = PixelButton(text="Test", disabled=True)
         assert btn.disabled
         assert btn.opacity == 0.5
+        # 回归: disabled 时文字不能用 Kivy 默认 disabled_color (近透明白)
+        # 否则浅色背景(如 CARD_SHADOW)上文字不可见 (bug 2026-06-12)
+        from app.ui.tokens import TEXT_BROWN
+        h = TEXT_BROWN.lstrip("#")
+        expected = (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0, 1.0)
+        assert tuple(btn.disabled_color) == expected
 
     def test_button_disabled_ignores_touch(self) -> None:
         """禁用的按钮不应在 touch_down 时改变状态。"""

@@ -16,6 +16,7 @@ from kivy.uix.screenmanager import Screen, ScreenManager
 from app.ui.assets.loader import IconLoader
 from app.ui.tokens import (
     FONT_SIZE_SMALL,
+    ICON_SIZE,
     NAV_HEIGHT,
     PRIMARY_YELLOW,
     TEXT_GRAY,
@@ -28,21 +29,27 @@ def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, f
 
 
 class TabButton(Button):  # type: ignore[misc]
-    """单个 Tab 按钮 — 像素图标 + 小字标签。"""
+    """单个 Tab 按钮 — 像素图标 + 小字标签，支持 active/inactive 双图标切换。"""
 
-    def __init__(self, icon_name: str, text: str, **kwargs: Any) -> None:
+    def __init__(self, icon_name: str, text: str, icon_name_active: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.background_normal = ""
         self.background_down = ""
         self.background_color = (0, 0, 0, 0)
         self.size_hint = (1, 1)
 
+        self._icon_inactive_source = str(IconLoader.get_icon_path(icon_name))
+        self._icon_active_source = (
+            str(IconLoader.get_icon_path(icon_name_active))
+            if icon_name_active else self._icon_inactive_source
+        )
+
         # 图标
         self._icon = KivyImage(
-            source=str(IconLoader.get_icon_path(icon_name)),
+            source=self._icon_inactive_source,
             size_hint=(None, None),
-            size=(32, 32),
-            pos_hint={"center_x": 0.5, "y": 0.35},
+            size=(ICON_SIZE, ICON_SIZE),
+            pos_hint={"center_x": 0.5},
         )
         self._icon.allow_stretch = True
         self._icon.keep_ratio = True
@@ -50,16 +57,16 @@ class TabButton(Button):  # type: ignore[misc]
         # 标签
         self._tab_label = Label(
             text=text,
-            font_size=FONT_SIZE_SMALL,
+            font_size=14,
             color=_to_rgba(TEXT_GRAY),
             size_hint=(1, None),
-            height=20,
-            pos_hint={"x": 0, "y": -0.1},
+            height=24,
+            pos_hint={"center_x": 0.5},
             halign="center",
-            valign="top",
+            valign="middle",
         )
 
-        layout = BoxLayout(orientation="vertical")
+        layout = BoxLayout(orientation="vertical", spacing=4, padding=[0, 3])
         layout.add_widget(self._icon)
         layout.add_widget(self._tab_label)
         self.add_widget(layout)
@@ -72,18 +79,20 @@ class TabButton(Button):  # type: ignore[misc]
     def set_active(self, active: bool) -> None:
         if active:
             self._tab_label.color = _to_rgba(PRIMARY_YELLOW)
+            self._icon.source = self._icon_active_source
         else:
             self._tab_label.color = _to_rgba(TEXT_GRAY)
+            self._icon.source = self._icon_inactive_source
 
     def set_color_icon(self, color: tuple[float, float, float, float]) -> None:
         self._icon.color = color
 
 
 TAB_CONFIG: list[dict[str, str]] = [
-    {"name": "checkin", "icon": "tab_checkin", "text": "打卡"},
-    {"name": "history", "icon": "tab_history", "text": "历史"},
-    {"name": "bet", "icon": "tab_bet", "text": "对赌"},
-    {"name": "settings", "icon": "tab_settings", "text": "设置"},
+    {"name": "checkin", "icon": "tab_checkin_inactive", "icon_active": "tab_checkin_active", "text": "打卡"},
+    {"name": "history", "icon": "tab_history_inactive", "icon_active": "tab_history_active", "text": "历史"},
+    {"name": "bet", "icon": "tab_bet_inactive", "icon_active": "tab_bet_active", "text": "对赌"},
+    {"name": "settings", "icon": "tab_settings_inactive", "icon_active": "tab_settings_active", "text": "设置"},
 ]
 
 
@@ -103,7 +112,7 @@ class BottomTabBar(BoxLayout):  # type: ignore[misc]
         self._active_index = 0
 
         for i, cfg in enumerate(TAB_CONFIG):
-            btn = TabButton(icon_name=cfg["icon"], text=cfg["text"])
+            btn = TabButton(icon_name=cfg["icon"], text=cfg["text"], icon_name_active=cfg.get("icon_active"))
             btn.bind(on_press=lambda _, idx=i: self.switch_tab(idx))
             self.add_widget(btn)
             self._tabs.append(btn)

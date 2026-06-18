@@ -23,15 +23,16 @@ class CheckinRepo(BaseRepo):
         """原子 upsert — 使用 INSERT ON CONFLICT 消除 TOCTOU 竞态"""
         self._execute(
             """INSERT INTO checkins (checkin_date, period, checkin_time,
-               checkout_time, checkout_type, status, is_shooting,
+               checkout_time, checkout_type, status, is_shooting, photo_path,
                created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                ON CONFLICT(checkin_date, period) DO UPDATE SET
                checkin_time = excluded.checkin_time,
                checkout_time = excluded.checkout_time,
                checkout_type = excluded.checkout_type,
                status = excluded.status,
                is_shooting = excluded.is_shooting,
+               photo_path = excluded.photo_path,
                updated_at = datetime('now')""",
             (
                 checkin.checkin_date,
@@ -41,6 +42,7 @@ class CheckinRepo(BaseRepo):
                 checkin.checkout_type,
                 checkin.status,
                 checkin.is_shooting,
+                checkin.photo_path,
             ),
         )
         row = self._fetch_one(
@@ -87,6 +89,7 @@ class CheckinRepo(BaseRepo):
 
     @staticmethod
     def _row_to_checkin(row: sqlite3.Row) -> Checkin:
+        keys = row.keys()
         return Checkin(
             id=row["id"],
             checkin_date=row["checkin_date"],
@@ -96,4 +99,5 @@ class CheckinRepo(BaseRepo):
             checkout_type=row["checkout_type"],
             status=row["status"],
             is_shooting=row["is_shooting"],
+            photo_path=row["photo_path"] if "photo_path" in keys else None,
         )

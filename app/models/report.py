@@ -37,3 +37,4 @@ class ReportData:
     promise: PromiseDetail | None = None
     completed_tasks: list[str] = field(default_factory=list)
     encouragement: str = ""
+    threshold_hours: float = 8.0

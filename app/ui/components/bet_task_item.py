@@ -302,12 +302,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             self._do_decrement()
             return
 
-        # 复选框 (扩大命中区域 8px, 小目标好按)
-        cx, cy = self._check_box.pos
-        cw, ch = self._check_box.size
-        if cx - 8 <= tx <= cx + cw + 8 and cy - 6 <= ty <= cy + ch + 6:
-            self._do_toggle_check()
-            return
+        # 复选框区域仅显示，不可交互
 
         # 编辑/删除按钮 (左滑露出时可见)
         if self._delete_visible:
@@ -325,11 +320,11 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             self._snap_back()
             return
 
-        # 描述区域 tap -> 编辑
+        # 描述区域 tap -> 弹出操作菜单
         dx, dy = self._desc_label.pos
         dw, dh = self._desc_label.size
         if dx <= tx <= dx + dw and dy <= ty <= dy + dh:
-            self._do_edit()
+            self._show_action_menu()
             return
 
     def _do_increment(self) -> None:
@@ -385,8 +380,17 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         """触发编辑回调 (由父组件 BetScreen 弹出 AddTaskDialog 编辑模式)。"""
         if self._on_edit_cb and self._task.id is not None:
             self._on_edit_cb(self._task.id)
-        # 编辑后通常 snap_back 回收按钮区
         self._snap_back()
+
+    def _show_action_menu(self) -> None:
+        """弹出任务操作菜单（修改/删除/取消）。"""
+        from app.ui.components.pixel_dialog import TaskActionDialog
+        dialog = TaskActionDialog(
+            task_desc=self._task.task_desc,
+            on_edit=self._do_edit,
+            on_delete=self._do_delete,
+        )
+        dialog.open()
 
     # ---- Swipe 动画 ----
 
@@ -539,21 +543,17 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
             self._redraw_check_box()
 
     def _redraw_check_box(self, *args: Any) -> None:
-        """绘制 checkbox 矩形 + (选中时) 对勾 — 跟主页 PixelCheckbox 视觉一致。"""
+        """仅在完成时绘制对勾，不画方框，不可交互，只读显示完成状态。"""
         self._check_box.canvas.before.clear()
-        if self._check_box.opacity <= 0:
+        if self._check_box.opacity <= 0 or not self._check_box.checked:
             return
         x, y = self._check_box.pos
-        w, h = self._check_box.size
         with self._check_box.canvas.before:
-            Color(*self._to_rgba(TEXT_BROWN))
-            Line(rectangle=(x, y, w, h), width=BORDER_WIDTH)
-            if self._check_box.checked:
-                Color(*self._to_rgba(DOPAMINE_COLORS["mint"]["light"]))
-                Line(
-                    points=[x + 4, y + 10, x + 8, y + 6, x + 16, y + 14],
-                    width=2,
-                )
+            Color(*self._to_rgba(DOPAMINE_COLORS["mint"]["light"]))
+            Line(
+                points=[x + 4, y + 10, x + 8, y + 6, x + 16, y + 14],
+                width=2,
+            )
 
     def _redraw_plus_btn(self, *args: Any) -> None:
         """绘制 [+1] 按钮像素边框 — 用 plus_btn 绝对窗口坐标。"""
