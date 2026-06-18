@@ -31,6 +31,7 @@ from app.ui.tokens import (
     DOPAMINE_COLORS,
     FONT_SIZE_BODY,
     FONT_SIZE_SMALL,
+    GRASS_INSET,
     GRID_UNIT,
     TEXT_BROWN,
     TEXT_GRAY,
@@ -90,7 +91,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             orientation="vertical",
             size_hint=(1, None),
             spacing=GRID_UNIT,
-            padding=[CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING],
+            padding=[CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING + GRASS_INSET],
         )
         self._container.bind(minimum_height=self._container.setter("height"))
         self.add_widget(self._container)

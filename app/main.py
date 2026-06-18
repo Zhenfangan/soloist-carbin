@@ -180,8 +180,8 @@ class SoloistApp(App):  # type: ignore[misc]
 
         sm = AppScreenManager(screens)
         sm.size_hint = (1, None)
-        sm.pos_hint = {"x": 0, "top": 1}
-        sm.height = Window.height - GRASS_INSET
+        sm.pos_hint = {"x": 0, "y": 0}
+        sm.height = Window.height
 
         # Layer 4: 天空背景 — 与 report_preview 一致的渲染方式
         _sky = _PassthroughImage(
