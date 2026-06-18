@@ -141,7 +141,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             orientation="vertical",
             size_hint_y=None,
             spacing=GRID_UNIT,
-            padding=[GRID_UNIT, GRID_UNIT, GRID_UNIT, GRID_UNIT * 2],
+            padding=[GRID_UNIT, GRID_UNIT, GRID_UNIT, GRID_UNIT * 2 + GRASS_INSET],
         )
         self._week_card_container.bind(
             minimum_height=self._week_card_container.setter("height")
@@ -240,7 +240,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             orientation="vertical",
             size_hint=(1, None),
             spacing=2,
-            padding=[GRID_UNIT, GRID_UNIT],
+            padding=[GRID_UNIT, GRID_UNIT, GRID_UNIT, GRID_UNIT + GRASS_INSET],
         )
         self._month_calendar.bind(
             minimum_height=self._month_calendar.setter("height")
@@ -417,7 +417,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             orientation="vertical",
             size_hint_y=None,
             spacing=GRID_UNIT,
-            padding=[GRID_UNIT, GRID_UNIT],
+            padding=[GRID_UNIT, GRID_UNIT, GRID_UNIT, GRID_UNIT + GRASS_INSET],
         )
         self._year_card_container.bind(
             minimum_height=self._year_card_container.setter("height")

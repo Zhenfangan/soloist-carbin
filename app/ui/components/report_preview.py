@@ -377,7 +377,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             self._mask = Rectangle(size=root.size, pos=root.pos)
         root.bind(size=self._update_mask, pos=self._update_mask)
 
-        panel = FloatLayout(size_hint=(1, 0.95), pos_hint={"x": 0, "y": 0})
+        panel = FloatLayout(size_hint=(1, 1), pos_hint={"x": 0, "y": 0})
 
         # ── 底层 [Image #6]: 完整景观背景（天空+彩虹+草地+土壤）─────
         def _redraw_panel_bg(w: Any, *_: Any) -> None:
@@ -395,7 +395,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             orientation="vertical",
             size_hint=(1, None),
             spacing=0,
-            padding=[CARD_PADDING, GRID_UNIT],
+            padding=[CARD_PADDING, GRID_UNIT, CARD_PADDING, GRID_UNIT + GRASS_INSET // 3],
         )
         self._content_box.bind(minimum_height=self._content_box.setter("height"))
 

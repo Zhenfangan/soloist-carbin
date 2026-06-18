@@ -66,23 +66,36 @@ class TabButton(Button):  # type: ignore[misc]
             valign="middle",
         )
 
-        layout = BoxLayout(orientation="vertical", spacing=4, padding=[0, 3])
-        layout.add_widget(self._icon)
-        layout.add_widget(self._tab_label)
-        self.add_widget(layout)
-        # Button 不是 Layout, 不会自动把 size/pos 派发给子 BoxLayout
-        # 必须显式 bind, 否则 layout 永远停在默认 (0,0) (100,100), 4 个 tab 视觉重叠在左下角
-        self.bind(size=layout.setter("size"), pos=layout.setter("pos"))
-        layout.size = self.size
-        layout.pos = self.pos
+        self._layout = BoxLayout(orientation="vertical", spacing=4, padding=[0, 3])
+        self._layout.add_widget(self._icon)
+        self._layout.add_widget(self._tab_label)
+        self.add_widget(self._layout)
+        self.bind(size=self._layout.setter("size"), pos=self._layout.setter("pos"))
+        self._layout.size = self.size
+        self._layout.pos = self.pos
 
     def set_active(self, active: bool) -> None:
+        _inactive_size = int(ICON_SIZE * 1.5)
+        _active_size = int(ICON_SIZE * 2.2 * 0.8 * 1.1)
         if active:
             self._tab_label.color = _to_rgba(PRIMARY_YELLOW)
             self._icon.source = self._icon_active_source
+            self._icon.size = (_active_size, _active_size)
+            self._tab_label.height = 0
+            self._tab_label.opacity = 0
+            self._layout.spacing = 0
+            self._layout.padding = [0, 0, 0, 0]
+            from kivy.clock import Clock
+            _shift = int(_active_size / 5)
+            Clock.schedule_once(lambda dt: setattr(self._icon, 'y', self._layout.height - _active_size + _shift))
         else:
             self._tab_label.color = _to_rgba(TEXT_GRAY)
             self._icon.source = self._icon_inactive_source
+            self._icon.size = (_inactive_size, _inactive_size)
+            self._tab_label.height = 24
+            self._tab_label.opacity = 1
+            self._layout.spacing = 4
+            self._layout.padding = [0, 3]
 
     def set_color_icon(self, color: tuple[float, float, float, float]) -> None:
         self._icon.color = color
