@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import queue
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from app.services.event_bus import EventType, get_event_bus
@@ -26,6 +28,10 @@ PERIOD_CN: dict[str, str] = {"morning": "上午", "afternoon": "下午", "evenin
 
 DEDUP_TTL_SECONDS = 5.0
 TOPIC_LOG_THROTTLE_SECONDS = 30.0
+QUEUE_MAX = 200
+HTTP_TIMEOUT = 3.0
+BACKOFF_THRESHOLD = 3
+BACKOFF_SECONDS = 30.0
 
 _logger = logging.getLogger("NtfyPushService")
 
@@ -36,10 +42,12 @@ class NtfyPushService:
     def __init__(
         self,
         settings_service: SettingsService,
+        queue_path: Path | None = None,
         monotonic: Callable[[], float] | None = None,
     ) -> None:
         self._settings = settings_service
         self._monotonic = monotonic or time.monotonic
+        self._queue_path = queue_path or Path("user_data/push_queue.json")
         self._memory_queue: "queue.Queue[str]" = queue.Queue()
         self._recent: dict[str, float] = {}
         self._last_topic_warn = 0.0
@@ -132,3 +140,50 @@ class NtfyPushService:
         """返回当前队列里最后入队的一条（线程不安全，仅测试用）。"""
         items = list(self._memory_queue.queue)
         return items[-1] if items else None
+
+    # ── 持久化 ───────────────────────────
+
+    def _read_persisted(self) -> list[str]:
+        if not self._queue_path.exists():
+            return []
+        try:
+            content = self._queue_path.read_text(encoding="utf-8")
+            data = json.loads(content) if content.strip() else []
+            if not isinstance(data, list):
+                return []
+            return [m for m in data if isinstance(m, str)]
+        except Exception:
+            return []
+
+    def _append_persisted(self, msgs: list[str]) -> None:
+        self._queue_path.parent.mkdir(parents=True, exist_ok=True)
+        current = self._read_persisted()
+        current.extend(msgs)
+        if len(current) > QUEUE_MAX:
+            dropped = len(current) - QUEUE_MAX
+            current = current[-QUEUE_MAX:]
+            _logger.warning(f"push_queue 超 {QUEUE_MAX} 条，丢弃最早 {dropped} 条")
+        self._queue_path.write_text(
+            json.dumps(current, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    def _load_persisted_queue(self) -> None:
+        if not self._queue_path.exists():
+            return
+        try:
+            content = self._queue_path.read_text(encoding="utf-8")
+            data = json.loads(content) if content.strip() else []
+            if not isinstance(data, list):
+                self._queue_path.write_text("[]", encoding="utf-8")
+                return
+            for m in data:
+                if isinstance(m, str):
+                    self._memory_queue.put(m)
+            self._queue_path.write_text("[]", encoding="utf-8")
+        except Exception as e:
+            _logger.warning(f"push_queue.json 解析失败，已清空: {e}")
+            try:
+                self._queue_path.write_text("[]", encoding="utf-8")
+            except Exception:
+                pass
