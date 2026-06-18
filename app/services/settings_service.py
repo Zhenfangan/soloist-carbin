@@ -26,6 +26,9 @@ class SettingsService:
         "work_days": "1,2,3,4,5",
         "shooting_reward": "30",
         "boyfriend_hour_threshold": "8",
+        "ntfy_enabled": "0",
+        "ntfy_topic": "",
+        "ntfy_server": "https://ntfy.sh",
     }
 
     def __init__(self, settings_repo: SettingsRepo) -> None:
