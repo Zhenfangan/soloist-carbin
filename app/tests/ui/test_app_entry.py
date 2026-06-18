@@ -58,13 +58,12 @@ class TestAppEntry:
         )
 
     def test_font_loading(self) -> None:
-        """验证 apply_global_font 可调用 + 把 SmileySans 注册成 Roboto。"""
+        """验证 apply_global_font 可调用 + 把长坂点宋16 注册成 Roboto。"""
         from kivy.core.text import LabelBase
 
         from app.ui.fonts import apply_global_font
 
         apply_global_font()
-        # 字体文件存在时, Roboto 应该被覆盖为 SmileySans
         assert "Roboto" in LabelBase._fonts
 
     def test_resource_preload(self) -> None:

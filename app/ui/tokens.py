@@ -92,14 +92,14 @@ GRASS_INSET: int = 126
 # ============================================================
 
 FONTS: Final[dict[str, object]] = {
-    "DEFAULT": "SmileySans",
-    "PIXEL": "SmileySans",
-    "HANZI_PIXEL": "SmileySans",
+    "DEFAULT": "QiuYeYuanTi",
+    "PIXEL": "QiuYeYuanTi",
+    "HANZI_PIXEL": "QiuYeYuanTi",
     "SIZE_TITLE": 18,
     "SIZE_BODY": 14,
     "SIZE_SMALL": 10,
     "FILES": {
-        "SmileySans": "app/ui/assets/fonts/SmileySans-Oblique.ttf",
+        "QiuYeYuanTi": "app/ui/assets/fonts/QiuYeYuanTi-16.ttf",
     },
 }
 
