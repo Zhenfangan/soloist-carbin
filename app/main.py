@@ -34,6 +34,7 @@ from app.services.motivation_service import MotivationService  # noqa: E402
 from app.services.penalty_service import PenaltyService  # noqa: E402
 from app.services.report_service import ReportService  # noqa: E402
 from app.services.settings_service import SettingsService  # noqa: E402
+from app.services.ntfy_service import NtfyPushService  # noqa: E402
 from app.services.sync_service import SyncService  # noqa: E402
 from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path  # noqa: E402
 from app.ui.assets.loader import preload_all  # noqa: E402
@@ -107,6 +108,8 @@ class SoloistApp(App):  # type: ignore[misc]
         self._motivation_svc = MotivationService(
             checkin_repo, StreakRepo(self.DB_PATH), settings_repo, NoOpNotifier()
         )
+        self._ntfy_svc = NtfyPushService(settings_svc)
+        self._ntfy_svc.start()
 
         # 根布局: FloatLayout，子 widget 按添加顺序从底到顶堆叠
         self._root = FloatLayout()
@@ -210,7 +213,8 @@ class SoloistApp(App):  # type: ignore[misc]
 
     def on_stop(self) -> None:
         """应用退出时清理资源。"""
-        pass
+        if hasattr(self, "_ntfy_svc"):
+            self._ntfy_svc.stop()
 
 
 def main() -> None:
