@@ -123,6 +123,16 @@ class NtfyPushService:
         except Exception:
             return False
 
+    # ── 测试推送（设置页按钮）─────────────
+
+    def send_test(self) -> bool:
+        """同步发一条 'soloist 测试通知'，绕开 enabled / 队列。"""
+        topic = self._settings.get("ntfy_topic")
+        server = self._settings.get("ntfy_server") or "https://ntfy.sh"
+        if not topic:
+            return False
+        return self._send_one(server, topic, "soloist 测试通知")
+
     # ── 订阅 ─────────────────────────────
 
     def _subscribe_events(self) -> None:

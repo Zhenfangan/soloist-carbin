@@ -108,3 +108,31 @@ def test_dedup_outside_ttl(fresh_bus: EventBus) -> None:
     fresh_bus.publish(EventType.CHECK_IN_COMPLETED, payload)
     fresh_bus.publish(EventType.CHECK_IN_COMPLETED, payload)
     assert svc.queue_size() == 2
+
+
+def test_send_test_success_returns_true(fresh_bus: EventBus) -> None:
+    class _Resp:
+        status_code = 200
+    captured: list[tuple[str, bytes]] = []
+    def fake_post(url: str, data: bytes = b"", timeout: float = 0) -> _Resp:
+        captured.append((url, data))
+        return _Resp()
+    repo = _FakeRepo({"ntfy_enabled": "0", "ntfy_topic": "tx", "ntfy_server": "https://ntfy.sh"})
+    svc = NtfyPushService(SettingsService(repo), http_post=fake_post)
+    assert svc.send_test() is True
+    assert captured[0][0] == "https://ntfy.sh/tx"
+    assert "测试" in captured[0][1].decode("utf-8")
+
+
+def test_send_test_topic_empty_returns_false(fresh_bus: EventBus) -> None:
+    repo = _FakeRepo({"ntfy_enabled": "1", "ntfy_topic": ""})
+    svc = NtfyPushService(SettingsService(repo))
+    assert svc.send_test() is False
+
+
+def test_send_test_exception_returns_false(fresh_bus: EventBus) -> None:
+    def fake_post(*a, **kw):
+        raise OSError("nope")
+    repo = _FakeRepo({"ntfy_enabled": "1", "ntfy_topic": "tx"})
+    svc = NtfyPushService(SettingsService(repo), http_post=fake_post)
+    assert svc.send_test() is False
