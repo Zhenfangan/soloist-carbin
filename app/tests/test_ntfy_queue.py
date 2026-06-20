@@ -83,6 +83,7 @@ def test_load_persisted_non_list_treated_as_empty(tmp_path: Path) -> None:
     svc = _svc(tmp_path)
     svc._load_persisted_queue()
     assert svc.queue_size() == 0
+    assert json.loads(qp.read_text(encoding="utf-8")) == []
 
 
 import threading
