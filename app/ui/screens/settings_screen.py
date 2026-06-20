@@ -139,6 +139,15 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         )
         content.add_widget(group4)
 
+        # --- 5. 推送通知组 ---
+        ntfy_content = self._build_ntfy_group()
+        group5 = CollapsibleGroup(
+            title="推送通知",
+            content=ntfy_content,
+            collapsed=True,
+        )
+        content.add_widget(group5)
+
         scroll.add_widget(content)
         self.add_widget(scroll)
 
@@ -411,6 +420,134 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         box.add_widget(version_container)
 
         return box
+
+    # ------------------------------------------------------------------
+    # 推送通知组
+    # ------------------------------------------------------------------
+
+    def _build_ntfy_group(self) -> Widget:
+        box = self._make_vbox()
+
+        # --- 开关行 ---
+        switch_row = BoxLayout(
+            orientation="horizontal",
+            spacing=CARD_PADDING,
+            padding=[CARD_PADDING, 4],
+            size_hint=(1, None),
+            height=48,
+        )
+        switch_lbl = Label(
+            text="启用推送",
+            font_size=FONT_SIZE_BODY,
+            color=self._to_rgba(TEXT_BROWN),
+            size_hint=(1, 1),
+            halign="left",
+            valign="middle",
+            text_size=(None, None),
+        )
+        switch_row.add_widget(switch_lbl)
+
+        enabled_now = self._read("ntfy_enabled") == "1"
+        toggle_btn = PixelButton(
+            text="开" if enabled_now else "关",
+            size_mode="small",
+            size_hint=(None, 1),
+            width=80,
+            color=MINT_GREEN if enabled_now else COLORS["CARD_SHADOW"],
+        )
+
+        def _on_toggle(_btn: Any) -> None:
+            new_val = "0" if self._read("ntfy_enabled") == "1" else "1"
+            self._write("ntfy_enabled", new_val)
+            toggle_btn.text = "开" if new_val == "1" else "关"
+            toggle_btn.set_color(MINT_GREEN if new_val == "1" else COLORS["CARD_SHADOW"])
+
+        toggle_btn.bind(on_press=_on_toggle)
+        switch_row.add_widget(toggle_btn)
+        box.add_widget(switch_row)
+
+        # --- topic 输入 + 随机生成 ---
+        topic_row = BoxLayout(
+            orientation="horizontal",
+            spacing=CARD_PADDING,
+            padding=[CARD_PADDING, 4],
+            size_hint=(1, None),
+            height=48,
+        )
+        topic_lbl = Label(
+            text="主题(topic)",
+            font_size=FONT_SIZE_BODY,
+            color=self._to_rgba(TEXT_BROWN),
+            size_hint=(None, 1),
+            width=90,
+            halign="left",
+            valign="middle",
+            text_size=(90, None),
+        )
+        topic_row.add_widget(topic_lbl)
+
+        topic_input = PixelInput(
+            hint_text="andy-soloist-xxxxxxx",
+            value=self._read("ntfy_topic"),
+            password=False,
+            size_hint=(1, 1),
+        )
+        topic_input.bind(text=lambda _i, v: self._write("ntfy_topic", v))
+        topic_row.add_widget(topic_input)
+
+        rand_btn = PixelButton(
+            text="随机",
+            size_mode="small",
+            size_hint=(None, 1),
+            width=70,
+            color=SKY_BLUE,
+        )
+
+        def _on_random(_btn: Any) -> None:
+            import secrets
+            new_topic = f"andy-soloist-{secrets.token_urlsafe(8)}"
+            topic_input.text = new_topic
+            self._write("ntfy_topic", new_topic)
+
+        rand_btn.bind(on_press=_on_random)
+        topic_row.add_widget(rand_btn)
+        box.add_widget(topic_row)
+
+        # --- 服务器地址（可选）---
+        server_row = self._build_text_input_row(
+            label="服务器",
+            key="ntfy_server",
+            hint="https://ntfy.sh",
+            password=False,
+        )
+        box.add_widget(server_row)
+
+        # --- 测试推送按钮 ---
+        box.add_widget(Widget(size_hint=(1, None), height=GRID_UNIT))
+        test_btn = PixelButton(
+            text="测试推送",
+            color=WARM_ORANGE,
+            size_mode="normal",
+            size_hint=(1, None),
+        )
+        test_btn.bind(on_press=lambda _: self._on_ntfy_test())
+        box.add_widget(test_btn)
+
+        return box
+
+    def _on_ntfy_test(self) -> None:
+        from kivy.app import App
+        app = App.get_running_app()
+        svc = getattr(app, "_ntfy_svc", None) if app else None
+        if svc is None:
+            self.show_toast("推送服务未初始化")
+            return
+        try:
+            ok = svc.send_test()
+        except Exception as e:
+            Logger.error(f"SettingsScreen: ntfy 测试推送失败 {e}")
+            ok = False
+        self.show_toast("测试推送已发出，请到 ntfy 客户端查看" if ok else "测试推送失败：请检查 topic / 网络")
 
     def _build_text_input_row(self, label: str, key: str, hint: str = "", password: bool = False) -> Widget:
         """构建带标签的 PixelInput 行。"""
