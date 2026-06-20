@@ -83,3 +83,108 @@ def test_load_persisted_non_list_treated_as_empty(tmp_path: Path) -> None:
     svc = _svc(tmp_path)
     svc._load_persisted_queue()
     assert svc.queue_size() == 0
+
+
+import threading
+from app.services.event_bus import EventBus, EventType, set_event_bus
+
+
+class _FakeResp:
+    def __init__(self, status_code: int) -> None:
+        self.status_code = status_code
+
+
+def test_consume_success_does_not_persist(tmp_path: Path) -> None:
+    set_event_bus(EventBus())
+    calls: list[tuple[str, bytes]] = []
+    def fake_post(url: str, data: bytes = b"", timeout: float = 0) -> _FakeResp:
+        calls.append((url, data))
+        return _FakeResp(200)
+
+    repo = _FakeRepo({
+        "ntfy_enabled": "1",
+        "ntfy_topic": "t1",
+        "ntfy_server": "https://ntfy.sh",
+    })
+    svc = NtfyPushService(
+        SettingsService(repo),
+        queue_path=tmp_path / "push_queue.json",
+        http_post=fake_post,
+    )
+    svc.start()
+    svc._memory_queue.put("hello")
+
+    # 等线程处理
+    for _ in range(20):
+        if calls:
+            break
+        threading.Event().wait(0.05)
+
+    svc.stop()
+    assert len(calls) == 1
+    assert calls[0][0] == "https://ntfy.sh/t1"
+    assert calls[0][1] == "hello".encode("utf-8")
+    # 没失败 → 不该持久化
+    qp = tmp_path / "push_queue.json"
+    assert (not qp.exists()) or json.loads(qp.read_text(encoding="utf-8")) == []
+
+
+def test_consume_failure_persists(tmp_path: Path) -> None:
+    set_event_bus(EventBus())
+    def fake_post(url: str, data: bytes = b"", timeout: float = 0) -> _FakeResp:
+        raise OSError("network down")
+
+    repo = _FakeRepo({
+        "ntfy_enabled": "1",
+        "ntfy_topic": "t1",
+        "ntfy_server": "https://ntfy.sh",
+    })
+    svc = NtfyPushService(
+        SettingsService(repo),
+        queue_path=tmp_path / "push_queue.json",
+        http_post=fake_post,
+        sleep=lambda s: None,  # 屏蔽 backoff sleep
+    )
+    svc.start()
+    svc._memory_queue.put("hello")
+
+    for _ in range(20):
+        if (tmp_path / "push_queue.json").exists():
+            data = json.loads((tmp_path / "push_queue.json").read_text(encoding="utf-8"))
+            if data:
+                break
+        threading.Event().wait(0.05)
+
+    svc.stop()
+    data = json.loads((tmp_path / "push_queue.json").read_text(encoding="utf-8"))
+    assert "hello" in data
+
+
+def test_start_loads_persisted_then_consumes(tmp_path: Path) -> None:
+    """启动时读 JSON → 入内存 → daemon 消费 → 调用 HTTP。"""
+    set_event_bus(EventBus())
+    (tmp_path / "push_queue.json").write_text(
+        json.dumps(["restart_msg"]), encoding="utf-8"
+    )
+    calls: list[bytes] = []
+    def fake_post(url: str, data: bytes = b"", timeout: float = 0) -> _FakeResp:
+        calls.append(data)
+        return _FakeResp(200)
+
+    repo = _FakeRepo({
+        "ntfy_enabled": "1",
+        "ntfy_topic": "t1",
+        "ntfy_server": "https://ntfy.sh",
+    })
+    svc = NtfyPushService(
+        SettingsService(repo),
+        queue_path=tmp_path / "push_queue.json",
+        http_post=fake_post,
+    )
+    svc.start()
+    for _ in range(20):
+        if calls:
+            break
+        threading.Event().wait(0.05)
+    svc.stop()
+    assert calls == ["restart_msg".encode("utf-8")]
