@@ -79,10 +79,8 @@ class SoloistApp(App):  # type: ignore[misc]
         # 诊断脚手架 (Wave 2 Phase 1) — 必须在任何 widget 实例化之前
         _setup_debug_hooks()
 
-        # 初始化时钟 (虚拟时间: 周日 08:00 用于调试)
-        from app.utils.clock import SimulatedClock
-        from datetime import datetime
-        set_clock(SimulatedClock(datetime(2026, 6, 14, 8, 0, 0)))
+        # 使用系统真实时间
+        set_clock(SystemClock())
 
         # 初始化数据库
         init_db(self.DB_PATH)
