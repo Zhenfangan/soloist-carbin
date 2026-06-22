@@ -53,7 +53,8 @@ class NtfyPushService:
         self._settings = settings_service
         self._monotonic = monotonic or time.monotonic
         self._queue_path = queue_path or Path("user_data/push_queue.json")
-        self._http_post = http_post or requests.post
+        self._session: requests.Session | None = requests.Session() if http_post is None else None
+        self._http_post = http_post or self._session.post  # type: ignore[union-attr]
         self._sleep = sleep or time.sleep
         self._memory_queue: "queue.Queue[str]" = queue.Queue()
         self._recent: dict[str, float] = {}
@@ -93,6 +94,9 @@ class NtfyPushService:
                 break
         if remaining:
             self._append_persisted(remaining)
+        if self._session is not None:
+            self._session.close()
+            self._session = None
 
     # ── 消费 ─────────────────────────────
 
