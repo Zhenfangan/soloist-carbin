@@ -1,10 +1,10 @@
-"""打卡成功反馈面板 — 覆盖在目标 PeriodCard 之上的浮层。
+"""打卡成功反馈面板 — 卡片头部下方的内嵌反馈。
 
-每次签到 / 签退成功后，在触发的 PeriodCard 当前可视区域内显示反馈，
-4.5 秒后自动消失。PeriodCard 本身的大小、位置不会改变；面板只是
-通过 Window.add_widget 加在 Window 顶层、pos/size 跟随 PeriodCard 同步。
+每次签到 / 签退成功后，覆盖在触发的 PeriodCard 头部以下的内容区，
+4.5 秒后自动消失。卡片头部（period 名 + 时间范围）始终保留可见，
+卡片本身的高度、位置不变。
 
-布局（限制在卡片内部）：
+布局（卡片白底）：
 - 左 30%：IP 序列动画（rabbit 日常 / bear 夜间）
 - 右 70%：
   - 上半：大字 "签到成功！⭐" / "签退成功！⭐"（上下弹跳）
@@ -27,16 +27,28 @@ from kivy.uix.label import Label
 
 from app.services.report_service import ENCOURAGEMENTS
 from app.ui.assets.loader import SequenceLoader
-from app.ui.tokens import FONT_SIZE_BODY, FONT_SIZE_SMALL, FONT_SIZE_TITLE
+from app.ui.tokens import (
+    CARD_WHITE,
+    FONT_SIZE_BODY,
+    FONT_SIZE_TITLE,
+    TEXT_BROWN,
+    TEXT_GRAY,
+)
 
 DISPLAY_DURATION = 4.5
 IP_FRAME_INTERVAL = 0.25
 BOUNCE_HEIGHT = 8
 BOUNCE_HALF_DURATION = 0.2
+HEADER_HEIGHT = 48  # 与 PeriodCard._COLLAPSED_HEIGHT 一致
+
+
+def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
+    h = hex_color.lstrip("#")
+    return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0, alpha)
 
 
 class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
-    """打卡 / 签退成功后的卡片内反馈浮层"""
+    """卡片内嵌的打卡 / 签退成功反馈浮层"""
 
     def __init__(
         self,
@@ -57,12 +69,12 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         self._bounce_anim: Animation | None = None
         self._dismissed = False
 
-        # 同步初始位置/大小到目标卡片
+        # 初次同步位置/大小
         self._sync_to_card()
 
-        # 半透明背景（绑定到 FloatLayout 自身）
+        # 卡片白底（覆盖原内容区的签到按钮 / 请假标签）
         with self.canvas.before:
-            Color(0, 0, 0, 0.65)
+            Color(*_hex_to_rgba(CARD_WHITE))
             self._bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._redraw_bg, size=self._redraw_bg)
 
@@ -74,8 +86,8 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
             self._frames = []
         self._frame_idx = 0
         self._ip_image = Image(
-            size_hint=(0.3, 0.85),
-            pos_hint={"x": 0.02, "center_y": 0.5},
+            size_hint=(0.28, 0.85),
+            pos_hint={"x": 0.03, "center_y": 0.5},
             allow_stretch=True,
             keep_ratio=True,
         )
@@ -83,15 +95,15 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
             self._ip_image.texture = self._frames[0].texture
         self.add_widget(self._ip_image)
 
-        # 右 70% 上半：大字标题（适配卡片高度 ~180px，字号取 TITLE 即可）
+        # 右 70% 上半：大字标题（卡片内容区高度约 132px）
         title_text = "签到成功！⭐" if is_checkin else "签退成功！⭐"
         self._title_lbl = Label(
             text=title_text,
-            font_size=FONT_SIZE_TITLE,
-            color=(1, 1, 1, 1),
+            font_size=int(FONT_SIZE_TITLE * 1.5),
+            color=_hex_to_rgba(TEXT_BROWN),
             bold=True,
-            size_hint=(0.66, 0.4),
-            pos_hint={"x": 0.32, "center_y": 0.65},
+            size_hint=(0.66, 0.45),
+            pos_hint={"x": 0.32, "center_y": 0.68},
             halign="center",
             valign="middle",
         )
@@ -102,28 +114,31 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         message = self._pick_encouragement()
         self._msg_lbl = Label(
             text=message,
-            font_size=FONT_SIZE_SMALL,
-            color=(1, 1, 1, 0.92),
+            font_size=FONT_SIZE_BODY,
+            color=_hex_to_rgba(TEXT_GRAY),
             size_hint=(0.66, 0.35),
-            pos_hint={"x": 0.32, "center_y": 0.28},
+            pos_hint={"x": 0.32, "center_y": 0.25},
             halign="center",
             valign="middle",
         )
         self._msg_lbl.bind(size=lambda i, _: setattr(i, "text_size", i.size))
         self.add_widget(self._msg_lbl)
 
-        # 跟随目标卡片位置/大小变化（滚动、布局重排时同步）
+        # 同步：卡片位置/大小变化时跟随
         target_card.bind(pos=self._on_card_changed, size=self._on_card_changed)
 
     # --------------------------------------------------------------
-    # 位置/大小同步
+    # 位置/大小同步（仅覆盖 header 以下的内容区）
     # --------------------------------------------------------------
 
     def _sync_to_card(self) -> None:
         card = self._target_card
-        # 卡片的 window 坐标（脱离 ScrollView / Screen 嵌套）
+        # 卡片底部在 window 坐标系中的位置（脱离 ScrollView / Screen 嵌套）
         wx, wy = card.to_window(card.x, card.y)
-        self.size = (card.width, card.height)
+        # 覆盖 card 全宽，高度 = card.height - 头部高度
+        new_h = max(0, card.height - HEADER_HEIGHT)
+        self.size = (card.width, new_h)
+        # y = card.y（底部对齐卡片底部），顶部停在 header 下沿
         self.pos = (wx, wy)
 
     def _on_card_changed(self, *_args: Any) -> None:
@@ -154,9 +169,7 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
     # --------------------------------------------------------------
 
     def open(self) -> None:
-        """挂到 Window 顶层 + 启动动画 + 定时关闭"""
         Window.add_widget(self)
-        # 延一帧启动跳动，确保 FloatLayout 已为 title 计算 y
         Clock.schedule_once(self._start_title_bounce, 0.05)
         Clock.schedule_once(self._auto_dismiss, DISPLAY_DURATION)
         if self._frames and len(self._frames) > 1:
@@ -190,12 +203,10 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         if self._bounce_anim:
             self._bounce_anim.cancel(self._title_lbl)
             self._bounce_anim = None
-        # 解绑目标卡片，避免引用泄漏
         try:
             self._target_card.unbind(pos=self._on_card_changed, size=self._on_card_changed)
         except Exception:
             pass
-        # 从 Window 移除
         if self.parent is Window:
             Window.remove_widget(self)
         if self._on_dismiss_callback:
