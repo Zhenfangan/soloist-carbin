@@ -97,12 +97,10 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         self.add_widget(self._ip_image)
 
         # 右 70% 上半：大字标题（卡片内容区高度约 132px）
-        # 用 markup 把 emoji 段强制切到系统 emoji 字体（QiuYeYuanTi 不带 emoji 字形）
-        action_word = "签到成功！" if is_checkin else "签退成功！"
-        title_text = f"{action_word}[font=Segoe UI Emoji]⭐[/font]"
+        # 使用 unicode ★（U+2605），秋叶圆体原生支持；避免 markup font 标签引起字体文件加载失败
+        title_text = "签到成功！★" if is_checkin else "签退成功！★"
         self._title_lbl = Label(
             text=title_text,
-            markup=True,
             font_size=int(FONT_SIZE_TITLE * 1.5),
             color=_hex_to_rgba(PRIMARY_YELLOW),
             outline_color=_hex_to_rgba(TEXT_BROWN),
