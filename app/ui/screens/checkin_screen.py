@@ -454,13 +454,15 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
             self._morning_checked_in = True
 
-            panel = CheckinSuccessPanel(
-                is_checkin=True,
-                is_night=period in ("evening", "night"),
-                settings_service=self._settings_service,
-                on_dismiss_callback=lambda p=period: self._after_checkin_animation(p),
-            )
-            panel.open()
+            if card:
+                panel = CheckinSuccessPanel(
+                    target_card=card,
+                    is_checkin=True,
+                    is_night=period in ("evening", "night"),
+                    settings_service=self._settings_service,
+                    on_dismiss_callback=lambda p=period: self._after_checkin_animation(p),
+                )
+                panel.open()
 
             self._refresh_status()
         except Exception as e:
@@ -536,6 +538,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
             if card:
                 panel = CheckinSuccessPanel(
+                    target_card=card,
                     is_checkin=False,
                     is_night=period in ("evening", "night"),
                     settings_service=self._settings_service,

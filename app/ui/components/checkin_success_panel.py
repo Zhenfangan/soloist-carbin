@@ -1,7 +1,10 @@
-"""打卡成功反馈面板 — 全屏浮层。
+"""打卡成功反馈面板 — 覆盖在目标 PeriodCard 之上的浮层。
 
-每次签到 / 签退成功后弹出，4.5 秒后自动关闭。
-布局：
+每次签到 / 签退成功后，在触发的 PeriodCard 当前可视区域内显示反馈，
+4.5 秒后自动消失。PeriodCard 本身的大小、位置不会改变；面板只是
+通过 Window.add_widget 加在 Window 顶层、pos/size 跟随 PeriodCard 同步。
+
+布局（限制在卡片内部）：
 - 左 30%：IP 序列动画（rabbit 日常 / bear 夜间）
 - 右 70%：
   - 上半：大字 "签到成功！⭐" / "签退成功！⭐"（上下弹跳）
@@ -16,54 +19,52 @@ from typing import Any
 
 from kivy.animation import Animation
 from kivy.clock import Clock
+from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
-from kivy.uix.modalview import ModalView
 
 from app.services.report_service import ENCOURAGEMENTS
 from app.ui.assets.loader import SequenceLoader
-from app.ui.tokens import FONT_SIZE_BODY, FONT_SIZE_TITLE
+from app.ui.tokens import FONT_SIZE_BODY, FONT_SIZE_SMALL, FONT_SIZE_TITLE
 
 DISPLAY_DURATION = 4.5
 IP_FRAME_INTERVAL = 0.25
-BOUNCE_HEIGHT = 12
+BOUNCE_HEIGHT = 8
 BOUNCE_HALF_DURATION = 0.2
 
 
-class CheckinSuccessPanel(ModalView):  # type: ignore[misc]
-    """打卡 / 签退成功后的全屏反馈面板"""
+class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
+    """打卡 / 签退成功后的卡片内反馈浮层"""
 
     def __init__(
         self,
+        target_card: Any,
         is_checkin: bool = True,
         is_night: bool = False,
         settings_service: Any = None,
         on_dismiss_callback: Callable[[], Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(
-            size_hint=(1, 1),
-            background="",
-            background_color=(0, 0, 0, 0),
-            auto_dismiss=False,
-            **kwargs,
-        )
+        super().__init__(size_hint=(None, None), **kwargs)
+        self._target_card = target_card
         self._is_checkin = is_checkin
         self._is_night = is_night
         self._settings_service = settings_service
         self._on_dismiss_callback = on_dismiss_callback
         self._frame_event: Any = None
         self._bounce_anim: Animation | None = None
+        self._dismissed = False
 
-        # 半透明黑色遮罩
+        # 同步初始位置/大小到目标卡片
+        self._sync_to_card()
+
+        # 半透明背景（绑定到 FloatLayout 自身）
         with self.canvas.before:
-            Color(0, 0, 0, 0.7)
+            Color(0, 0, 0, 0.65)
             self._bg_rect = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._redraw_bg, size=self._redraw_bg)
-
-        root = FloatLayout()
 
         # 左 30%：IP 动画
         anim_id = "bear" if is_night else "rabbit"
@@ -73,49 +74,70 @@ class CheckinSuccessPanel(ModalView):  # type: ignore[misc]
             self._frames = []
         self._frame_idx = 0
         self._ip_image = Image(
-            size_hint=(0.3, 0.6),
-            pos_hint={"x": 0.0, "center_y": 0.5},
+            size_hint=(0.3, 0.85),
+            pos_hint={"x": 0.02, "center_y": 0.5},
             allow_stretch=True,
             keep_ratio=True,
         )
         if self._frames:
             self._ip_image.texture = self._frames[0].texture
-        root.add_widget(self._ip_image)
+        self.add_widget(self._ip_image)
 
-        # 右 70% 上半：大字标题
+        # 右 70% 上半：大字标题（适配卡片高度 ~180px，字号取 TITLE 即可）
         title_text = "签到成功！⭐" if is_checkin else "签退成功！⭐"
         self._title_lbl = Label(
             text=title_text,
-            font_size=int(FONT_SIZE_TITLE * 1.6),
+            font_size=FONT_SIZE_TITLE,
             color=(1, 1, 1, 1),
             bold=True,
-            size_hint=(0.65, 0.25),
-            pos_hint={"x": 0.32, "center_y": 0.6},
+            size_hint=(0.66, 0.4),
+            pos_hint={"x": 0.32, "center_y": 0.65},
             halign="center",
             valign="middle",
         )
         self._title_lbl.bind(size=lambda i, _: setattr(i, "text_size", i.size))
-        root.add_widget(self._title_lbl)
+        self.add_widget(self._title_lbl)
 
         # 右 70% 下半：激励语
         message = self._pick_encouragement()
-        msg_lbl = Label(
+        self._msg_lbl = Label(
             text=message,
-            font_size=FONT_SIZE_BODY,
-            color=(1, 1, 1, 0.9),
-            size_hint=(0.65, 0.22),
-            pos_hint={"x": 0.32, "center_y": 0.38},
+            font_size=FONT_SIZE_SMALL,
+            color=(1, 1, 1, 0.92),
+            size_hint=(0.66, 0.35),
+            pos_hint={"x": 0.32, "center_y": 0.28},
             halign="center",
             valign="middle",
         )
-        msg_lbl.bind(size=lambda i, _: setattr(i, "text_size", i.size))
-        root.add_widget(msg_lbl)
+        self._msg_lbl.bind(size=lambda i, _: setattr(i, "text_size", i.size))
+        self.add_widget(self._msg_lbl)
 
-        self.add_widget(root)
+        # 跟随目标卡片位置/大小变化（滚动、布局重排时同步）
+        target_card.bind(pos=self._on_card_changed, size=self._on_card_changed)
+
+    # --------------------------------------------------------------
+    # 位置/大小同步
+    # --------------------------------------------------------------
+
+    def _sync_to_card(self) -> None:
+        card = self._target_card
+        # 卡片的 window 坐标（脱离 ScrollView / Screen 嵌套）
+        wx, wy = card.to_window(card.x, card.y)
+        self.size = (card.width, card.height)
+        self.pos = (wx, wy)
+
+    def _on_card_changed(self, *_args: Any) -> None:
+        if self._dismissed:
+            return
+        self._sync_to_card()
 
     def _redraw_bg(self, *_args: Any) -> None:
         self._bg_rect.pos = self.pos
         self._bg_rect.size = self.size
+
+    # --------------------------------------------------------------
+    # 内容
+    # --------------------------------------------------------------
 
     def _pick_encouragement(self) -> str:
         user_items: list[str] = []
@@ -127,8 +149,14 @@ class CheckinSuccessPanel(ModalView):  # type: ignore[misc]
         pool = user_items if user_items else ENCOURAGEMENTS
         return random.choice(pool)
 
-    def on_open(self) -> None:  # type: ignore[override]
-        # 延迟一帧启动跳动，确保 FloatLayout 已为 title 计算 y
+    # --------------------------------------------------------------
+    # 生命周期
+    # --------------------------------------------------------------
+
+    def open(self) -> None:
+        """挂到 Window 顶层 + 启动动画 + 定时关闭"""
+        Window.add_widget(self)
+        # 延一帧启动跳动，确保 FloatLayout 已为 title 计算 y
         Clock.schedule_once(self._start_title_bounce, 0.05)
         Clock.schedule_once(self._auto_dismiss, DISPLAY_DURATION)
         if self._frames and len(self._frames) > 1:
@@ -153,13 +181,23 @@ class CheckinSuccessPanel(ModalView):  # type: ignore[misc]
         self._bounce_anim = anim
 
     def _auto_dismiss(self, dt: float) -> None:
+        if self._dismissed:
+            return
+        self._dismissed = True
         if self._frame_event:
             self._frame_event.cancel()
             self._frame_event = None
         if self._bounce_anim:
             self._bounce_anim.cancel(self._title_lbl)
             self._bounce_anim = None
-        self.dismiss()
+        # 解绑目标卡片，避免引用泄漏
+        try:
+            self._target_card.unbind(pos=self._on_card_changed, size=self._on_card_changed)
+        except Exception:
+            pass
+        # 从 Window 移除
+        if self.parent is Window:
+            Window.remove_widget(self)
         if self._on_dismiss_callback:
             try:
                 self._on_dismiss_callback()
