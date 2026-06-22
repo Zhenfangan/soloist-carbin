@@ -208,6 +208,8 @@ class CheckinService:
                 continue
             if record and record.checkin_time:
                 continue
+            if record and record.status in (STATUS_ABSENT_MORNING, STATUS_ABSENT_AFTERNOON):
+                continue
 
             absent_status = (
                 STATUS_ABSENT_MORNING if period == "morning" else STATUS_ABSENT_AFTERNOON
