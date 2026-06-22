@@ -568,14 +568,29 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             self._periods_data = getattr(day_status, "periods", [])
             self._status_box.update_status(day_status)
             # 同步刷新所有 PeriodCard，确保签到/签退后卡片状态正确 (B10+B11)
+            from app.utils.clock import get_clock
+            current_time = get_clock().current_time_str()
+            start_times = {
+                "morning": (
+                    self._settings_service.get("morning_start")
+                    if self._settings_service else "09:00"
+                ),
+                "afternoon": (
+                    self._settings_service.get("afternoon_start")
+                    if self._settings_service else "14:00"
+                ),
+            }
             for ps in self._periods_data:
                 card = self._period_cards.get(ps.period)
                 if card:
                     card.set_status_from_period(ps)
-                    # 未做任何动作（pending）的工作时段才允许请假；
-                    # evening 是加班时段，不参与请假
+                    # 请假允许条件：pending + morning/afternoon + 当前时间早于签到时间
+                    start_time = start_times.get(ps.period, "")
                     card.leave_enabled = (
-                        ps.status == "pending" and ps.period in ("morning", "afternoon")
+                        ps.status == "pending"
+                        and ps.period in ("morning", "afternoon")
+                        and bool(start_time)
+                        and current_time < start_time
                     )
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")

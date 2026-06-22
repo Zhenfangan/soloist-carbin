@@ -156,14 +156,17 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         )
         self._content_area.add_widget(self._mascot_row)
 
-        self._leave_label = Label(
-            text="请假", font_size=FONT_SIZE_SMALL,
-            color=self._to_rgba(TEXT_GRAY),
-            size_hint=(1, None), height=24,
-            halign="center", valign="middle",
+        # 请假按钮 — 仅 morning/afternoon 时段显示，evening 是加班时段不参与
+        self._can_leave = period_name in ("morning", "afternoon")
+        self._leave_btn = PixelButton(
+            text="请假",
+            color=COLORS["CARD_SHADOW"],
+            size_mode="small",
+            size_hint=(1, None),
+            disabled=True,
         )
-        self._leave_label.bind(on_touch_down=self._on_leave_touch)
-        self._content_area.add_widget(self._leave_label)
+        self._leave_btn.bind(on_press=lambda _b: self._on_leave_press())
+        self._content_area.add_widget(self._leave_btn)
 
         self.add_widget(self._content_area)
 
@@ -379,12 +382,18 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         else:
             self._check_label.opacity = 0
 
-        # 请假入口
-        if self._card_state == "expanded":
-            self._leave_label.color = self._to_rgba(TEXT_BROWN if self._leave_enabled else TEXT_GRAY)
-            self._leave_label.opacity = 1.0
+        # 请假按钮 — 仅 expanded + morning/afternoon 时段显示
+        if self._card_state == "expanded" and self._can_leave:
+            self._leave_btn.opacity = 1.0
+            if self._leave_enabled:
+                self._leave_btn.disabled = False
+                self._leave_btn.set_color(DOPAMINE_COLORS["sky"]["light"])
+            else:
+                self._leave_btn.disabled = True
+                self._leave_btn.set_color(COLORS["CARD_SHADOW"])
         else:
-            self._leave_label.opacity = 0
+            self._leave_btn.opacity = 0
+            self._leave_btn.disabled = True
 
     def _get_status_text(self) -> str:
         status_map = {
@@ -403,14 +412,11 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             if self._on_checkin_cb:
                 self._on_checkin_cb(self._period_name)
 
-    def _on_leave_touch(self, instance: Any, touch: Any) -> bool:
+    def _on_leave_press(self) -> None:
         if not self._leave_enabled:
-            return False
-        if self._leave_label.collide_point(*touch.pos):
-            if self._on_leave_cb:
-                self._on_leave_cb(self._period_name)
-            return True
-        return False
+            return
+        if self._on_leave_cb:
+            self._on_leave_cb(self._period_name)
 
     def set_status_from_period(self, period_status: Any) -> None:
         if period_status is None:
