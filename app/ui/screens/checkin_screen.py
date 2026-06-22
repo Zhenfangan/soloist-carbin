@@ -20,7 +20,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 
-from app.ui.animations.checkin_animation import checkin_success_sequence
+from app.ui.components.checkin_success_panel import CheckinSuccessPanel
 from app.ui.components.period_card import PeriodCard
 from app.ui.components.pixel_button import PixelButton
 from app.ui.components.promise_input import PromiseInput
@@ -63,6 +63,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         shooting_service: Any = None,
         bet_service: Any = None,
         camera_service: Any = None,
+        settings_service: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -77,6 +78,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         self._shooting_service = shooting_service
         self._bet_service = bet_service
         self._camera_service = camera_service
+        self._settings_service = settings_service
 
         # 状态
         self._date_str = ""
@@ -452,15 +454,13 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
             self._morning_checked_in = True
 
-            if card:
-                checkin_success_sequence(
-                    container=card,
-                    animating_widget=card._action_btn,
-                    on_mascot_show=lambda: None,
-                    on_mascot_hide=lambda: self._after_checkin_animation(period),
-                    on_complete=lambda: None,
-                    is_night=period in ("evening", "night"),
-                )
+            panel = CheckinSuccessPanel(
+                is_checkin=True,
+                is_night=period in ("evening", "night"),
+                settings_service=self._settings_service,
+                on_dismiss_callback=lambda p=period: self._after_checkin_animation(p),
+            )
+            panel.open()
 
             self._refresh_status()
         except Exception as e:
@@ -534,15 +534,14 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                         next_card.card_state = "expanded"
                         next_card.is_current = True
 
-            if card and hasattr(card, "_action_btn"):
-                checkin_success_sequence(
-                    container=card,
-                    animating_widget=card._action_btn,
-                    on_mascot_show=lambda: None,
-                    on_mascot_hide=lambda: None,
-                    on_complete=_after_checkout_anim,
+            if card:
+                panel = CheckinSuccessPanel(
+                    is_checkin=False,
                     is_night=period in ("evening", "night"),
+                    settings_service=self._settings_service,
+                    on_dismiss_callback=_after_checkout_anim,
                 )
+                panel.open()
             else:
                 _after_checkout_anim()
         except Exception as e:

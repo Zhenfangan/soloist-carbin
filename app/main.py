@@ -173,6 +173,7 @@ class SoloistApp(App):  # type: ignore[misc]
                 bet_service=bet_svc,
                 motivation_service=self._motivation_svc,
                 camera_service=self._camera_svc,
+                settings_service=settings_svc,
             ),
             "history": HistoryScreen(history_service=history_svc, report_service=self._report_svc),
             "bet": BetScreen(bet_service=bet_svc),
