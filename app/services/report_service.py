@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import random
 
 from jinja2 import Template
@@ -246,10 +247,25 @@ class ReportService:
         if date:
             self.generate_and_save(date)
 
+    def _read_user_encouragements(self) -> list[str]:
+        """从 settings_repo 直接读 encouragements_user 并 JSON 解析；失败兜底为空"""
+        if not self._settings_repo:
+            return []
+        raw = self._settings_repo.get("encouragements_user")
+        if not raw:
+            return []
+        try:
+            items = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(items, list):
+            return []
+        return [s for s in items if isinstance(s, str) and s.strip()]
+
     def _pick_encouragement(self, date: str) -> str:  # noqa: ARG002
-        # 扩展点：未来从用户自定义语录库（encouragement_repo）随机抽取，
-        # 合并 ENCOURAGEMENTS 作兜底；此处签名保持稳定。
-        return random.choice(ENCOURAGEMENTS)
+        user_items = self._read_user_encouragements()
+        pool = user_items if user_items else ENCOURAGEMENTS
+        return random.choice(pool)
 
     @staticmethod
     def _time_to_minutes(time_str: str) -> int:

@@ -88,3 +88,33 @@ class TestReportService:
         data = svc.collect_data("2026-06-01")
         html = svc.generate_html(data)
         assert data.encouragement in html
+
+    def test_pick_encouragement_uses_user_list_when_present(self, temp_db: str) -> None:
+        from app.repositories.settings_repo import SettingsRepo
+
+        settings_repo = SettingsRepo(temp_db)
+        settings_repo.set("encouragements_user", '["only one"]')
+        svc = ReportService(
+            CheckinRepo(temp_db),
+            LedgerRepo(temp_db),
+            ShootingRepo(temp_db),
+            settings_repo,
+        )
+        for _ in range(100):
+            assert svc._pick_encouragement("2026-06-01") == "only one"
+
+    def test_pick_encouragement_falls_back_to_builtin_when_user_empty(
+        self, temp_db: str
+    ) -> None:
+        from app.repositories.settings_repo import SettingsRepo
+        from app.services.report_service import ENCOURAGEMENTS
+
+        svc = ReportService(
+            CheckinRepo(temp_db),
+            LedgerRepo(temp_db),
+            ShootingRepo(temp_db),
+            SettingsRepo(temp_db),
+        )
+        results = {svc._pick_encouragement("2026-06-01") for _ in range(100)}
+        assert results.issubset(set(ENCOURAGEMENTS))
+        assert len(results) >= 1
