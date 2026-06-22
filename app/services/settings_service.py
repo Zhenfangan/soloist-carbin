@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+
+from kivy.logger import Logger
+
 from app.repositories.settings_repo import SettingsRepo
 from app.services.event_bus import EventType, get_event_bus
 
@@ -29,6 +33,7 @@ class SettingsService:
         "ntfy_enabled": "0",
         "ntfy_topic": "",
         "ntfy_server": "https://ntfy.sh",
+        "encouragements_user": "[]",
     }
 
     def __init__(self, settings_repo: SettingsRepo) -> None:
@@ -76,3 +81,24 @@ class SettingsService:
     def is_work_day(self, weekday: int) -> bool:
         """判断指定星期几是否为工作日 (1=周一, 7=周日)"""
         return weekday in self.get_work_days()
+
+    def get_user_encouragements(self) -> list[str]:
+        """读取用户自定义激励语录，JSON 解析失败或类型异常时返回空列表"""
+        raw = self.get("encouragements_user")
+        if not raw:
+            return []
+        try:
+            items = json.loads(raw)
+        except json.JSONDecodeError:
+            Logger.warning(
+                "SettingsService: encouragements_user JSON decode failed: %r", raw
+            )
+            return []
+        if not isinstance(items, list):
+            return []
+        return [s for s in items if isinstance(s, str) and s.strip()]
+
+    def set_user_encouragements(self, items: list[str]) -> None:
+        """写入用户自定义激励语录，自动 JSON 编码并发布 SETTINGS_CHANGED 事件"""
+        encoded = json.dumps(items, ensure_ascii=False)
+        self.set("encouragements_user", encoded)

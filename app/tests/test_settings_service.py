@@ -71,3 +71,27 @@ class TestSettingsService:
         assert d["ntfy_enabled"] == "0"
         assert d["ntfy_topic"] == ""
         assert d["ntfy_server"] == "https://ntfy.sh"
+
+    def test_user_encouragements_default_empty(self, svc: SettingsService) -> None:
+        assert svc.get_user_encouragements() == []
+
+    def test_user_encouragements_set_and_get_roundtrip(self, svc: SettingsService) -> None:
+        svc.set_user_encouragements(["坚持就是胜利", "今天也要加油"])
+        assert svc.get_user_encouragements() == ["坚持就是胜利", "今天也要加油"]
+
+    def test_user_encouragements_handles_corrupted_json(
+        self, svc: SettingsService, temp_db: str
+    ) -> None:
+        SettingsRepo(temp_db).set("encouragements_user", "not json {{")
+        assert svc.get_user_encouragements() == []
+
+    def test_user_encouragements_set_publishes_event(self, svc: SettingsService) -> None:
+        events: list[dict[str, Any]] = []
+
+        def handler(et: EventType, payload: dict[str, Any]) -> None:
+            events.append(payload)
+
+        get_event_bus().subscribe(EventType.SETTINGS_CHANGED, handler)
+        svc.set_user_encouragements(["新语录"])
+        assert len(events) == 1
+        assert events[0]["key"] == "encouragements_user"
