@@ -148,6 +148,15 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         )
         content.add_widget(group5)
 
+        # --- 6. 个性化激励语句组 ---
+        enc_content = self._build_encouragement_group()
+        group6 = CollapsibleGroup(
+            title="个性化激励语句",
+            content=enc_content,
+            collapsed=True,
+        )
+        content.add_widget(group6)
+
         scroll.add_widget(content)
         self.add_widget(scroll)
 
@@ -548,6 +557,150 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             Logger.error(f"SettingsScreen: ntfy 测试推送失败 {e}")
             ok = False
         self.show_toast("测试推送已发出，请到 ntfy 客户端查看" if ok else "测试推送失败：请检查 topic / 网络")
+
+    # ------------------------------------------------------------------
+    # 个性化激励语句组
+    # ------------------------------------------------------------------
+
+    def _build_encouragement_group(self) -> Widget:
+        box = self._make_vbox()
+
+        # 顶部输入行：输入框 + 添加按钮
+        input_row = BoxLayout(
+            orientation="horizontal",
+            spacing=CARD_PADDING,
+            padding=[CARD_PADDING, 4],
+            size_hint=(1, None),
+            height=48,
+        )
+        self._enc_input = PixelInput(
+            hint_text="添加一条激励语句…",
+            value="",
+            password=False,
+            size_hint=(1, 1),
+        )
+        input_row.add_widget(self._enc_input)
+
+        add_btn = PixelButton(
+            text="添加",
+            size_mode="small",
+            size_hint=(None, 1),
+            width=70,
+            color=MINT_GREEN,
+        )
+        add_btn.bind(on_press=lambda _b: self._on_encouragement_add())
+        input_row.add_widget(add_btn)
+
+        box.add_widget(input_row)
+
+        # 列表容器（每次刷新清空再重建）
+        self._enc_list_box = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, None),
+            spacing=2,
+        )
+        self._enc_list_box.bind(minimum_height=self._enc_list_box.setter("height"))
+        box.add_widget(self._enc_list_box)
+
+        self._refresh_encouragement_list()
+        return box
+
+    def _refresh_encouragement_list(self) -> None:
+        """重建列表 UI：先清空容器，再按当前数据重新生成行"""
+        self._enc_list_box.clear_widgets()
+
+        items: list[str] = []
+        if self._settings_service:
+            items = self._settings_service.get_user_encouragements()
+
+        if not items:
+            empty_lbl = Label(
+                text="尚未添加，战报将随机使用内置 5 句",
+                font_size=FONT_SIZE_SMALL,
+                color=self._to_rgba(TEXT_GRAY),
+                size_hint=(1, None),
+                height=40,
+                halign="center",
+                valign="middle",
+            )
+            empty_lbl.bind(size=lambda lbl, _: setattr(lbl, "text_size", lbl.size))
+            self._enc_list_box.add_widget(empty_lbl)
+            return
+
+        for idx, text in enumerate(items):
+            row = BoxLayout(
+                orientation="horizontal",
+                spacing=CARD_PADDING,
+                padding=[CARD_PADDING, 4],
+                size_hint=(1, None),
+                height=48,
+            )
+            lbl = Label(
+                text=text,
+                font_size=FONT_SIZE_BODY,
+                color=self._to_rgba(TEXT_BROWN),
+                size_hint=(1, 1),
+                halign="left",
+                valign="middle",
+            )
+            lbl.bind(size=lambda inst, _: setattr(inst, "text_size", (inst.width, None)))
+            row.add_widget(lbl)
+
+            del_btn = PixelButton(
+                text="X",
+                size_mode="small",
+                size_hint=(None, 1),
+                width=40,
+                color=COLORS["CARD_SHADOW"],
+            )
+            del_btn.bind(on_press=lambda _b, i=idx: self._on_encouragement_delete(i))
+            row.add_widget(del_btn)
+
+            self._enc_list_box.add_widget(row)
+
+    def _on_encouragement_add(self) -> None:
+        """添加按钮：取输入框文本，校验后入库并刷新列表"""
+        if not self._settings_service:
+            self.show_toast("设置服务未初始化")
+            return
+
+        text = self._enc_input.text.strip()
+        if not text:
+            self.show_toast("请输入内容")
+            return
+        if len(text) > 100:
+            self.show_toast("单条不能超过 100 字")
+            return
+
+        current = self._settings_service.get_user_encouragements()
+        if text in current:
+            self.show_toast("已存在相同语录")
+            return
+
+        try:
+            self._settings_service.set_user_encouragements(current + [text])
+        except Exception as e:  # noqa: BLE001
+            Logger.error(f"SettingsScreen: 添加激励语录失败 {e}")
+            self.show_toast("保存失败，请重试")
+            return
+
+        self._enc_input.text = ""
+        self._refresh_encouragement_list()
+
+    def _on_encouragement_delete(self, index: int) -> None:
+        """删除按钮：按索引移除一条并刷新列表"""
+        if not self._settings_service:
+            return
+        current = self._settings_service.get_user_encouragements()
+        if 0 <= index < len(current):
+            new_list = current[:index] + current[index + 1 :]
+            try:
+                self._settings_service.set_user_encouragements(new_list)
+            except Exception as e:  # noqa: BLE001
+                Logger.error(f"SettingsScreen: 删除激励语录失败 {e}")
+                self.show_toast("删除失败，请重试")
+                return
+            self._refresh_encouragement_list()
 
     def _build_text_input_row(self, label: str, key: str, hint: str = "", password: bool = False) -> Widget:
         """构建带标签的 PixelInput 行。"""

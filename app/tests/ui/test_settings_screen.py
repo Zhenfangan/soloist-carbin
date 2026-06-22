@@ -65,6 +65,23 @@ class MockSettingsService:
     def get_all(self) -> dict[str, str]:
         return dict(self.data)
 
+    def get_user_encouragements(self) -> list[str]:
+        import json
+        raw = self.data.get("encouragements_user", "")
+        if not raw:
+            return []
+        try:
+            items = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(items, list):
+            return []
+        return [s for s in items if isinstance(s, str) and s.strip()]
+
+    def set_user_encouragements(self, items: list[str]) -> None:
+        import json
+        self.set("encouragements_user", json.dumps(items, ensure_ascii=False))
+
 
 class MockSyncService:
     """模拟 SyncService，仅供测试。"""
