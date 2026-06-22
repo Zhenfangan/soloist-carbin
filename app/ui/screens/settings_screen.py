@@ -130,30 +130,30 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         )
         content.add_widget(group3)
 
-        # --- 4. 其他组 ---
-        other_content = self._build_other_group()
-        group4 = CollapsibleGroup(
-            title="其他",
-            content=other_content,
-            collapsed=False,
-        )
-        content.add_widget(group4)
-
-        # --- 5. 推送通知组 ---
+        # --- 4. 推送通知组 ---
         ntfy_content = self._build_ntfy_group()
-        group5 = CollapsibleGroup(
+        group4 = CollapsibleGroup(
             title="推送通知",
             content=ntfy_content,
             collapsed=True,
         )
-        content.add_widget(group5)
+        content.add_widget(group4)
 
-        # --- 6. 个性化激励语句组 ---
+        # --- 5. 个性化激励语句组 ---
         enc_content = self._build_encouragement_group()
-        group6 = CollapsibleGroup(
+        group5 = CollapsibleGroup(
             title="个性化激励语句",
             content=enc_content,
             collapsed=True,
+        )
+        content.add_widget(group5)
+
+        # --- 6. 其他组 ---
+        other_content = self._build_other_group()
+        group6 = CollapsibleGroup(
+            title="其他",
+            content=other_content,
+            collapsed=False,
         )
         content.add_widget(group6)
 
