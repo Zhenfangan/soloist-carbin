@@ -572,6 +572,11 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 card = self._period_cards.get(ps.period)
                 if card:
                     card.set_status_from_period(ps)
+                    # 未做任何动作（pending）的工作时段才允许请假；
+                    # evening 是加班时段，不参与请假
+                    card.leave_enabled = (
+                        ps.status == "pending" and ps.period in ("morning", "afternoon")
+                    )
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")
 
