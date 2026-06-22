@@ -86,7 +86,7 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         content = BoxLayout(
             orientation="vertical",
             size_hint_y=None,
-            padding=[0, GRID_UNIT, 0, GRID_UNIT],
+            padding=[0, GRID_UNIT, 0, GRASS_INSET + GRID_UNIT],
             spacing=GRID_UNIT,
         )
         content.bind(minimum_height=content.setter("height"))
