@@ -434,7 +434,6 @@ class TestSettingsScreen:
 
         target.collapse()
         assert target.collapsed  # 状态同步更新
-        assert target._arrow_label.text == "▶"  # 箭头同步更新
         # 注意: 内容区高度动画是异步的 (Clock.schedule_once)，
         # 此处验证 collapsed 状态和 UI 文字的立即可见变化
 

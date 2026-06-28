@@ -6,6 +6,7 @@ from app.models.history import (
     CalendarCell as CalendarCellModel,
 )
 from app.models.history import (
+    CycleSummary,
     DayCard as DayCardModel,
 )
 from app.models.history import (
@@ -34,6 +35,11 @@ class MockHistoryService:
         self.get_week_view_calls: list[str] = []
         self.get_month_view_calls: list[tuple[int, int]] = []
         self.get_year_view_calls: list[int] = []
+        self.get_cycle_history_calls: int = 0
+
+    def get_cycle_history(self, limit: int = 50) -> list:
+        self.get_cycle_history_calls += 1
+        return []  # 空周期列表
 
     def get_week_view(self, week_start: str) -> WeekViewData:
         self.get_week_view_calls.append(week_start)
@@ -312,7 +318,7 @@ class TestHistoryTabs:
         """创建三 Tab。"""
         tabs = HistoryTabs()
         assert len(tabs._tab_buttons) == 3
-        assert tabs._tab_buttons[0].text == "周"
+        assert tabs._tab_buttons[0].text == "周期"
         assert tabs._tab_buttons[1].text == "月"
         assert tabs._tab_buttons[2].text == "年"
 
@@ -361,46 +367,36 @@ class TestHistoryScreen:
         assert screen._service is service  # type: ignore[comparison-overlap]
         assert screen._tab_index == 0  # type: ignore[unreachable]
 
-    def test_default_tab_is_week(self) -> None:
-        """默认打开周视图。"""
+    def test_default_tab_is_cycle(self) -> None:
+        """默认打开周期视图。"""
         screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
         assert screen.tabs.active_tab == 0
-        assert screen._week_view.opacity == 1.0
-        assert screen._month_view.opacity == 0.0
-        assert screen._year_view.opacity == 0.0
+        assert screen._sm.current == "cycle"
 
     def test_tab_switch_to_month(self) -> None:
         """切换到月视图。"""
         screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
         screen._switch_tab(1)
         assert screen._tab_index == 1
-        assert screen._week_view.opacity == 0.0
-        assert screen._month_view.opacity == 1.0
-        assert screen._year_view.opacity == 0.0
+        assert screen._sm.current == "month"
 
     def test_tab_switch_to_year(self) -> None:
         """切换到年视图。"""
         screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
         screen._switch_tab(2)
         assert screen._tab_index == 2
-        assert screen._week_view.opacity == 0.0
-        assert screen._month_view.opacity == 0.0
-        assert screen._year_view.opacity == 1.0
+        assert screen._sm.current == "year"
 
-    def test_week_view_renders_day_cards(self) -> None:
-        """周视图渲染 DayCard 列表（container 包含 3 张 DayCard + 1 个 footer label）。"""
+    def test_cycle_view_shows_empty_state(self) -> None:
+        """周期视图无数据时显示空状态提示。"""
         screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
-        from app.ui.components.day_card import DayCard as DayCardWidget
-        day_cards = [c for c in screen._week_card_container.children if isinstance(c, DayCardWidget)]
-        assert len(day_cards) == 3
+        assert len(screen._cycle_container.children) >= 1  # 至少有空状态 label
 
-    def test_week_navigation_calls_service(self) -> None:
-        """周箭头切换调用服务。"""
+    def test_cycle_view_calls_service(self) -> None:
+        """周期视图加载时调用 get_cycle_history。"""
         service = MockHistoryService()
         screen = HistoryScreen(history_service=service)  # type: ignore[arg-type]
-        initial_calls = len(service.get_week_view_calls)
-        screen._navigate_week(1)
-        assert len(service.get_week_view_calls) == initial_calls + 1
+        assert service.get_cycle_history_calls >= 1
 
     def test_month_navigation_calls_service(self) -> None:
         """月箭头切换调用服务。"""
@@ -421,10 +417,10 @@ class TestHistoryScreen:
         screen._navigate_year(1)
         assert len(service.get_year_view_calls) == initial_calls + 1
 
-    def test_week_total_label(self) -> None:
-        """周视图底部合计显示。"""
+    def test_cycle_view_empty_label(self) -> None:
+        """周期视图无数据时显示提示文字。"""
         screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
-        assert "30.0" in screen._week_total_label.text or "+30" in screen._week_total_label.text
+        assert "暂无周期记录" in screen._cycle_empty_label.text
 
     def test_year_view_renders_month_cards(self) -> None:
         """年视图渲染 12 张 MonthCard。"""
@@ -499,18 +495,16 @@ class TestHistoryScreenIntegration:
         checkin_repo = CheckinRepo(temp_db)
         ledger_repo = LedgerRepo(temp_db)
         shooting_repo = ShootingRepo(temp_db)
-        history_service = HistoryService(checkin_repo, ledger_repo, shooting_repo)
+        from app.repositories.bet_repo import BetRepo
+        history_service = HistoryService(checkin_repo, ledger_repo, shooting_repo, BetRepo(temp_db))
 
         # 创建页面
         screen = HistoryScreen(history_service=history_service)
         assert screen._service is history_service
         assert screen._tab_index == 0
 
-        # 周视图应加载 DayCard 列表
-        assert len(screen._week_card_container.children) > 0
-
-        # 验证合计
-        assert "30" in screen._week_total_label.text or "+30" in screen._week_total_label.text
+        # 周期视图应正常加载（可能为空状态）
+        assert screen._cycle_container is not None
 
     def test_screen_switches_to_month_view(self, temp_db: str, clock: SimulatedClock) -> None:
         """验证从周视图切换到月视图使用真实数据。"""

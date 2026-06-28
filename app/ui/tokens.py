@@ -50,7 +50,7 @@ DOPAMINE_COLORS: Final[dict[str, dict[str, str]]] = {
 # ============================================================
 
 SEMANTIC_COLORS: Final[dict[str, dict[str, str]]] = {
-    "normal": {"block": "#E0F4FF", "border": "#60C8FF", "icon": "#60C8FF"},
+    "normal": {"block": "#E0F4FF", "border": "#60C8FF", "icon": "#1E70A8"},
     "late": {"block": "#FFE8EC", "border": "#FF6B8A", "icon": "#FF6B8A"},
     "early_leave": {"block": "#FFF0E8", "border": "#FF9040", "icon": "#FF9040"},
     "absent": {"block": "#FFE0E8", "border": "#FF5070", "icon": "#FF5070"},

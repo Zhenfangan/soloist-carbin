@@ -103,14 +103,14 @@ class TestComponentBackgrounds:
         assert _has_canvas_before(bubble), "MascotBubble 缺少 canvas.before 背景"
 
     def test_collapsible_group_has_background(self) -> None:
-        """P0: CollapsibleGroup 必须有自己的背景绘制。"""
+        """P0: CollapsibleGroup 整体必须有玻璃板背景（折叠/展开都可见）。"""
         from kivy.uix.widget import Widget
 
         content = Widget(size_hint=(1, None), height=48)
         group = CollapsibleGroup(title="测试组", content=content)
         group._redraw()
         assert _has_canvas_before(group), (
-            "CollapsibleGroup 缺少 canvas.before 背景 — 这是导致设置页黑屏的根本原因"
+            "CollapsibleGroup 缺少 canvas.before 背景 — 折叠态会无玻璃框"
         )
 
     def test_week_summary_header_has_background(self) -> None:

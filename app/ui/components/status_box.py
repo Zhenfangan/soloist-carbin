@@ -12,12 +12,15 @@ from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 
+from app.ui.components.glass_bg import draw_glass_card_bg
+from app.ui.fonts import emj
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
     CARD_WHITE,
     FONT_SIZE_BODY,
     FONT_SIZE_SMALL,
+    FONT_SIZE_TITLE,
     GRID_UNIT,
     SEMANTIC_COLORS,
     SHADOW_BLACK,
@@ -48,15 +51,17 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         kwargs.setdefault("spacing", 2)
         super().__init__(**kwargs)
 
-        # 标题
+        # 标题 — 大字号显示，单字号高于正文
         self._title_label = Label(
-            text="今日状态",
-            font_size=FONT_SIZE_SMALL,
-            color=self._to_rgba(TEXT_GRAY),
+            text=f"{emj('📊')} 今日状态",
+            font_size=FONT_SIZE_TITLE,
+            color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
-            height=20,
+            height=28,
             halign="left",
             valign="middle",
+            bold=True,
+            markup=True,
         )
         self.add_widget(self._title_label)
 
@@ -86,9 +91,9 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
             )
 
             status_w = Label(
-                text="等待签到...",
+                text=f"{emj('⏳')} 等待签到...",
                 font_size=FONT_SIZE_BODY,
-                color=self._to_rgba(TEXT_GRAY),
+                color=self._to_rgba(TEXT_BROWN),
                 size_hint=(1, None),
                 height=28,
                 halign="left",
@@ -96,6 +101,7 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 shorten=True,
                 shorten_from="right",
                 text_size=(None, 28),  # 初始即设
+                markup=True,
             )
 
             def _bind_text_size(w: Any, _: Any) -> None:
@@ -134,7 +140,7 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         is_shooting_day = getattr(day_status, "is_shooting_day", False)
 
         if date:
-            self._title_label.text = date
+            self._title_label.text = f"{emj('📅')} {date}"
 
         period_map: dict[str, Any] = {}
         for ps in periods:
@@ -147,8 +153,8 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 continue
 
             if ps is None:
-                status_w.text = "等待签到..."
-                status_w.color = self._to_rgba(TEXT_GRAY)
+                status_w.text = f"{emj('⏳')} 等待签到..."
+                status_w.color = self._to_rgba(TEXT_BROWN)
             else:
                 text = self._build_status_text(ps, is_shooting_day)
                 color_hex = self._get_status_color(ps.status)
@@ -156,43 +162,43 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 status_w.color = self._to_rgba(color_hex)
 
     def _build_status_text(self, ps: Any, is_shooting_day: bool) -> str:
-        """根据 PeriodStatus 构建状态文案。"""
+        """根据 PeriodStatus 构建状态文案（前缀彩色 emoji）。"""
         status = ps.status
         checkin_time = ps.checkin_time
         checkout_time = ps.checkout_time
 
         if status == "pending":
             if is_shooting_day:
-                return "拍摄中"
-            return "等待签到..."
+                return f"{emj('📸')} 拍摄中"
+            return f"{emj('⏳')} 等待签到..."
         if status == "normal":
-            parts = [f"正常签到 {checkin_time}" if checkin_time else "正常"]
+            parts = [f"{emj('✅')} 正常签到 {checkin_time}" if checkin_time else f"{emj('✅')} 正常"]
             if checkout_time:
-                parts.append(f"签退 {checkout_time}")
+                parts.append(f"{emj('🌙')} 签退 {checkout_time}")
             return " / ".join(parts)
         if status == "late":
-            return f"迟到 {checkin_time}" if checkin_time else "迟到"
+            return f"{emj('⏰')} 迟到 {checkin_time}" if checkin_time else f"{emj('⏰')} 迟到"
         if status == "early_leave":
-            return f"早退 {checkout_time}" if checkout_time else "早退"
+            return f"{emj('🏃')} 早退 {checkout_time}" if checkout_time else f"{emj('🏃')} 早退"
         if status in ("absent", "absent_morning", "absent_afternoon"):
             penalty = getattr(ps, "penalty_amount", None)
             amount_str = f" {int(penalty)}" if penalty is not None else ""
             if status == "absent_morning":
-                return f"未签到(上午){amount_str}"
+                return f"{emj('🚨')} 未签到(上午){amount_str}"
             if status == "absent_afternoon":
-                return f"未签到(下午){amount_str}"
-            return f"未签到{amount_str}"
+                return f"{emj('🚨')} 未签到(下午){amount_str}"
+            return f"{emj('🚨')} 未签到{amount_str}"
         if status == "leave":
-            return "已请假"
+            return f"{emj('🛌')} 已请假"
         if status == "shooting":
-            return "拍摄中"
+            return f"{emj('📸')} 拍摄中"
 
         if checkin_time and not checkout_time and status != "leave":
-            return "工作中..."
+            return f"{emj('💼')} 工作中..."
         if checkin_time and checkout_time:
-            return f"签到 {checkin_time} / 签退 {checkout_time}"
+            return f"{emj('✅')} 签到 {checkin_time} / {emj('🌙')} 签退 {checkout_time}"
 
-        return "等待签到..."
+        return f"{emj('⏳')} 等待签到..."
 
     def _get_status_color(self, status: str) -> str:
         """根据状态获取对应颜色。"""
@@ -200,7 +206,7 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
             return SEMANTIC_COLORS[status]["icon"]
         if status in ("absent_morning", "absent_afternoon"):
             return SEMANTIC_COLORS["absent"]["icon"]
-        return TEXT_GRAY
+        return TEXT_BROWN
 
     @property
     def _period_rows(self) -> list[dict[str, Any]]:
@@ -215,20 +221,5 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 w.text_size = (w.width, w.height)
 
     def _redraw(self, *args: Any) -> None:
-        """重绘状态框像素边框。"""
-        self.canvas.before.clear()
-        x, y = self.pos
-        w, h = self.size
-        bw = BORDER_WIDTH
-
-        with self.canvas.before:
-            Color(*self._to_rgba(SHADOW_BLACK))
-            Rectangle(pos=(x + 2, y - 2), size=(w, h))
-            Color(*self._to_rgba(CARD_WHITE))
-            Rectangle(pos=(x, y), size=(w, h))
-            Color(*self._to_rgba("#FFFFFF"))
-            Rectangle(pos=(x, y + h - bw), size=(w, bw))
-            Rectangle(pos=(x, y), size=(bw, h))
-            Color(*self._to_rgba("#F0E8D0"))
-            Rectangle(pos=(x, y), size=(w, bw))
-            Rectangle(pos=(x + w - bw, y), size=(bw, h))
+        """重绘状态框玻璃背景。"""
+        draw_glass_card_bg(self)

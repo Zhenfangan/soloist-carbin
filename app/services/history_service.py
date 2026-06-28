@@ -1,12 +1,14 @@
-"""历史模块服务层 — 周/月/年三维度数据查询"""
+"""历史模块服务层 — 周/月/年/周期多维度数据查询"""
 
 from __future__ import annotations
 
 import calendar
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from app.models.history import (
     CalendarCell,
+    CycleSummary,
     DayCard,
     MonthSummary,
     MonthViewData,
@@ -19,6 +21,9 @@ from app.repositories.checkin_repo import CheckinRepo
 from app.repositories.ledger_repo import LedgerRepo
 from app.repositories.shooting_repo import ShootingRepo
 
+if TYPE_CHECKING:
+    from app.repositories.bet_repo import BetRepo
+
 
 class HistoryService:
     """历史数据查询（只读消费）"""
@@ -28,10 +33,12 @@ class HistoryService:
         checkin_repo: CheckinRepo,
         ledger_repo: LedgerRepo,
         shooting_repo: ShootingRepo,
+        bet_repo: BetRepo | None = None,
     ) -> None:
         self._checkin_repo = checkin_repo
         self._ledger_repo = ledger_repo
         self._shooting_repo = shooting_repo
+        self._bet_repo = bet_repo
 
     def get_week_view(self, week_start: str) -> WeekViewData:
         """周视图：每天一张卡片，含打卡状态/工时/奖惩"""
@@ -152,7 +159,7 @@ class HistoryService:
         )
 
     def get_year_view(self, year: int) -> YearViewData:
-        """年视图：12 个月汇总卡片"""
+        """年视图：12 个月汇总卡片（含对赌数据）"""
         months: list[MonthSummary] = []
 
         for month in range(1, 13):
@@ -174,6 +181,27 @@ class HistoryService:
 
             total_ledger = sum(e.amount for e in entries)
 
+            # 对赌数据：按月查询 bet 相关流水
+            bet_cycles = 0
+            bet_net = 0.0
+            if self._bet_repo:
+                month_start = f"{year}-{month:02d}-01"
+                if month == 12:
+                    month_end = f"{year}-12-31"
+                else:
+                    month_end = f"{year}-{month+1:02d}-01"
+                bet_rows = self._bet_repo.conn.execute(
+                    "SELECT COUNT(DISTINCT week_start) as cycles,"
+                    " COALESCE(SUM(amount), 0) as net"
+                    " FROM ledger_entries"
+                    " WHERE type IN ('bet_reward', 'bet_extra', 'bet_penalty', 'bet_late_fee')"
+                    " AND entry_date >= ? AND entry_date < ?",
+                    (month_start, month_end),
+                ).fetchone()
+                if bet_rows:
+                    bet_cycles = bet_rows["cycles"] or 0
+                    bet_net = bet_rows["net"] or 0.0
+
             months.append(MonthSummary(
                 month=month,
                 work_days=work_days,
@@ -181,9 +209,92 @@ class HistoryService:
                 absent_count=absent_count,
                 total_hours=total_hours,
                 total_ledger=total_ledger,
+                bet_cycles=bet_cycles,
+                bet_net=bet_net,
             ))
 
         return YearViewData(year=year, months=months)
+
+    def get_cycle_history(self, limit: int = 50) -> list[CycleSummary]:
+        """对赌周期历史：每条周期含时长条 + 金额统计。
+
+        按 week_start 倒序返回最近 N 个已结算/滞纳中周期。
+        """
+        if not self._bet_repo:
+            return []
+
+        configs = self._bet_repo.conn.execute(
+            "SELECT * FROM bet_configs WHERE status IN ('settled', 'late')"
+            " ORDER BY week_start DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+
+        cycles: list[CycleSummary] = []
+        for row in configs:
+            ws = row["week_start"]
+            week_end = (datetime.strptime(ws, "%Y-%m-%d") + timedelta(days=6)).strftime("%Y-%m-%d")
+            status = row["status"]
+            late_start = row["late_start_date"] if "late_start_date" in row.keys() else None
+
+            # 任务统计
+            tasks = self._bet_repo.conn.execute(
+                "SELECT COUNT(*) as total,"
+                " SUM(CASE WHEN is_completed THEN 1 ELSE 0 END) as done"
+                " FROM bet_tasks WHERE week_start = ?",
+                (ws,),
+            ).fetchone()
+            total_tasks = tasks["total"] if tasks else 0
+            completed_tasks = tasks["done"] if tasks else 0
+
+            # 金额统计
+            ledger_rows = self._bet_repo.conn.execute(
+                "SELECT type, SUM(amount) as amt FROM ledger_entries"
+                " WHERE week_start = ? GROUP BY type",
+                (ws,),
+            ).fetchall()
+
+            base_reward = 0.0
+            extra_reward = 0.0
+            penalty = 0.0
+            late_fees = 0.0
+            for lr in ledger_rows:
+                amt = abs(lr["amt"]) if lr["amt"] else 0.0
+                if lr["type"] == "bet_reward":
+                    base_reward = amt
+                elif lr["type"] == "bet_extra":
+                    extra_reward = amt
+                elif lr["type"] == "bet_penalty":
+                    penalty = amt
+                elif lr["type"] == "bet_late_fee":
+                    late_fees += amt
+
+            # 滞纳天数
+            late_days = 0
+            if late_start:
+                late_start_dt = datetime.strptime(late_start, "%Y-%m-%d")
+                if status == "late":
+                    late_days = (datetime.now() - late_start_dt).days + 1
+                else:
+                    late_days = max(0, (datetime.now() - late_start_dt).days)
+
+            net = base_reward + extra_reward - penalty - late_fees
+
+            cycles.append(CycleSummary(
+                week_start=ws,
+                week_end=week_end,
+                status=status,
+                total_tasks=total_tasks,
+                completed_tasks=completed_tasks,
+                base_reward=base_reward,
+                extra_reward=extra_reward,
+                penalty=penalty,
+                late_fees=late_fees,
+                late_days=late_days,
+                net=net,
+                actual_end_date=late_start,
+            ))
+
+        return cycles
 
     @staticmethod
     def _time_to_minutes(time_str: str) -> int:

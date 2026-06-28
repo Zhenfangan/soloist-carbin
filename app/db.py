@@ -143,6 +143,13 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     if "photo_path" not in existing:
         conn.execute("ALTER TABLE checkins ADD COLUMN photo_path TEXT")
 
+    # 对赌滞纳期字段迁移
+    bet_cfg_cols = {row[1] for row in conn.execute("PRAGMA table_info(bet_configs)")}
+    if "late_fee_per_day" not in bet_cfg_cols:
+        conn.execute("ALTER TABLE bet_configs ADD COLUMN late_fee_per_day REAL DEFAULT 10")
+    if "late_start_date" not in bet_cfg_cols:
+        conn.execute("ALTER TABLE bet_configs ADD COLUMN late_start_date TEXT")
+
 
 def init_db(path: str | None = None) -> None:
     """显式初始化数据库（建表），幂等。"""

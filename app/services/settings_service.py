@@ -27,6 +27,7 @@ class SettingsService:
         "bet_base_reward": "50",
         "bet_extra_reward": "30",
         "bet_penalty": "50",
+        "bet_late_fee_per_day": "10",
         "work_days": "1,2,3,4,5",
         "shooting_reward": "30",
         "boyfriend_hour_threshold": "8",

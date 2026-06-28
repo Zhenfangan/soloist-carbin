@@ -39,6 +39,13 @@ _C_SHADOW = "#28C888"   # 内阴影（右下偏移 3px，不超出 bounds）
 _C_TEXT   = "#1A1A1A"   # 正文黑
 _C_RATE   = "#0D4A2F"   # 百分比深绿（在薄荷底上更清晰）
 
+# 滞纳期警告配色
+_L_OUTER  = "#FF6B8A"   # 珊瑚红外框
+_L_INNER  = "#FFB3C6"   # 浅珊瑚内框
+_L_BG     = "#FFD4DE"   # 粉底
+_L_SHADOW = "#E05070"   # 深珊瑚阴影
+_L_RATE   = "#8B1030"   # 深红百分比
+
 
 class WeekSummaryHeader(FloatLayout):  # type: ignore[misc]
     """本周总结浮层。"""
@@ -152,11 +159,18 @@ class WeekSummaryHeader(FloatLayout):  # type: ignore[misc]
         extra_count = int(summary.get("extra_count", 0))
         total_reward = float(summary.get("total_reward", 0.0))
         completion_rate = float(summary.get("completion_rate", 0.0))
+        status = str(summary.get("status", "active"))
+        accrued_late_fees = float(summary.get("accrued_late_fees", 0) or 0)
+        self._is_late = status == "late"
 
         if not animate:
             self._completed_label.text = f"已完成 {completed}  超额 {extra_count}"
-            self._reward_label.text = f"预计奖励: {int(total_reward):+d}"
+            if self._is_late:
+                self._reward_label.text = f"滞纳中 · 已累积 -{int(accrued_late_fees)}"
+            else:
+                self._reward_label.text = f"预计奖励: {int(total_reward):+d}"
             self._rate_label.text = f"{int(completion_rate)}%"
+            self._redraw()
             return
 
         self._animate_count(completed, extra_count)
@@ -179,13 +193,22 @@ class WeekSummaryHeader(FloatLayout):  # type: ignore[misc]
         steps, interval = 10, 0.03
         for i in range(steps + 1):
             v = new_val * (i / steps)
-            sign = "+" if v >= 0 else ""
-            Clock.schedule_once(
-                lambda dt, s=sign, vv=int(v): setattr(
-                    self._reward_label, "text", f"预计奖励: {s}{vv}"
-                ),
-                i * interval,
-            )
+            if self._is_late:
+                accrued = float(self._summary.get("accrued_late_fees", 0) or 0)
+                Clock.schedule_once(
+                    lambda dt, vv=int(accrued * (i / steps)): setattr(
+                        self._reward_label, "text", f"滞纳中 · 已累积 -{vv}"
+                    ),
+                    i * interval,
+                )
+            else:
+                sign = "+" if v >= 0 else ""
+                Clock.schedule_once(
+                    lambda dt, s=sign, vv=int(v): setattr(
+                        self._reward_label, "text", f"预计奖励: {s}{vv}"
+                    ),
+                    i * interval,
+                )
 
     def _animate_rate(self, new_val: float) -> None:
         steps, interval = 10, 0.03
@@ -199,28 +222,38 @@ class WeekSummaryHeader(FloatLayout):  # type: ignore[misc]
     # ── 绘制 + 布局 ─────────────────────────────────────────────────
 
     def _redraw(self, *args: Any) -> None:
-        """薄荷绿双层像素边框卡片（内阴影，不超出 bounds）。"""
+        """薄荷绿双层像素边框卡片（内阴影，不超出 bounds）。
+        滞纳期使用珊瑚红警告配色。
+        """
         self.canvas.before.clear()
         x, y = self.pos
         w, h = self.size
 
+        is_late = getattr(self, "_is_late", False)
+        outer = _L_OUTER if is_late else _C_OUTER
+        inner = _L_INNER if is_late else _C_INNER
+        bg = _L_BG if is_late else _C_BG
+        shadow = _L_SHADOW if is_late else _C_SHADOW
+        rate_color = _L_RATE if is_late else _C_RATE
+
         with self.canvas.before:
-            # 内阴影：深绿偏移 3px（右下，保持在 bounds 内）
-            Color(*self._to_rgba(_C_SHADOW, 0.45))
+            # 内阴影：偏移 3px（右下，保持在 bounds 内）
+            Color(*self._to_rgba(shadow, 0.45))
             Rectangle(pos=(x + 3, y), size=(w - 3, h - 3))
 
             # 外框
-            Color(*self._to_rgba(_C_OUTER))
+            Color(*self._to_rgba(outer))
             Rectangle(pos=(x, y + 3), size=(w - 3, h - 3))
 
             # 内框
-            Color(*self._to_rgba(_C_INNER))
+            Color(*self._to_rgba(inner))
             Rectangle(pos=(x + 3, y + 6), size=(w - 9, h - 9))
 
             # 内容底色
-            Color(*self._to_rgba(_C_BG))
+            Color(*self._to_rgba(bg))
             Rectangle(pos=(x + 6, y + 9), size=(w - 15, h - 15))
 
+        self._rate_label.color = self._to_rgba(rate_color)
         self._reposition_labels()
 
     def _reposition_labels(self, *args: Any) -> None:

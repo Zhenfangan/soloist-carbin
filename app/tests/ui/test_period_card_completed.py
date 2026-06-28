@@ -40,7 +40,7 @@ def test_checked_in_state_shows_checkout_btn() -> None:
     card._update_display()
 
     assert card._action_btn.opacity == 1, "已签到时签退按钮可见"
-    assert card._action_btn.text == "签退"
+    assert "签退" in card._action_btn.text
 
 
 def test_state_transition_completed_to_pending_restores_button() -> None:
@@ -89,7 +89,7 @@ def test_set_status_keeps_expanded_when_checked_in_not_out() -> None:
     assert card._card_state == "expanded", (
         f"已签到未签退应保持 expanded, 实际: {card._card_state}"
     )
-    assert card._action_btn.text == "签退"
+    assert "签退" in card._action_btn.text
     assert card._action_btn.opacity == 1
     assert card._action_btn.height == 64
 

@@ -81,6 +81,8 @@ def mock_checkin_service() -> MagicMock:
     service.check_out.return_value = MockCheckoutResult("morning")
     service.get_leave_options.return_value = ["morning", "afternoon", "all_day"]
     service.apply_leave.return_value = []
+    service.get_period_end_time.return_value = None
+    service.mark_absent.return_value = None
 
     return service
 
@@ -230,13 +232,12 @@ class TestPeriodCard:
         card.leave_enabled = True
         Clock.tick()
         assert card._leave_enabled is True
-        # 请假文字应为正常色
-        expected = list(card._to_rgba("#3A3028"))
-        assert list(card._leave_label.color) == expected
+        assert card._leave_btn.disabled is False
 
         card.leave_enabled = False
         Clock.tick()
         assert card._leave_enabled is False
+        assert card._leave_btn.disabled is True
 
 
 # ── StatusBox Tests ──────────────────────────────────────
@@ -338,7 +339,7 @@ class TestStatusBox:
         box.update_status(day_status)
 
         morning_info = {"status_w": box._status_widgets["morning"]}
-        assert "旷工" in morning_info["status_w"].text
+        assert "未签到" in morning_info["status_w"].text
 
     def test_shooting_status(self) -> None:
         """测试拍摄日状态。"""
@@ -393,7 +394,7 @@ class TestStatusBox:
         ])
         box.update_status(day_status)
         morning_info = {"status_w": box._status_widgets["morning"]}
-        assert "旷工" in morning_info["status_w"].text
+        assert "未签到" in morning_info["status_w"].text
 
 
 # ── TaskInlineList Tests ─────────────────────────────────

@@ -3,10 +3,11 @@
 4 阶段动画:
 ① 按钮隐藏 (150ms)
 ② 吉祥物在卡片内展开 (300ms)
-③ 吉祥物左右摇摆 2 次 (1600ms)
+③ 7帧逐帧播放: frame_02~04 各 0.7s(含1s间隔), frame_05(打哈欠) 1.3s,
+   frame_06(倒数第二) 1.3s, frame_07(最后) 1.3s
 ④ 吉祥物缩回，卡片恢复 (400ms)
 
-总时长 ~2.5 秒。吉祥物显示在触发签到/签退的 PeriodCard 内部，
+总时长 ~13 秒。吉祥物显示在触发签到/签退的 PeriodCard 内部，
 卡片临时扩展高度容纳动画，完成后恢复正常。
 
 日常打卡/签退使用小兔胜利动画，加班时段使用小熊熬夜动画。
@@ -61,7 +62,7 @@ def checkin_success_sequence(
         mascot_img: Any = Image(
             size_hint=(None, None),
             size=(MASCOT_DISPLAY_SIZE, MASCOT_DISPLAY_SIZE),
-            pos_hint={"center_x": 0.5},
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
             allow_stretch=True,
             keep_ratio=True,
         )
@@ -101,20 +102,28 @@ def checkin_success_sequence(
         Clock.schedule_once(phase3_swing_1, 0.3)
 
     def phase3_swing_1(dt: float) -> None:
-        _advance_frame()
-        Clock.schedule_once(phase3_swing_2, 0.4)
+        _advance_frame()  # frame_02
+        Clock.schedule_once(phase3_swing_2, 0.7)
 
     def phase3_swing_2(dt: float) -> None:
-        _advance_frame()
-        Clock.schedule_once(phase3_swing_3, 0.4)
+        _advance_frame()  # frame_03
+        Clock.schedule_once(phase3_swing_3, 0.7)
 
     def phase3_swing_3(dt: float) -> None:
-        _advance_frame()
-        Clock.schedule_once(phase3_swing_4, 0.4)
+        _advance_frame()  # frame_04
+        Clock.schedule_once(phase3_swing_4, 0.7)
 
     def phase3_swing_4(dt: float) -> None:
-        _advance_frame()
-        Clock.schedule_once(phase4, 0.6)
+        _advance_frame()  # frame_05 — 打哈欠，4x 时长 + 1s 间隔
+        Clock.schedule_once(phase3_swing_5, 1.3)
+
+    def phase3_swing_5(dt: float) -> None:
+        _advance_frame()  # frame_06 — 倒数第二帧，4x 时长 + 1s 间隔
+        Clock.schedule_once(phase3_swing_6, 1.3)
+
+    def phase3_swing_6(dt: float) -> None:
+        _advance_frame()  # frame_07 — 最后一帧，4x 时长 + 1s 间隔
+        Clock.schedule_once(phase4, 1.3)
 
     # 阶段 4: 吉祥物消失，还原按钮
     def phase4(dt: float) -> None:

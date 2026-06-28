@@ -546,6 +546,7 @@ class TestBetScreen:
         clock.set_time(datetime(2026, 6, 1))  # Monday -> week_start = 2026-06-01
 
         svc = create_bet_service(temp_db)
+        svc.set_week_config("2026-06-01", 50, 30, 50)
         svc.create_task("2026-06-01", "文章1")
         svc.create_task("2026-06-01", "文章2", target_qty=3)
 
@@ -554,28 +555,13 @@ class TestBetScreen:
         screen.refresh()
         assert len(screen._task_container.children) == 2
 
-    def test_week_start_calculation(self) -> None:
-        """周起始计算正确。"""
-        # 周三
-        wed = datetime(2026, 6, 3)
-        ws = BetScreen._get_week_start(wed)
-        assert ws == "2026-06-01"  # 周一
-
-        # 周日
-        sun = datetime(2026, 6, 7)
-        ws = BetScreen._get_week_start(sun)
-        assert ws == "2026-06-01"  # 周一
-
-        # 周一
-        mon = datetime(2026, 6, 1)
-        ws = BetScreen._get_week_start(mon)
-        assert ws == "2026-06-01"
-
     def test_create_task_through_screen(self, temp_db: str, clock: Any) -> None:
         """通过页面添加任务。"""
         clock.set_time(datetime(2026, 6, 1))  # Monday -> week_start = 2026-06-01
 
         svc = create_bet_service(temp_db)
+        # 预设当前周期 config 使 get_current_cycle_start 返回期望值
+        svc.set_week_config("2026-06-01", 50, 30, 50)
         screen = BetScreen(bet_service=svc)
 
         # 手动触发添加
@@ -607,13 +593,16 @@ class TestBetScreenSettlement:
         assert "周日" in screen._settle_hint.text
 
     def test_settle_button_enabled_on_sunday(self, temp_db: str, clock: Any) -> None:
-        """周日结算按钮可用。"""
+        """周日结算按钮可用（需有任务）。"""
         # 设为周日
         clock.set_time(datetime(2026, 6, 7))  # Sunday
 
         svc = create_bet_service(temp_db)
+        svc.set_week_config("2026-06-01", 50, 30, 50)
+        svc.create_task("2026-06-01", "任务1")
         screen = BetScreen(bet_service=svc)
-        screen._update_settle_button()
+        # 刷新以获取 summary 数据
+        screen.refresh()
 
         assert not screen._settle_btn.disabled
         assert screen._settle_hint.text == ""

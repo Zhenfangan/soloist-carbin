@@ -59,14 +59,18 @@ class BetRepo(BaseRepo):
         is_completed 双向自动维护:
             达到 target → 1, 低于 target → 0;
             current_qty 下限 0 (MAX 防止减成负数)。
+        is_extra 自动维护: current_qty > target_qty → 1, 否则 → 0。
         """
         self._execute(
             "UPDATE bet_tasks SET current_qty = MAX(0, current_qty + ?),"
             " is_completed = CASE"
             "   WHEN MAX(0, current_qty + ?) >= target_qty THEN 1"
+            "   ELSE 0 END,"
+            " is_extra = CASE"
+            "   WHEN MAX(0, current_qty + ?) > target_qty THEN 1"
             "   ELSE 0 END"
             " WHERE id = ?",
-            (delta, delta, task_id),
+            (delta, delta, delta, task_id),
         )
         row = self._fetch_one("SELECT * FROM bet_tasks WHERE id = ?", (task_id,))
         return self._row_to_task(row) if row else None
@@ -79,15 +83,19 @@ class BetRepo(BaseRepo):
     def upsert_config(self, config: BetConfig) -> BetConfig:
         """原子 upsert — 使用 INSERT ON CONFLICT 消除 TOCTOU 竞态"""
         self._execute(
-            """INSERT INTO bet_configs (week_start, base_reward, extra_reward, penalty, status)
-               VALUES (?, ?, ?, ?, ?)
+            """INSERT INTO bet_configs (week_start, base_reward, extra_reward, penalty,
+               status, late_fee_per_day, late_start_date)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(week_start) DO UPDATE SET
                base_reward = excluded.base_reward,
                extra_reward = excluded.extra_reward,
                penalty = excluded.penalty,
-               status = excluded.status""",
+               status = excluded.status,
+               late_fee_per_day = excluded.late_fee_per_day,
+               late_start_date = excluded.late_start_date""",
             (config.week_start, config.base_reward, config.extra_reward,
-             config.penalty, config.status),
+             config.penalty, config.status,
+             config.late_fee_per_day, config.late_start_date),
         )
         row = self._fetch_one(
             "SELECT * FROM bet_configs WHERE week_start = ?", (config.week_start,)
@@ -116,6 +124,7 @@ class BetRepo(BaseRepo):
 
     @staticmethod
     def _row_to_config(row: sqlite3.Row) -> BetConfig:
+        cols = row.keys()
         return BetConfig(
             id=row["id"],
             week_start=row["week_start"],
@@ -123,4 +132,23 @@ class BetRepo(BaseRepo):
             extra_reward=row["extra_reward"],
             penalty=row["penalty"],
             status=row["status"],
+            late_fee_per_day=row["late_fee_per_day"] if "late_fee_per_day" in cols else 10.0,
+            late_start_date=row["late_start_date"] if "late_start_date" in cols else None,
         )
+
+    def get_late_fee_dates(self, week_start: str) -> set[str]:
+        """返回已扣滞纳金的日期集合（用于去重）。"""
+        from app.utils.config import LEDGER_TYPE_BET_LATE_FEE
+        rows = self._fetch_all(
+            "SELECT entry_date FROM ledger_entries"
+            " WHERE week_start = ? AND type = ?",
+            (week_start, LEDGER_TYPE_BET_LATE_FEE),
+        )
+        return {r["entry_date"] for r in rows}
+
+    def get_unsettled_weeks(self) -> list[BetConfig]:
+        """返回所有未完成结算的周配置 (active / late)。"""
+        rows = self._fetch_all(
+            "SELECT * FROM bet_configs WHERE status IN ('active', 'late')"
+        )
+        return [self._row_to_config(r) for r in rows]

@@ -160,12 +160,12 @@ class TestCollapsibleGroup:
     def test_initial_state_expanded(self) -> None:
         group = CollapsibleGroup(title="设置组")
         assert not group.collapsed
-        assert group._arrow_label.text == "▼"
+        assert group._title_label.text == "设置组"
 
     def test_initial_state_collapsed(self) -> None:
         group = CollapsibleGroup(title="设置组", collapsed=True)
         assert group.collapsed
-        assert group._arrow_label.text == "▶"
+        assert group._title_label.text == "设置组"
 
     def test_toggle_expand_collapse(self) -> None:
         group = CollapsibleGroup(title="设置组")

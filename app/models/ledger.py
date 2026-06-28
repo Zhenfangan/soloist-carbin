@@ -50,6 +50,8 @@ class BetConfig:
     extra_reward: float
     penalty: float
     status: str = "active"
+    late_fee_per_day: float = 10.0
+    late_start_date: str | None = None
     id: int | None = None
 
 
@@ -64,3 +66,5 @@ class WeeklySettlementResult:
     total_penalty: float
     net: float
     ledger_entries: list[LedgerEntry]
+    status: str = "settled"
+    late_fee_total: float = 0.0

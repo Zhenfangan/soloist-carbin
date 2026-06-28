@@ -1,13 +1,16 @@
 """打卡成功反馈面板 — 卡片头部下方的内嵌反馈。
 
 每次签到 / 签退成功后，覆盖在触发的 PeriodCard 头部以下的内容区，
-4.5 秒后自动消失。卡片头部（period 名 + 时间范围）始终保留可见，
+~13 秒后自动消失。卡片头部（period 名 + 时间范围）始终保留可见，
 卡片本身的高度、位置不变。
 
-布局（卡片白底）：
+面板自己不画背景 —— 卡片本身的玻璃背景就是它的底；同时把卡片原本
+的签到 / 请假按钮隐藏；滚动时自动跟随卡片位置。
+
+布局：
 - 左 30%：IP 序列动画（rabbit 日常 / bear 夜间）
 - 右 70%：
-  - 上半：大字 "签到成功！⭐" / "签退成功！⭐"（上下弹跳）
+  - 上半：大字 "签到成功！★" / "签退成功！★"（上下弹跳）
   - 下半：激励语句（用户自定义优先，否则内置 5 句）
 """
 
@@ -20,7 +23,6 @@ from typing import Any
 from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.graphics import Color, Rectangle
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
@@ -28,16 +30,13 @@ from kivy.uix.label import Label
 from app.services.report_service import ENCOURAGEMENTS
 from app.ui.assets.loader import SequenceLoader
 from app.ui.tokens import (
-    CARD_WHITE,
     FONT_SIZE_BODY,
     FONT_SIZE_TITLE,
     PRIMARY_YELLOW,
     TEXT_BROWN,
-    TEXT_GRAY,
 )
 
-DISPLAY_DURATION = 4.5
-IP_FRAME_INTERVAL = 0.25
+DISPLAY_DURATION = 6.5  # 总时长匹配帧序列：0.3 + 0.7×3 + 1.3×3 + 末帧驻留
 BOUNCE_HEIGHT = 8
 BOUNCE_HALF_DURATION = 0.2
 HEADER_HEIGHT = 48  # 与 PeriodCard._COLLAPSED_HEIGHT 一致
@@ -49,7 +48,7 @@ def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, floa
 
 
 class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
-    """卡片内嵌的打卡 / 签退成功反馈浮层"""
+    """卡片内嵌的打卡 / 签退成功反馈浮层 —— 透明背景，使用卡片自身玻璃。"""
 
     def __init__(
         self,
@@ -66,18 +65,15 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         self._is_night = is_night
         self._settings_service = settings_service
         self._on_dismiss_callback = on_dismiss_callback
-        self._frame_event: Any = None
+        self._frame_event: Any = None  # 兼容旧逻辑，改用 _next_frame_event 链式调度
+        self._next_frame_event: Any = None
         self._bounce_anim: Animation | None = None
         self._dismissed = False
+        self._hidden_widgets: list[tuple[Any, float]] = []
+        self._bound_scrollview: Any = None
 
         # 初次同步位置/大小
         self._sync_to_card()
-
-        # 卡片白底（覆盖原内容区的签到按钮 / 请假标签）
-        with self.canvas.before:
-            Color(*_hex_to_rgba(CARD_WHITE))
-            self._bg_rect = Rectangle(pos=self.pos, size=self.size)
-        self.bind(pos=self._redraw_bg, size=self._redraw_bg)
 
         # 左 30%：IP 动画
         anim_id = "bear" if is_night else "rabbit"
@@ -97,7 +93,6 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         self.add_widget(self._ip_image)
 
         # 右 70% 上半：大字标题（卡片内容区高度约 132px）
-        # 使用 unicode ★（U+2605），秋叶圆体原生支持；避免 markup font 标签引起字体文件加载失败
         title_text = "签到成功！★" if is_checkin else "签退成功！★"
         self._title_lbl = Label(
             text=title_text,
@@ -119,7 +114,7 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         self._msg_lbl = Label(
             text=message,
             font_size=FONT_SIZE_BODY,
-            color=_hex_to_rgba(TEXT_GRAY),
+            color=_hex_to_rgba(TEXT_BROWN),
             size_hint=(0.66, 0.35),
             pos_hint={"x": 0.32, "center_y": 0.25},
             halign="center",
@@ -137,22 +132,15 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
 
     def _sync_to_card(self) -> None:
         card = self._target_card
-        # 卡片底部在 window 坐标系中的位置（脱离 ScrollView / Screen 嵌套）
         wx, wy = card.to_window(card.x, card.y)
-        # 覆盖 card 全宽，高度 = card.height - 头部高度
         new_h = max(0, card.height - HEADER_HEIGHT)
         self.size = (card.width, new_h)
-        # y = card.y（底部对齐卡片底部），顶部停在 header 下沿
         self.pos = (wx, wy)
 
     def _on_card_changed(self, *_args: Any) -> None:
         if self._dismissed:
             return
         self._sync_to_card()
-
-    def _redraw_bg(self, *_args: Any) -> None:
-        self._bg_rect.pos = self.pos
-        self._bg_rect.size = self.size
 
     # --------------------------------------------------------------
     # 内容
@@ -174,18 +162,73 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
 
     def open(self) -> None:
         Window.add_widget(self)
+        # 隐藏底下卡片的签到 / 请假按钮，避免半透明玻璃透出
+        for attr in ("_action_btn", "_leave_btn"):
+            w = getattr(self._target_card, attr, None)
+            if w is not None:
+                self._hidden_widgets.append((w, w.opacity))
+                w.opacity = 0
+        # 跟随滚动：找到上层 ScrollView 并绑定 scroll_y / scroll_x
+        parent = self._target_card.parent
+        while parent is not None:
+            if hasattr(parent, "scroll_y"):
+                self._bound_scrollview = parent
+                parent.bind(scroll_y=self._on_scroll_changed, scroll_x=self._on_scroll_changed)
+                break
+            parent = parent.parent
         Clock.schedule_once(self._start_title_bounce, 0.05)
         Clock.schedule_once(self._auto_dismiss, DISPLAY_DURATION)
         if self._frames and len(self._frames) > 1:
-            self._frame_event = Clock.schedule_interval(
-                self._advance_frame, IP_FRAME_INTERVAL
-            )
+            self._start_frame_sequence()
 
-    def _advance_frame(self, dt: float) -> None:
-        if not self._frames:
+    def _on_scroll_changed(self, *_args: Any) -> None:
+        if not self._dismissed:
+            self._sync_to_card()
+
+    # --------------------------------------------------------------
+    # 帧序列播放（分阶段变速）
+    # --------------------------------------------------------------
+    # 帧时间表: frame_02~04 各 0.7s, frame_05(打哈欠) 1.3s,
+    #            frame_06(倒数第二) 1.3s, frame_07(最后) 1.3s
+
+    def _start_frame_sequence(self) -> None:
+        """启动分阶段变速帧序列: frame_01 已是初始纹理, 从 frame_02 开始推进。"""
+        if not self._frames or len(self._frames) <= 1:
             return
-        self._frame_idx = (self._frame_idx + 1) % len(self._frames)
-        self._ip_image.texture = self._frames[self._frame_idx].texture
+        # frame_01(索引0) → frame_02(索引1): 0.3s 展开后
+        self._next_frame_event = Clock.schedule_once(
+            lambda dt: self._advance_to(1, 0.7), 0.3
+        )
+
+    def _advance_to(self, frame_idx: int, next_delay: float) -> None:
+        """跳转到 frame_idx 帧并设置下一帧的延迟。
+
+        Args:
+            frame_idx: 要显示的帧索引
+            next_delay: 当前帧展示完毕后到下一帧的延迟(秒)
+        """
+        if self._dismissed:
+            return
+        if frame_idx < len(self._frames):
+            self._frame_idx = frame_idx
+            self._ip_image.texture = self._frames[frame_idx].texture
+
+        next_idx = frame_idx + 1
+        if next_idx >= len(self._frames):
+            self._next_frame_event = None
+            return  # 最后一帧，不再推进
+
+        # 根据下一帧索引决定展示时长
+        # 索引 4=frame_05(打哈欠), 5=frame_06, 6=frame_07 → 1.3s
+        # 其余 → 0.7s
+        if next_idx >= 4:
+            delay = 1.3
+        else:
+            delay = 0.7
+
+        self._next_frame_event = Clock.schedule_once(
+            lambda dt, n=next_idx, d=delay: self._advance_to(n, d), next_delay
+        )
 
     def _start_title_bounce(self, dt: float) -> None:
         original_y = self._title_lbl.y
@@ -204,9 +247,27 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         if self._frame_event:
             self._frame_event.cancel()
             self._frame_event = None
+        if self._next_frame_event:
+            self._next_frame_event.cancel()
+            self._next_frame_event = None
         if self._bounce_anim:
             self._bounce_anim.cancel(self._title_lbl)
             self._bounce_anim = None
+        # 恢复底下卡片按钮可见性
+        for w, prev_opacity in self._hidden_widgets:
+            try:
+                w.opacity = prev_opacity
+            except Exception:
+                pass
+        # 解绑滚动事件
+        if self._bound_scrollview is not None:
+            try:
+                self._bound_scrollview.unbind(
+                    scroll_y=self._on_scroll_changed,
+                    scroll_x=self._on_scroll_changed,
+                )
+            except Exception:
+                pass
         try:
             self._target_card.unbind(pos=self._on_card_changed, size=self._on_card_changed)
         except Exception:

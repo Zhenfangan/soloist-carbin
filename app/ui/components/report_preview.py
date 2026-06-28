@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import os
+import random
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -27,6 +28,7 @@ from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 from kivy.uix.scrollview import ScrollView
 
+from app.services.report_service import ENCOURAGEMENTS
 from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path
 from app.ui.components.pixel_button import PixelButton
 from app.ui.tokens import (
@@ -75,6 +77,10 @@ _SPRITE_RABBIT     = "doc/ui-design/ip/images/gif/小兔胜利/Gemini_Generated_
 _SPRITE_CAT_CORNER = "doc/ui-design/ip/images/gif/小猫庆祝/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_08.png"
 _SPRITE_BEAR       = "doc/ui-design/ip/images/gif/小熊熬夜/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_28.png"   # 最后一帧
 _SPRITE_PIG        = "doc/ui-design/ip/images/gif/小猪倒下/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_29.png"   # 第一帧(开心站立)
+_PIG_FRAMES = [
+    f"doc/ui-design/ip/images/gif/小猪倒下/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_{i:02d}.png"
+    for i in range(29, 36)
+]
 
 _CAT_FRAMES = [
     f"doc/ui-design/ip/images/gif/小猫庆祝/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_{i:02d}.png"
@@ -675,7 +681,10 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         card.add_widget(time_row)
         wrapper.add_widget(card)
 
-        # 右上角小猪贴纸：中心对齐卡片顶边，一半在框内一半在框外
+        # 右上角小猪贴纸：中心对齐卡片顶边，一半在框内一半在框外，上下跳动
+        from kivy.animation import Animation as _Anim
+        from kivy.clock import Clock as _Clock
+        from kivy.graphics.context_instructions import PopMatrix, PushMatrix, Translate
         pig = Image(
             source=_SPRITE_PIG,
             size_hint=(None, None),
@@ -683,25 +692,31 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             pos_hint={"right": 1.0, "center_y": 1.0},
             fit_mode="contain",
         )
+        with pig.canvas.before:
+            PushMatrix()
+            _pig_tr = Translate(0, 0, 0)
+        with pig.canvas.after:
+            PopMatrix()
+
+        def _pig_bounce(dt, t=_pig_tr):
+            anim = (
+                _Anim(y=10, duration=0.5, t="out_sine")
+                + _Anim(y=0, duration=0.5, t="in_sine")
+            )
+            anim.repeat = True
+            anim.start(t)
+
+        _Clock.schedule_once(_pig_bounce, 0.5)
         wrapper.add_widget(pig)
         return wrapper
 
     @staticmethod
     def _reward_panel(data: ReportData) -> FloatLayout:
         """达标/未达标双态看板，IP 贴纸叠加。"""
-        import dataclasses as _dc
         if data.promise is not None:
             achieved = data.promise.fulfilled
         else:
             achieved = data.total_work_hours >= data.threshold_hours
-        achieved = True  # TODO-TEST: 视觉调试注入，确认后移除
-        # TODO-TEST: 注入测试承诺，确认后移除
-        from app.models.report import PromiseDetail as _PD
-        data = _dc.replace(
-            data,
-            promise=_PD(reward_desc="买一杯喜茶", reward_qty=2, fulfilled=True),
-            total_work_hours=9.5,
-        )
 
         panel_h  = 124
         sprite_w = panel_h
@@ -737,8 +752,17 @@ class ReportPreview(ModalView):  # type: ignore[misc]
                 outer="#B0A090", inner="#D8D0C0",
                 shadow="#807060", content_bg=_COLOR_UNMET_BG,
             )
-            main_text = "「我凭感觉活着，我有许多破绽。」"
-            sub_text = "但没关系，明天台灯再次点亮，小木屋依然陪你前行。"
+            if data.promise:
+                # 剥离 reward_desc 中可能存在的 "兜兜" 昵称
+                reward = data.promise.reward_desc.replace("兜兜", "").lstrip("：:、, ").strip()
+                main_text = (
+                    f"今天工时 {data.total_work_hours:.1f}h "
+                    f"未达 {data.threshold_hours:.0f}h 门槛，"
+                    f"没拿到「{reward}」"
+                )
+            else:
+                main_text = f"今天工时 {data.total_work_hours:.1f}h，未达标"
+            sub_text = random.choice(ENCOURAGEMENTS)
 
         ml = Label(
             text=main_text,

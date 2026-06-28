@@ -1,7 +1,7 @@
 """HistoryScreen — 主历史页面。
 
-顶部 HistoryTabs + 三个视图容器: 周视图 / 月视图 / 年视图。
-默认打开周视图，当前周。
+顶部 HistoryTabs + 三个视图容器: 周期视图 / 月视图 / 年视图。
+默认打开周期视图，展示对赌周期历史（热力图条）。
 """
 
 from __future__ import annotations
@@ -18,11 +18,12 @@ from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 
 from app.models.history import CalendarCell as CalendarCellModel
-from app.models.history import DayCard as DayCardModel
+from app.models.history import CycleSummary, DayCard as DayCardModel
 from app.models.history import MonthViewData, WeekViewData, YearViewData
 from app.services.history_service import HistoryService
 from app.services.report_service import ReportService
 from app.ui.components.calendar_cell import CalendarCell
+from app.ui.components.cycle_bar import CycleBar
 from app.ui.components.day_card import DayCard
 from app.ui.components.history_tabs import HistoryTabs
 from app.ui.components.month_card import MonthCard
@@ -33,7 +34,6 @@ from app.ui.tokens import (
     FONT_SIZE_SMALL,
     GRASS_INSET,
     GRID_UNIT,
-    NAV_HEIGHT,
     TEXT_BROWN,
     TEXT_GRAY,
 )
@@ -62,7 +62,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         self._report_service: ReportService | None = report_service
 
         # 当前导航偏移
-        self._tab_index: int = 0  # 0=周, 1=月, 2=年
+        self._tab_index: int = 0  # 0=周期, 1=月, 2=年
         self._week_offset: int = 0
         self._month_offset: int = 0
         self._year_offset: int = 0
@@ -75,15 +75,15 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         self.tabs = HistoryTabs(on_tab_change=self._switch_tab)
         root.add_widget(self.tabs)
 
-        # --- 内容区域 (ScreenManager 承载周/月/年三视图) ---
+        # --- 内容区域 (ScreenManager 承载周期/月/年三视图) ---
         self._sm = ScreenManager(size_hint=(1, 1))
         root.add_widget(self._sm)
 
-        # 周视图
-        self._week_view = self._build_week_view()
-        week_screen = Screen(name="week")
-        week_screen.add_widget(self._week_view)
-        self._sm.add_widget(week_screen)
+        # 周期视图 (替代原周视图)
+        self._cycle_view = self._build_cycle_view()
+        cycle_screen = Screen(name="cycle")
+        cycle_screen.add_widget(self._cycle_view)
+        self._sm.add_widget(cycle_screen)
 
         # 月视图
         self._month_view = self._build_month_view()
@@ -97,110 +97,86 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         year_screen.add_widget(self._year_view)
         self._sm.add_widget(year_screen)
 
-        # --- 初始加载：周视图，当前周 ---
+        # --- 初始加载：周期视图 ---
         now = get_clock().now()
         self._current_week_start = (now - timedelta(days=now.weekday())).strftime("%Y-%m-%d")
         self._current_year = now.year
         self._current_month = now.month
 
-        self._refresh_week_view()
+        self._refresh_cycle_view()
         self._switch_tab(0)
 
     # ================================================================
-    # 周视图
+    # 周期视图 (对赌周期历史)
     # ================================================================
 
-    def _build_week_view(self) -> BoxLayout:
+    def _build_cycle_view(self) -> BoxLayout:
         layout = BoxLayout(orientation="vertical", size_hint=(1, 1))
 
-        # 导航栏
-        nav = BoxLayout(
+        # 标题栏
+        title_bar = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
             height=BTN_HEIGHT,
             padding=[GRID_UNIT, 0],
         )
-        self._week_prev_btn = PixelButton(text="←", size_mode="small", on_press=lambda: self._navigate_week(-1))
-        self._week_label = Label(
-            text="",
+        self._cycle_label = Label(
+            text="对赌周期历史",
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, 1),
             halign="center",
             valign="middle",
         )
-        self._week_next_btn = PixelButton(text="→", size_mode="small", on_press=lambda: self._navigate_week(1))
-        nav.add_widget(self._week_prev_btn)
-        nav.add_widget(self._week_label)
-        nav.add_widget(self._week_next_btn)
-        layout.add_widget(nav)
+        title_bar.add_widget(self._cycle_label)
+        layout.add_widget(title_bar)
 
-        # DayCard 列表 (可滚动)
-        self._week_scroll = ScrollView(size_hint=(1, 1))
-        self._week_card_container = BoxLayout(
+        # 周期条列表 (可滚动)
+        self._cycle_scroll = ScrollView(size_hint=(1, 1))
+        self._cycle_container = BoxLayout(
             orientation="vertical",
             size_hint_y=None,
-            spacing=GRID_UNIT,
+            spacing=GRID_UNIT // 2,
             padding=[GRID_UNIT, GRID_UNIT, GRID_UNIT, GRID_UNIT * 2 + GRASS_INSET],
         )
-        self._week_card_container.bind(
-            minimum_height=self._week_card_container.setter("height")
+        self._cycle_container.bind(
+            minimum_height=self._cycle_container.setter("height")
         )
 
-        # 本周合计 — 放入 ScrollView 内容容器，随内容一起滚动
-        self._week_total_label = Label(
-            text="",
-            font_size=FONT_SIZE_BODY,
-            color=self._to_rgba(TEXT_BROWN),
+        # 空状态提示
+        self._cycle_empty_label = Label(
+            text="暂无周期记录\n完成第一个对赌周期后这里会出现数据",
+            font_size=FONT_SIZE_SMALL,
+            color=self._to_rgba(TEXT_GRAY),
             size_hint=(1, None),
-            height=BTN_HEIGHT,
-            halign="left",
+            height=60,
+            halign="center",
             valign="middle",
-            padding=[GRID_UNIT * 2, 0],
         )
-        self._week_total_label.bind(
-            width=lambda inst, w: setattr(inst, "text_size", (w, None))
-        )
-        self._week_card_container.add_widget(self._week_total_label)
+        self._cycle_container.add_widget(self._cycle_empty_label)
 
-        self._week_scroll.add_widget(self._week_card_container)
-        layout.add_widget(self._week_scroll)
+        self._cycle_scroll.add_widget(self._cycle_container)
+        layout.add_widget(self._cycle_scroll)
 
         return layout
 
-    def _navigate_week(self, direction: int) -> None:
-        """切换周 (direction: -1 上一周, +1 下一周)。"""
-        self._week_offset += direction
-        self._refresh_week_view()
-
-    def _refresh_week_view(self) -> None:
-        """重新加载周视图数据并更新 UI。"""
-        start_dt = datetime.strptime(self._current_week_start, "%Y-%m-%d")
-        offset_dt = start_dt + timedelta(weeks=self._week_offset)
-        week_start = offset_dt.strftime("%Y-%m-%d")
-        week_end = (offset_dt + timedelta(days=6)).strftime("%Y-%m-%d")
-
+    def _refresh_cycle_view(self) -> None:
+        """重新加载周期视图数据并更新 UI。"""
         try:
-            data: WeekViewData = self._service.get_week_view(week_start)
+            cycles = self._service.get_cycle_history()
         except Exception as e:
-            Logger.error(f"HistoryScreen: {e}")
+            Logger.error(f"HistoryScreen cycle: {e}")
             return
 
-        # 更新标题
-        self._week_label.text = f"{week_start} ~ {week_end}"
+        self._cycle_container.clear_widgets()
 
-        # 重建卡片 — 清空全部，按顺序添加卡片，最后追加 footer label
-        self._week_card_container.clear_widgets()
-        for day in data.days:
-            card = DayCard(day_summary=day, on_click=self._on_day_click)
-            self._week_card_container.add_widget(card)
-        # footer label 始终在卡片列表最下方
-        self._week_card_container.add_widget(self._week_total_label)
+        if not cycles:
+            self._cycle_container.add_widget(self._cycle_empty_label)
+            return
 
-        # 更新合计
-        net = data.weekly_net
-        sign = "+" if net >= 0 else ""
-        self._week_total_label.text = f"本周合计: {sign}{net}"
+        for c in cycles:
+            bar = CycleBar(cycle=c)
+            self._cycle_container.add_widget(bar)
 
     # ================================================================
     # 月视图
@@ -457,13 +433,13 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         """Tab 切换：通过 ScreenManager 切换视图，彻底杜绝触摸穿透。"""
         self._tab_index = tab_index
 
-        tab_names = ["week", "month", "year"]
+        tab_names = ["cycle", "month", "year"]
         if tab_index < len(tab_names):
             self._sm.current = tab_names[tab_index]
 
         # 刷新对应视图数据
         if tab_index == 0:
-            self._refresh_week_view()
+            self._refresh_cycle_view()
         elif tab_index == 1:
             self._refresh_month_view()
         elif tab_index == 2:

@@ -92,7 +92,7 @@ class _EditDialog(ModalView):  # type: ignore[misc]
             value=str(int(current_value)),
             size_hint=(None, None),
             size=(card_w - CARD_PADDING * 2, 40),
-            pos_hint={"x": 0.5, "y": 0.45},
+            pos_hint={"center_x": 0.5, "y": 0.45},
         )
 
         btn_layout = BoxLayout(
@@ -191,6 +191,7 @@ class BetConfigSection(CollapsibleGroup):
             "base_reward": 50.0,
             "extra_reward": 30.0,
             "penalty": 50.0,
+            "late_fee_per_day": 10.0,
         }
 
         # 构建展开内容
@@ -202,20 +203,22 @@ class BetConfigSection(CollapsibleGroup):
         )
         self._content_layout = content
 
-        # 三个配置行
+        # 四个配置行
         self._reward_row = self._build_config_row("完成奖励", "base_reward", "50")
         self._extra_row = self._build_config_row("超额单任务奖励", "extra_reward", "30")
         self._penalty_row = self._build_config_row("未完成惩罚", "penalty", "50")
+        self._late_fee_row = self._build_config_row("每日滞纳金", "late_fee_per_day", "10")
 
         content.add_widget(self._reward_row)
         content.add_widget(self._extra_row)
         content.add_widget(self._penalty_row)
+        content.add_widget(self._late_fee_row)
 
         # 绑定高度
         content.bind(minimum_height=content.setter("height"))
 
         super().__init__(
-            title="本周赏罚设置 [+]",
+            title="本周赏罚设置",
             content=content,
             collapsed=True,
             **kwargs,
@@ -278,6 +281,7 @@ class BetConfigSection(CollapsibleGroup):
             "base_reward": "完成奖励金额",
             "extra_reward": "超额单任务奖励",
             "penalty": "未完成惩罚金额",
+            "late_fee_per_day": "每日滞纳金金额",
         }
         dialog = _EditDialog(
             label=label_map.get(key, "编辑"),
@@ -302,6 +306,7 @@ class BetConfigSection(CollapsibleGroup):
                 base_reward=self._config["base_reward"],
                 extra_reward=self._config["extra_reward"],
                 penalty=self._config["penalty"],
+                late_fee_per_day=self._config.get("late_fee_per_day", 10.0),
             )
         except Exception:
             pass
@@ -315,9 +320,10 @@ class BetConfigSection(CollapsibleGroup):
                 self._config["base_reward"] = float(getattr(config, "base_reward", 50))
                 self._config["extra_reward"] = float(getattr(config, "extra_reward", 30))
                 self._config["penalty"] = float(getattr(config, "penalty", 50))
+                self._config["late_fee_per_day"] = float(getattr(config, "late_fee_per_day", 10))
 
                 # 更新显示
-                for key in ("base_reward", "extra_reward", "penalty"):
+                for key in ("base_reward", "extra_reward", "penalty", "late_fee_per_day"):
                     label = getattr(self, f"_{key}_label", None)
                     if label:
                         label.text = str(int(self._config[key]))

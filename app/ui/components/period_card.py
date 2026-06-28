@@ -14,9 +14,12 @@ from typing import Any
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 
+from app.ui.components.glass_bg import draw_glass_card_bg
 from app.ui.components.pixel_button import PixelButton
+from app.ui.fonts import emj
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -116,16 +119,18 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         self._summary_label = Label(
             text=self._get_time_range_text(),
             font_size=FONT_SIZE_BODY,
-            color=self._to_rgba(TEXT_GRAY),
+            color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, 1),
             halign="left", valign="middle",
+            markup=True,
         )
         # 完成徽章 — 放在 header 内，默认不可见
         self._check_label = Label(
             text="", font_size=FONT_SIZE_BODY,
-            color=self._to_rgba(DOPAMINE_COLORS["mint"]["light"]),
-            size_hint=(None, 1), width=100,
+            color=self._to_rgba(DOPAMINE_COLORS["mint"]["dark"]),
+            size_hint=(None, 1), width=120,
             halign="left", valign="middle", opacity=0,
+            markup=True,
         )
 
         self._header.add_widget(self._icon_label)
@@ -138,35 +143,38 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         self._content_area = BoxLayout(
             orientation="vertical",
             size_hint=(1, None), height=0, opacity=0,
-            padding=[CARD_PADDING, GRID_UNIT, CARD_PADDING, GRID_UNIT // 2],
+            padding=[CARD_PADDING, GRID_UNIT, CARD_PADDING, GRID_UNIT],
             spacing=GRID_UNIT,
         )
 
         self._action_btn = PixelButton(
-            text="签到", color=COLORS["PRIMARY_YELLOW"],
+            text=f"{emj('✍️')} 签到", color=COLORS["PRIMARY_YELLOW"],
             size_mode="large", size_hint=(1, None),
+            markup=True,
         )
         self._action_btn.bind(on_press=lambda _: self._on_action())
         self._content_area.add_widget(self._action_btn)
 
-        # 吉祥物动画插槽 — 平时 height=0 不占空间，动画时展开
-        self._mascot_row = BoxLayout(
-            size_hint=(1, None),
-            height=0,
-        )
-        self._content_area.add_widget(self._mascot_row)
-
-        # 请假按钮 — 仅 morning/afternoon 时段显示，evening 是加班时段不参与
+        # 请假按钮 — 紧挨签到按钮下方，仅 morning/afternoon 时段显示
         self._can_leave = period_name in ("morning", "afternoon")
         self._leave_btn = PixelButton(
-            text="请假",
+            text=f"{emj('🛌')} 请假",
             color=COLORS["CARD_SHADOW"],
             size_mode="small",
             size_hint=(1, None),
             disabled=True,
+            markup=True,
         )
         self._leave_btn.bind(on_press=lambda _b: self._on_leave_press())
         self._content_area.add_widget(self._leave_btn)
+
+        # 吉祥物动画插槽 — FloatLayout 确保吉祥物居中锚定不动
+        # 平时 height=0 不占空间，动画时展开并绘制像素边框
+        self._mascot_row = FloatLayout(
+            size_hint=(1, None),
+            height=0,
+        )
+        self._content_area.add_widget(self._mascot_row)
 
         self.add_widget(self._content_area)
 
@@ -245,6 +253,13 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         self._is_current = value
         self._update_display()
 
+    def set_time_range(self, start: str, end: str) -> None:
+        """动态更新时段起止时间（响应用户设置变更）。"""
+        self._start_time = start
+        self._end_time = end
+        self._summary_label.text = self._get_time_range_text()
+        self._update_display()
+
     # ── 展开 / 折叠 / 完成 ──
 
     def expand(self, animate: bool = True) -> None:
@@ -317,24 +332,24 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
     def _update_display(self) -> None:
         # 摘要文字
         if self._card_state == "absent":
-            self._summary_label.text = "旷工"
+            self._summary_label.text = f"{emj('🚨')} 旷工"
             self._summary_label.color = self._to_rgba(SEMANTIC_COLORS["absent"]["icon"])
         elif self._card_state == "completed":
             parts = []
             if self._checkin_time:
                 parts.append(f"{self._get_status_text()} {self._checkin_time}")
             if self._checkout_time:
-                checkout_label = "早退" if self._is_early_checkout() else "签退"
+                checkout_label = f"{emj('🏃')} 早退" if self._is_early_checkout() else f"{emj('🌙')} 签退"
                 parts.append(f"{checkout_label} {self._checkout_time}")
-            self._summary_label.text = "  ".join(parts) if parts else "已完成"
-            color = COLORS["PRIMARY_YELLOW"] if self._is_violation() else DOPAMINE_COLORS["mint"]["light"]
+            self._summary_label.text = "  ".join(parts) if parts else f"{emj('✅')} 已完成"
+            color = COLORS["PRIMARY_DARK"] if self._is_violation() else DOPAMINE_COLORS["mint"]["dark"]
             self._summary_label.color = self._to_rgba(color)
         elif self._card_state == "expanded":
             self._summary_label.text = self._get_time_range_text()
             self._summary_label.color = self._to_rgba(TEXT_BROWN)
         else:
             self._summary_label.text = self._get_time_range_text()
-            self._summary_label.color = self._to_rgba(TEXT_GRAY)
+            self._summary_label.color = self._to_rgba(TEXT_BROWN)
 
         # 内容区可见性 — 吉祥物动画期间不重置高度
         is_expanded = self._card_state == "expanded"
@@ -350,7 +365,7 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._action_btn.size_hint_y = None
             self._action_btn.height = 0
         elif self._has_checked_in and not self._has_checked_out:
-            self._action_btn.text = "签退"
+            self._action_btn.text = f"{emj('✍️')} 签退"
             self._action_btn.set_color(DOPAMINE_COLORS["mint"]["light"])
             self._action_btn.disabled = False
             self._action_btn.opacity = 1
@@ -363,7 +378,7 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._action_btn.size_hint_y = None
             self._action_btn.height = 0
         else:
-            self._action_btn.text = "签到"
+            self._action_btn.text = f"{emj('✍️')} 签到"
             self._action_btn.set_color(COLORS["PRIMARY_YELLOW"])
             self._action_btn.disabled = not self._is_current
             self._action_btn.opacity = 1
@@ -374,10 +389,10 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         if self._card_state == "completed":
             if self._is_violation():
                 self._check_label.text = self._get_status_text()
-                self._check_label.color = self._to_rgba(COLORS["PRIMARY_YELLOW"])
+                self._check_label.color = self._to_rgba(COLORS["PRIMARY_DARK"])
             else:
-                self._check_label.text = "[OK]"
-                self._check_label.color = self._to_rgba(DOPAMINE_COLORS["mint"]["light"])
+                self._check_label.text = f"{emj('✅')} 完成"
+                self._check_label.color = self._to_rgba(DOPAMINE_COLORS["mint"]["dark"])
             self._check_label.opacity = 1.0
         else:
             self._check_label.opacity = 0
@@ -397,10 +412,15 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
 
     def _get_status_text(self) -> str:
         status_map = {
-            "normal": "正常", "late": "迟到", "early_leave": "早退",
-            "absent": "旷工", "leave": "请假", "shooting": "撮影中", "pending": "签到",
+            "normal": f"{emj('✅')} 正常",
+            "late": f"{emj('⏰')} 迟到",
+            "early_leave": f"{emj('🏃')} 早退",
+            "absent": f"{emj('🚨')} 旷工",
+            "leave": f"{emj('🛌')} 请假",
+            "shooting": f"{emj('📸')} 拍摄中",
+            "pending": f"{emj('✍️')} 签到",
         }
-        return status_map.get(self._status, "签到")
+        return status_map.get(self._status, f"{emj('✍️')} 签到")
 
     # ── 交互 ──
 
@@ -457,7 +477,7 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
     # ── 吉祥物动画 ──
 
     def show_mascot_widget(self, widget: Any) -> None:
-        """在卡片内展示吉祥物动画 widget，同时扩展卡片高度。"""
+        """在卡片内展示吉祥物动画 widget，同时扩展卡片高度并绘制边框。"""
         self._mascot_active = True
         self._mascot_row.clear_widgets()
         self._mascot_row.add_widget(widget)
@@ -465,19 +485,44 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         self._content_area.height = self._EXPANDED_HEIGHT_ANIM - self._COLLAPSED_HEIGHT
         self._content_area.opacity = 1.0
         self.height = self._EXPANDED_HEIGHT_ANIM
+        # 绑定重绘以更新像素边框
+        self._mascot_row.bind(pos=self._draw_mascot_border, size=self._draw_mascot_border)
+        self._draw_mascot_border()
 
     def hide_mascot_widget(self) -> None:
-        """移除吉祥物 widget，卡片恢复正常展开高度。"""
+        """移除吉祥物 widget，卡片恢复正常展开高度，清除边框。"""
         self._mascot_row.clear_widgets()
         self._mascot_row.height = 0
         self._mascot_active = False
+        self._mascot_row.unbind(pos=self._draw_mascot_border, size=self._draw_mascot_border)
+        self._mascot_row.canvas.before.clear()
+        self._mascot_row.canvas.after.clear()
         self._content_area.height = self._EXPANDED_HEIGHT - self._COLLAPSED_HEIGHT
         self.height = self._EXPANDED_HEIGHT
+
+    def _draw_mascot_border(self, *args: Any) -> None:
+        """在吉祥物行周围绘制像素边框，稳定动画视觉。"""
+        self._mascot_row.canvas.before.clear()
+        self._mascot_row.canvas.after.clear()
+        if not self._mascot_active or self._mascot_row.height <= 0:
+            return
+        x, y = self._mascot_row.pos
+        w, h = self._mascot_row.size
+        bw = BORDER_WIDTH
+        with self._mascot_row.canvas.before:
+            # 内部背景 — 与卡片同色的白底，让动画不穿帮
+            Color(*self._to_rgba(CARD_WHITE))
+            Rectangle(pos=(x, y), size=(w, h))
+            # 像素边框 — 茶色 2px
+            Color(*self._to_rgba(TEXT_BROWN, 0.4))
+            Rectangle(pos=(x, y), size=(w, bw))
+            Rectangle(pos=(x, y + h - bw), size=(w, bw))
+            Rectangle(pos=(x, y), size=(bw, h))
+            Rectangle(pos=(x + w - bw, y), size=(bw, h))
 
     # ── 像素边框 ──
 
     def _redraw(self, *args: Any) -> None:
-        self.canvas.before.clear()
         x, y = self.pos
         w, h = self.size
         bw = BORDER_WIDTH
@@ -494,14 +539,4 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         else:
             border_light, border_dark = "#FFFFFF", COLORS["CARD_SHADOW"]
 
-        with self.canvas.before:
-            Color(*self._to_rgba(SHADOW_BLACK))
-            Rectangle(pos=(x + 2, y - 2), size=(w, h))
-            Color(*self._to_rgba(CARD_WHITE))
-            Rectangle(pos=(x, y), size=(w, h))
-            Color(*self._to_rgba(border_light))
-            Rectangle(pos=(x, y + h - bw), size=(w, bw))
-            Rectangle(pos=(x, y), size=(bw, h))
-            Color(*self._to_rgba(border_dark))
-            Rectangle(pos=(x, y), size=(w, bw))
-            Rectangle(pos=(x + w - bw, y), size=(bw, h))
+        draw_glass_card_bg(self, border_light=border_light, border_dark=border_dark)

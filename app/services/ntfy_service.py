@@ -202,6 +202,9 @@ class NtfyPushService:
             return f"{period_cn}签退 {t} {emoji} {label}".strip()
 
         if event_type == EventType.ATTENDANCE_JUDGED:
+            if status in ("leave", "shooting"):
+                t = payload.get("checkin_time", "")
+                return f"{period_cn}{label} {t} {emoji}".strip()
             if status not in ("absent_morning", "absent_afternoon"):
                 return None
             end_key = "morning_end" if status == "absent_morning" else "afternoon_end"

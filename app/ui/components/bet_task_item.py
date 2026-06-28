@@ -17,6 +17,7 @@ from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
 from app.models.ledger import BetTask
+from app.ui.components.glass_bg import draw_glass_card_bg
 from app.ui.assets.loader import SpriteLoader
 from app.ui.tokens import (
     BORDER_WIDTH,
@@ -110,7 +111,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         self._qty_label = Label(
             text=f"×{task.target_qty}",
             font_size=FONT_SIZE_SMALL,
-            color=self._to_rgba(DOPAMINE_COLORS["warm_orange"]["light"]),
+            color=self._to_rgba(DOPAMINE_COLORS["warm_orange"]["dark"]),
             size_hint=(None, None),
             size=(40, 20),
             halign="center",
@@ -336,6 +337,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         target = self._task.target_qty
         already_done = self._task.is_completed
         self._task.current_qty = cur
+        self._task.is_extra = 1 if cur > target else 0
         if cur >= target and not already_done:
             self._task.is_completed = 1
             self._refresh_desc()
@@ -358,6 +360,8 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         self._task.current_qty = cur
         if cur < target and self._task.is_completed:
             self._task.is_completed = 0
+        if cur <= target:
+            self._task.is_extra = 0
         self._refresh_desc()
         if self._on_progress_cb and self._task.id is not None:
             self._on_progress_cb(self._task.id, -1)
@@ -511,27 +515,12 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
     # ---- Canvas 绘制 ----
 
     def _redraw(self, *args: Any) -> None:
-        """绘制 2px 边框 + 阴影 + 排列子 widget。"""
+        """绘制玻璃背景 + 阴影 + 排列子 widget。"""
         self._layout_labels(self._content_offset)
-
-        self.canvas.before.clear()
-        x, y = self.pos
-        w, h = self.size
-        bw = BORDER_WIDTH
-
-        with self.canvas.before:
-            Color(*self._to_rgba(COLORS["SHADOW_BLACK"]))
-            Rectangle(pos=(x + 2, y - 2), size=(w, h))
-            Color(*self._to_rgba(CARD_WHITE))
-            Rectangle(pos=(x, y), size=(w, h))
-            Color(*self._to_rgba("#FFFFFF"))
-            Rectangle(pos=(x, y + h - bw), size=(w, bw))
-            Rectangle(pos=(x, y), size=(bw, h))
-            Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
-            Rectangle(pos=(x, y), size=(w, bw))
-            Rectangle(pos=(x + w - bw, y), size=(bw, h))
+        draw_glass_card_bg(self)
 
         # 首次布局完成后开启 widget 可见性 (防止 (0,0) 闪现)
+        w, h = self.size
         if not self._layout_initialized and w > 0 and h > 0:
             self._layout_initialized = True
             self._check_box.opacity = 1

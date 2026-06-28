@@ -14,7 +14,7 @@ from app.ui.assets.loader import (
     SpriteLoader,
     preload_all,
 )
-from app.ui.fonts import load_pixel_fonts
+from app.ui.fonts import apply_global_font
 
 
 def _get_assets_dir() -> Path:
@@ -180,8 +180,7 @@ class TestFonts:
         assert (font_dir / "PressStart2P-Regular.ttf").exists()
         assert (font_dir / "Silkscreen-Regular.ttf").exists()
 
-    def test_load_pixel_fonts_returns_dict(self) -> None:
-        loaded = load_pixel_fonts()
-        assert isinstance(loaded, dict)
-        # 至少应该加载了一个字体
-        assert len(loaded) >= 1
+    def test_apply_global_font_registers_roboto(self) -> None:
+        from kivy.core.text import LabelBase
+        apply_global_font()
+        assert "Roboto" in LabelBase._fonts

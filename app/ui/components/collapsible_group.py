@@ -1,27 +1,22 @@
 """CollapsibleGroup — 像素折叠分组组件。
 
-像素三角箭头（▶ 折叠 / ▼ 展开），标题栏 + 可折叠内容区。
-阶梯式展开动画（200ms，每 8px 一步）。
+标题栏（点击折叠/展开） + 可折叠内容区。
+玻璃板（Minecraft 玻璃质感）卡片背景覆盖整个组件，折叠态也有框。
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from kivy.clock import Clock
-from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
+from app.ui.components.glass_bg import draw_glass_card_bg
 from app.ui.tokens import (
-    BORDER_WIDTH,
     CARD_PADDING,
-    CARD_WHITE,
-    COLORS,
     FONT_SIZE_BODY,
     GRID_UNIT,
-    SHADOW_BLACK,
     TEXT_BROWN,
 )
 
@@ -59,16 +54,6 @@ class CollapsibleGroup(BoxLayout):  # type: ignore[misc]
             spacing=GRID_UNIT,
         )
 
-        self._arrow_label = Label(
-            text="[-]" if not collapsed else "[+]",
-            font_size=FONT_SIZE_BODY,
-            color=self._to_rgba(TEXT_BROWN),
-            size_hint=(None, 1),
-            width=24,
-            halign="center",
-            valign="middle",
-        )
-
         self._title_label = Label(
             text=title,
             font_size=FONT_SIZE_BODY,
@@ -77,8 +62,6 @@ class CollapsibleGroup(BoxLayout):  # type: ignore[misc]
             halign="left",
             valign="middle",
         )
-
-        self._header.add_widget(self._arrow_label)
         self._header.add_widget(self._title_label)
 
         # 内容区
@@ -89,21 +72,26 @@ class CollapsibleGroup(BoxLayout):  # type: ignore[misc]
             opacity=0 if collapsed else 1,
         )
 
-        if content:
+        if content and not collapsed:
             self._content_box.add_widget(content)
+        if content:
             content.bind(height=self._on_content_size_change)
 
         self.add_widget(self._header)
         self.add_widget(self._content_box)
 
-        self._update_height()
+        # 整个组件的玻璃板背景（折叠/展开都有框，使用默认亮色边框）
         self.bind(pos=self._redraw, size=self._redraw)
+
+        self._update_height()
         self._redraw()
 
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
         h = hex_color.lstrip("#")
         return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0, alpha)
+
+    # ── 折叠/展开 ──
 
     @property
     def collapsed(self) -> bool:
@@ -124,49 +112,25 @@ class CollapsibleGroup(BoxLayout):  # type: ignore[misc]
             self.collapse()
 
     def expand(self) -> None:
-        """展开内容区。"""
+        """展开内容区（直接到位，无逐帧动画）。"""
         if not self._collapsed:
             return
         self._collapsed = False
-        self._arrow_label.text = "[-]"
+        # 重新添加内容 widget（折叠时被移除了）
+        if self._content_widget:
+            self._content_box.add_widget(self._content_widget)
         target_h = self._content_widget.height if self._content_widget else 0
-
-        def _step_expand(step: int, total_steps: int, dt: float) -> None:
-            progress = (step + 1) / total_steps
-            self._content_box.height = target_h * progress
-            self._content_box.opacity = progress
-            self._update_height()
-
-        steps = max(1, int(target_h) // GRID_UNIT)
-        for i in range(steps):
-            Clock.schedule_once(lambda dt, s=i: _step_expand(s, steps, dt), i * 0.2 / steps)
-        Clock.schedule_once(lambda dt: self._finalize_expand(target_h), 0.2 + 0.05)
-
-    def _finalize_expand(self, target_h: int) -> None:
         self._content_box.height = target_h
         self._content_box.opacity = 1
         self._update_height()
 
     def collapse(self) -> None:
-        """折叠内容区。"""
+        """折叠内容区（移除子 widget 防止触摸泄漏，直接到位，无逐帧动画）。"""
         if self._collapsed:
             return
         self._collapsed = True
-        self._arrow_label.text = "[+]"
-        start_h = self._content_box.height
-
-        def _step_collapse(step: int, total_steps: int, dt: float) -> None:
-            progress = 1 - (step + 1) / total_steps
-            self._content_box.height = start_h * max(0, progress)
-            self._content_box.opacity = max(0, progress)
-            self._update_height()
-
-        steps = max(1, int(start_h) // GRID_UNIT)
-        for i in range(steps):
-            Clock.schedule_once(lambda dt, s=i: _step_collapse(s, steps, dt), i * 0.2 / steps)
-        Clock.schedule_once(lambda dt: self._finalize_collapse(), 0.2 + 0.05)
-
-    def _finalize_collapse(self) -> None:
+        # 移除内容区子 widget，防止折叠态误触透传到其他区域
+        self._content_box.clear_widgets()
         self._content_box.height = 0
         self._content_box.opacity = 0
         self._update_height()
@@ -175,9 +139,9 @@ class CollapsibleGroup(BoxLayout):  # type: ignore[misc]
         """替换内容区 Widget。"""
         self._content_box.clear_widgets()
         self._content_widget = widget
-        self._content_box.add_widget(widget)
         widget.bind(height=self._on_content_size_change)
         if not self._collapsed:
+            self._content_box.add_widget(widget)
             self._content_box.height = widget.height
         self._update_height()
 
@@ -194,20 +158,10 @@ class CollapsibleGroup(BoxLayout):  # type: ignore[misc]
         self._redraw()
 
     def _redraw(self, *args: Any) -> None:
-        """绘制像素卡片边框。"""
-        self.canvas.before.clear()
-        x, y = self.pos
-        w, h = self.size
-        bw = BORDER_WIDTH
+        """在整个组件上绘制 Minecraft 玻璃板卡片背景。
 
-        with self.canvas.before:
-            Color(*self._to_rgba(SHADOW_BLACK))
-            Rectangle(pos=(x + 2, y - 2), size=(w, h))
-            Color(*self._to_rgba(CARD_WHITE))
-            Rectangle(pos=(x, y), size=(w, h))
-            Color(*self._to_rgba("#FFFFFF"))
-            Rectangle(pos=(x, y + h - bw), size=(w, bw))
-            Rectangle(pos=(x, y), size=(bw, h))
-            Color(*self._to_rgba(COLORS["CARD_SHADOW"]))
-            Rectangle(pos=(x, y), size=(w, bw))
-            Rectangle(pos=(x + w - bw, y), size=(bw, h))
+        使用默认亮色像素边框（白色亮面 + 浅灰蓝暗面），
+        与 BetTaskItem / StatusBox / TaskInlineList 玻璃框效果一致。
+        折叠和展开状态都有玻璃框。
+        """
+        draw_glass_card_bg(self)

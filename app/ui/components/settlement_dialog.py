@@ -104,6 +104,10 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
         completed = cast(int, summary.get("completed", 0) or 0)
         total_tasks = cast(int, summary.get("total_tasks", 0) or 0)
         extra_count = cast(int, summary.get("extra_count", 0) or 0)
+        week_status = str(summary.get("status", "active"))
+        accrued_late_fees = float(summary.get("accrued_late_fees", 0) or 0)
+        late_fee_per_day = float(summary.get("late_fee_per_day", 10) or 10)
+        late_start_date = summary.get("late_start_date")
 
         config = summary.get("config")
         if config and hasattr(config, "base_reward"):
@@ -115,9 +119,17 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
             extra_reward_val = 30.0
             penalty_val = 50.0
 
+        self._is_late = week_status == "late"
         uncompleted = total_tasks - completed
         self._is_success = uncompleted == 0 and completed > 0
-        if self._is_success:
+
+        if self._is_late:
+            # 滞纳期结算：罚金已付，无新奖励
+            reward_total = 0.0
+            extra_total = 0.0
+            penalty_total = 0.0
+            net = -accrued_late_fees
+        elif self._is_success:
             reward_total = base_reward_val
             extra_total = extra_reward_val * extra_count
             penalty_total = 0.0
@@ -154,12 +166,29 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
             spacing=GRID_UNIT // 2,
         )
 
-        details = [
+        details: list[tuple[str, str, str]] = [
             ("完成", f"{completed}/{total_tasks}", DOPAMINE_COLORS["mint"]["light"]),
             ("超额", f"{extra_count}", DOPAMINE_COLORS["warm_orange"]["light"]),
             ("", "", ""),
-            ("奖励", f"+{int(reward_total)}", COLORS["PRIMARY_YELLOW"]),
         ]
+
+        if self._is_late:
+            # 滞纳期结算详情
+            # 计算滞纳天数
+            late_days = 0
+            if late_start_date:
+                try:
+                    from datetime import date as dt_date
+                    late_start_dt = dt_date.fromisoformat(str(late_start_date))
+                    late_days = (dt_date.today() - late_start_dt).days + 1
+                except Exception:
+                    pass
+            details.append(("滞纳天数", f"{late_days}天", DOPAMINE_COLORS["coral"]["light"]))
+            details.append(("每日滞纳金", f"-{int(late_fee_per_day)}", DOPAMINE_COLORS["coral"]["light"]))
+            details.append(("累计滞纳金", f"-{int(accrued_late_fees)}", DOPAMINE_COLORS["coral"]["light"]))
+        else:
+            details.append(("奖励", f"+{int(reward_total)}", COLORS["PRIMARY_YELLOW"]))
+
         if extra_total > 0:
             details.append(("超额奖励", f"+{int(extra_total)}", COLORS["PRIMARY_YELLOW"]))
             total_label = f"+{int(reward_total + extra_total)}"
@@ -277,8 +306,10 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
             return
         self._is_settling = True
 
-        # 调用结算
+        # 滞纳期结算前先补扣当日滞纳金
         try:
+            if self._is_late:
+                self._bet_service.accrue_late_fees(self._week_start)
             self._bet_service.settle_week(self._week_start)
         except Exception:
             self._is_settling = False

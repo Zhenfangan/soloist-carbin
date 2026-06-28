@@ -31,6 +31,7 @@ class EventType(Enum):
     REPORT_GENERATED = "report_generated"
     SETTINGS_CHANGED = "settings_changed"
     WEEK_SETTLED = "week_settled"
+    BET_LATE_STARTED = "bet_late_started"
     PROMISE_SET = "promise_set"
 
 

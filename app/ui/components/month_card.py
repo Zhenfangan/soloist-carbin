@@ -11,6 +11,7 @@ from kivy.graphics import Color, Rectangle
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 
+from app.ui.components.glass_bg import draw_glass_card_bg
 from app.models.history import MonthSummary
 from app.ui.tokens import (
     BORDER_WIDTH,
@@ -46,16 +47,16 @@ class MonthCard(FloatLayout):  # type: ignore[misc]
             **kwargs,
         )
         self._month = month_summary
-        self.height = 80
+        self.height = 96
 
         # 月份标题
         month_name = MONTH_NAMES[month_summary.month] if 1 <= month_summary.month <= 12 else f"{month_summary.month}月"
         self._title_label = Label(
             text=month_name,
-            font_size=FONT_SIZE_BODY,
+            font_size=16,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, None),
-            size=(100, 24),
+            size=(100, 28),
             pos_hint={"x": 0.05, "y": 0.65},
             halign="left",
             valign="middle",
@@ -70,33 +71,51 @@ class MonthCard(FloatLayout):  # type: ignore[misc]
         )
         self._stats_label = Label(
             text=stats_text,
-            font_size=FONT_SIZE_SMALL,
-            color=self._to_rgba(TEXT_GRAY),
+            font_size=13,
+            color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, None),
-            size=(350, 20),
+            size=(400, 24),
             pos_hint={"x": 0.05, "y": 0.40},
             halign="left",
             valign="middle",
         )
         self.add_widget(self._stats_label)
 
-        # 总时长 + 奖惩
+        # 总时长 + 奖惩 + 对赌
         penalty = month_summary.total_ledger
+        bet_net = month_summary.bet_net
         bottom_text = (
             f"总时长 {month_summary.total_hours:.1f}h"
-            f"  奖惩 {penalty:+g}"
+            f"  考勤 {penalty:+g}"
         )
         self._bottom_label = Label(
             text=bottom_text,
-            font_size=FONT_SIZE_SMALL,
+            font_size=13,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, None),
-            size=(350, 20),
+            size=(400, 24),
             pos_hint={"x": 0.05, "y": 0.15},
             halign="left",
             valign="middle",
         )
         self.add_widget(self._bottom_label)
+
+        # 对赌行
+        if month_summary.bet_cycles > 0:
+            bet_sign = "+" if bet_net >= 0 else ""
+            bet_text = f"对赌 {month_summary.bet_cycles}周期  净额 {bet_sign}{bet_net:.0f}"
+            bet_color = "#50E8B0" if bet_net >= 0 else "#FF6B8A"
+            self._bet_label = Label(
+                text=bet_text,
+                font_size=13,
+                color=self._to_rgba(bet_color),
+                size_hint=(None, None),
+                size=(400, 24),
+                pos_hint={"x": 0.05, "y": 0.0},
+                halign="left",
+                valign="middle",
+            )
+            self.add_widget(self._bet_label)
 
         self.bind(pos=self._redraw, size=self._redraw)
 
@@ -111,29 +130,5 @@ class MonthCard(FloatLayout):  # type: ignore[misc]
         )
 
     def _redraw(self, *args: Any) -> None:
-        """绘制 2px 边框 + 2px 右移纯黑阴影。"""
-        self.canvas.before.clear()
-        x, y = self.pos
-        w, h = self.size
-        bw = BORDER_WIDTH
-        shadow_offset = 2
-
-        with self.canvas.before:
-            # 2px 右移纯黑阴影
-            Color(*self._to_rgba(SHADOW_BLACK))
-            Rectangle(pos=(x + bw + shadow_offset, y - shadow_offset), size=(w - 2 * bw, h))
-
-            # 背景填充
-            Color(*self._to_rgba(CARD_WHITE))
-            Rectangle(pos=(x + bw, y + bw), size=(w - 2 * bw, h - 2 * bw))
-
-            # 2px 边框
-            Color(*self._to_rgba(TEXT_BROWN))
-            # top
-            Rectangle(pos=(x, y + h - bw), size=(w, bw))
-            # bottom
-            Rectangle(pos=(x, y), size=(w, bw))
-            # left
-            Rectangle(pos=(x, y), size=(bw, h))
-            # right
-            Rectangle(pos=(x + w - bw, y), size=(bw, h))
+        """绘制玻璃背景 + 2px 茶色边框。"""
+        draw_glass_card_bg(self, border_light=TEXT_BROWN, border_dark=TEXT_BROWN, inset=2)

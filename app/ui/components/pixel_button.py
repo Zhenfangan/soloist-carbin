@@ -16,6 +16,7 @@ from app.ui.tokens import (
     BTN_HEIGHT,
     FONT_SIZE_BODY,
     FONT_SIZE_SMALL,
+    FONT_SIZE_TITLE,
     PRIMARY_DARK,
     PRIMARY_YELLOW,
     TEXT_BROWN,
@@ -60,7 +61,12 @@ class PixelButton(Button):  # type: ignore[misc]
         self.background_color = (0, 0, 0, 0)  # 透明底，用 canvas 画
         self.color = self._to_rgba(TEXT_BROWN)
         self.disabled_color = self._to_rgba(TEXT_BROWN)
-        self.font_size = FONT_SIZE_BODY if size_mode != "small" else FONT_SIZE_SMALL
+        if size_mode == "large":
+            self.font_size = FONT_SIZE_TITLE
+        elif size_mode == "small":
+            self.font_size = FONT_SIZE_SMALL
+        else:
+            self.font_size = FONT_SIZE_BODY
         self.disabled = disabled
         self.opacity = 1.0 if not disabled else 0.5
 

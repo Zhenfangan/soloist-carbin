@@ -70,6 +70,8 @@ class TestCheckinScreenRefresh:
         checkin_svc.check_out.return_value = SimpleNamespace(
             record_id=1, period="morning", checkin_time="09:00", checkout_time="12:00",
         )
+        checkin_svc.get_period_end_time.return_value = None
+        checkin_svc.mark_absent.return_value = None
 
         return checkin_svc, promise_svc, motivation_svc, report_svc, shooting_svc
 
@@ -138,21 +140,23 @@ class TestCheckinScreenRefresh:
         screen._status_box.update_status.assert_called_once()
 
     def test_checkin_triggers_get_today_status(self, screen, services) -> None:
-        """签到后应触发 get_today_status 来刷新数据。"""
+        """签到后 _refresh_status 应调用 get_today_status 刷新数据。"""
         checkin_svc = services[0]
-        # reset mock to clear _load_data 调用
         checkin_svc.get_today_status.reset_mock()
 
         screen._do_checkin("morning")
+        # 手动触发 refresh（实际由 panel dismiss 回调触发）
+        screen._refresh_status()
 
-        # 验证 get_today_status 被 _refresh_status 调用
         assert checkin_svc.get_today_status.called
 
     def test_checkout_triggers_get_today_status(self, screen, services) -> None:
-        """签退后应触发 get_today_status 来刷新数据。"""
+        """签退后 _refresh_status 应调用 get_today_status 刷新数据。"""
         checkin_svc = services[0]
         checkin_svc.get_today_status.reset_mock()
 
+        # _on_checkout 需要 get_period_end_time 返回 None 才跳过确认框
         screen._on_checkout("morning")
+        screen._refresh_status()
 
         assert checkin_svc.get_today_status.called

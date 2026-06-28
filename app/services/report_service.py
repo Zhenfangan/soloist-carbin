@@ -74,9 +74,9 @@ body { font-family: sans-serif; padding: 16px; max-width: 400px; margin: 0 auto;
   {% if data.overtime_hours > 0 %}<p>加班: {{ "%.1f"|format(data.overtime_hours) }}h</p>{% endif %}
 </div>
 
-{% if data.total_work_hours >= 8 %}
+{% if data.total_work_hours >= data.threshold_hours %}
 <div class="overtime">
-  ✨ 今天工作超过 8 小时，太棒了！给自己一个大大的赞！✨
+  ✨ 今天工作超过 {{ "%.0f"|format(data.threshold_hours) }} 小时，太棒了！给自己一个大大的赞！✨
 </div>
 {% endif %}
 

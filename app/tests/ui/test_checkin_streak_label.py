@@ -25,6 +25,6 @@ def test_streak_label_height_restored_when_text_set() -> None:
     if hasattr(screen, "_update_streak_height"):
         screen._update_streak_height()
 
-    assert screen._streak_label.height == 20, (
-        f"非空 text 时 height 应为 20, 实际 {screen._streak_label.height}"
+    assert screen._streak_label.height == 32, (
+        f"非空 text 时 height 应为 32, 实际 {screen._streak_label.height}"
     )

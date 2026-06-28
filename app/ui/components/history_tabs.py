@@ -47,7 +47,7 @@ class HistoryTabs(BoxLayout):  # type: ignore[misc]
         self._on_tab_change: Callable[[int], Any] | None = on_tab_change
         self._tab_buttons: list[Button] = []
 
-        tab_labels = ["周", "月", "年"]
+        tab_labels = ["周期", "月", "年"]
         for i, label in enumerate(tab_labels):
             btn = Button(
                 text=label,

@@ -17,6 +17,7 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 
 from app.models.history import DayCard as DayCardModel  # noqa: N813
+from app.ui.components.glass_bg import draw_glass_card_bg
 from app.ui.assets.loader import IconLoader
 from app.ui.tokens import (
     BORDER_WIDTH,
@@ -79,7 +80,7 @@ class DayCard(FloatLayout):  # type: ignore[misc]
         self._on_click = on_click
 
         # 卡片高度由内容撑起
-        self.height = 80
+        self.height = 96
 
         # 日期标签
         dt = datetime.strptime(day_summary.date, "%Y-%m-%d")
@@ -87,10 +88,10 @@ class DayCard(FloatLayout):  # type: ignore[misc]
         date_text = f"{dt.month}月{dt.day}日 {weekday_name}"
         self._date_label = Label(
             text=date_text,
-            font_size=FONT_SIZE_BODY,
+            font_size=16,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, None),
-            size=(200, 24),
+            size=(200, 28),
             pos_hint={"x": 0.05, "y": 0.65},
             halign="left",
             valign="middle",
@@ -113,10 +114,10 @@ class DayCard(FloatLayout):  # type: ignore[misc]
 
         self._status_label = Label(
             text=status_text,
-            font_size=FONT_SIZE_SMALL,
-            color=self._to_rgba(TEXT_GRAY),
+            font_size=13,
+            color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, None),
-            size=(300, 20),
+            size=(340, 24),
             pos_hint={"x": 0.05, "y": 0.40},
             halign="left",
             valign="middle",
@@ -131,10 +132,10 @@ class DayCard(FloatLayout):  # type: ignore[misc]
 
         self._hours_label = Label(
             text=bottom_text,
-            font_size=FONT_SIZE_SMALL,
+            font_size=13,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, None),
-            size=(300, 20),
+            size=(340, 24),
             pos_hint={"x": 0.05, "y": 0.15},
             halign="left",
             valign="middle",
@@ -144,10 +145,10 @@ class DayCard(FloatLayout):  # type: ignore[misc]
         # "点击查看复盘" 提示
         self._hint_label = Label(
             text="点击查看复盘 →",
-            font_size=FONT_SIZE_SMALL,
-            color=self._to_rgba(TEXT_GRAY),
+            font_size=13,
+            color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, None),
-            size=(150, 20),
+            size=(150, 24),
             pos_hint={"right": 0.95, "y": 0.15},
             halign="right",
             valign="middle",
@@ -178,36 +179,24 @@ class DayCard(FloatLayout):  # type: ignore[misc]
         )
 
     def _redraw(self, *args: Any) -> None:
-        """绘制 2px 边框 + 2px 右移纯黑阴影。"""
-        self.canvas.before.clear()
-        x, y = self.pos
-        w, h = self.size
-        bw = BORDER_WIDTH
-        shadow_offset = 2
-
-        with self.canvas.before:
-            # 2px 右移纯黑阴影
-            Color(*self._to_rgba(SHADOW_BLACK))
-            Rectangle(pos=(x + bw + shadow_offset, y - shadow_offset), size=(w - 2 * bw, h))
-
-            # 背景填充（拍摄日用橙色底）
-            if self._day.is_shooting:
-                bg_color = SEMANTIC_COLORS["shooting"]["block"]
-            else:
-                bg_color = CARD_WHITE
-            Color(*self._to_rgba(bg_color))
-            Rectangle(pos=(x + bw, y + bw), size=(w - 2 * bw, h - 2 * bw))
-
-            # 2px 边框
-            Color(*self._to_rgba(TEXT_BROWN))
-            # top
-            Rectangle(pos=(x, y + h - bw), size=(w, bw))
-            # bottom
-            Rectangle(pos=(x, y), size=(w, bw))
-            # left
-            Rectangle(pos=(x, y), size=(bw, h))
-            # right
-            Rectangle(pos=(x + w - bw, y), size=(bw, h))
+        """绘制 2px 边框 + 玻璃背景（拍摄日保留橙色底）。"""
+        if self._day.is_shooting:
+            self.canvas.before.clear()
+            x, y = self.pos
+            w, h = self.size
+            bw = BORDER_WIDTH
+            with self.canvas.before:
+                Color(*self._to_rgba(SHADOW_BLACK))
+                Rectangle(pos=(x + bw + 2, y - 2), size=(w - 2 * bw, h))
+                Color(*self._to_rgba(SEMANTIC_COLORS["shooting"]["block"]))
+                Rectangle(pos=(x + bw, y + bw), size=(w - 2 * bw, h - 2 * bw))
+                Color(*self._to_rgba(TEXT_BROWN))
+                Rectangle(pos=(x, y + h - bw), size=(w, bw))
+                Rectangle(pos=(x, y), size=(w, bw))
+                Rectangle(pos=(x, y), size=(bw, h))
+                Rectangle(pos=(x + w - bw, y), size=(bw, h))
+        else:
+            draw_glass_card_bg(self, border_light=TEXT_BROWN, border_dark=TEXT_BROWN, inset=2)
 
     def on_touch_down(self, touch: Any) -> bool:
         """点击触发回调。"""

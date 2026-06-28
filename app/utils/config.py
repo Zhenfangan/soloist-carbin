@@ -41,6 +41,7 @@ LEDGER_TYPE_BOYFRIEND_PROMISE = "boyfriend_promise"
 LEDGER_TYPE_BET_REWARD = "bet_reward"
 LEDGER_TYPE_BET_PENALTY = "bet_penalty"
 LEDGER_TYPE_BET_EXTRA = "bet_extra"
+LEDGER_TYPE_BET_LATE_FEE = "bet_late_fee"
 LEDGER_TYPE_SHOOTING_REWARD = "shooting_reward"
 
 # 签退方式

@@ -29,6 +29,7 @@ from app.repositories.sync_repo import SyncRepo  # noqa: E402
 from app.services.bet_service import BetService  # noqa: E402
 from app.services.camera_desktop_mock import DesktopCameraMock  # noqa: E402
 from app.services.checkin_service import CheckinService  # noqa: E402
+from app.services.boyfriend_promise_service import BoyfriendPromiseService  # noqa: E402
 from app.services.history_service import HistoryService  # noqa: E402
 from app.services.motivation_service import MotivationService  # noqa: E402
 from app.services.penalty_service import PenaltyService  # noqa: E402
@@ -40,13 +41,14 @@ from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path  # noqa
 from app.ui.assets.loader import preload_all  # noqa: E402
 from app.ui.fonts import apply_global_font  # noqa: E402
 from app.ui.navigation import AppScreenManager, BottomTabBar  # noqa: E402
+from app.ui.components.time_control_panel import TimeControlPanel  # noqa: E402
 from app.ui.screens.bet_screen import BetScreen  # noqa: E402
 from app.ui.screens.checkin_screen import CheckinScreen  # noqa: E402
 from app.ui.screens.history_screen import HistoryScreen  # noqa: E402
 from app.ui.screens.onboarding_screen import OnboardingScreen  # noqa: E402
 from app.ui.screens.settings_screen import SettingsScreen  # noqa: E402
 from app.ui.tokens import BG_CREAM, GRASS_INSET, NAV_HEIGHT  # noqa: E402
-from app.utils.clock import SystemClock, set_clock  # noqa: E402
+from app.utils.clock import SimulatedClock, SystemClock, set_clock  # noqa: E402
 
 
 def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
@@ -79,7 +81,7 @@ class SoloistApp(App):  # type: ignore[misc]
         # 诊断脚手架 (Wave 2 Phase 1) — 必须在任何 widget 实例化之前
         _setup_debug_hooks()
 
-        # 使用系统真实时间
+        # 默认使用系统真实时钟（虚拟时钟在开发面板中手动开启）
         set_clock(SystemClock())
 
         # 初始化数据库
@@ -97,8 +99,10 @@ class SoloistApp(App):  # type: ignore[misc]
         self._camera_svc = DesktopCameraMock()
         ledger_repo = LedgerRepo(self.DB_PATH)
         bet_svc = BetService(BetRepo(self.DB_PATH), ledger_repo, settings_repo)
+        # 启动时自动补扣滞纳金
+        bet_svc.run_auto_checks()
         shooting_repo = ShootingRepo(self.DB_PATH)
-        history_svc = HistoryService(checkin_repo, ledger_repo, shooting_repo)
+        history_svc = HistoryService(checkin_repo, ledger_repo, shooting_repo, BetRepo(self.DB_PATH))
         self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo, settings_repo)
         # 实例化以触发 ATTENDANCE_JUDGED / DAY_FINISHED 事件订阅 (生成罚款/奖励流水)
         self._penalty_svc = PenaltyService(checkin_repo, ledger_repo, settings_repo)
@@ -106,6 +110,7 @@ class SoloistApp(App):  # type: ignore[misc]
         self._motivation_svc = MotivationService(
             checkin_repo, StreakRepo(self.DB_PATH), settings_repo, NoOpNotifier()
         )
+        self._promise_svc = BoyfriendPromiseService(ledger_repo, settings_repo, checkin_repo)
         self._ntfy_svc = NtfyPushService(settings_svc)
         self._ntfy_svc.start()
 
@@ -169,6 +174,7 @@ class SoloistApp(App):  # type: ignore[misc]
         screens = {
             "checkin": CheckinScreen(
                 checkin_service=checkin_svc,
+                promise_service=self._promise_svc,
                 report_service=self._report_svc,
                 bet_service=bet_svc,
                 motivation_service=self._motivation_svc,
@@ -204,11 +210,22 @@ class SoloistApp(App):  # type: ignore[misc]
         # Layer 1: 底部导航
         tab_bar = BottomTabBar(sm, size_hint=(1, None), height=NAV_HEIGHT, pos_hint={"x": 0, "y": 0})
 
+        # 虚拟时钟浮动条（默认隐藏，开发面板中开启）
+        self._time_panel = TimeControlPanel(
+            size_hint=(1, None),
+            height=0,
+            opacity=0,
+            pos_hint={"x": 0, "top": 1.0},
+            on_time_changed=lambda: screens["checkin"].refresh() if "checkin" in screens else None,
+        )
+        self._time_panel_visible = False
+
         # z-order 决定渲染顺序: 先添加=底层, 后添加=顶层
         self._root.add_widget(_sky)
         self._root.add_widget(sm)
         self._root.add_widget(_grass)
         self._root.add_widget(tab_bar)
+        self._root.add_widget(self._time_panel)
 
     def on_stop(self) -> None:
         """应用退出时清理资源。"""

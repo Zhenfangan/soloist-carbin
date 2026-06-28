@@ -153,14 +153,19 @@ class BottomTabBar(BoxLayout):  # type: ignore[misc]
 class AppScreenManager(ScreenManager):  # type: ignore[misc]
     """Kivy ScreenManager，注册 4 个页面 Screen。
 
-    切换时触发渐隐渐显。
+    切换时触发渐隐渐显。若 widget 有 refresh() 方法，on_enter 时自动调用。
     """
 
     def __init__(self, screens: dict[str, Any], **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self._screen_widgets: dict[str, Any] = {}
         for name, widget in screens.items():
             screen = Screen(name=name)
             screen.add_widget(widget)
             self.add_widget(screen)
+            # 记录 widget 以便 on_enter 时调用 refresh
+            self._screen_widgets[name] = widget
+            if hasattr(widget, "refresh"):
+                screen.bind(on_enter=lambda instance, w=widget: w.refresh())
 
         self.transition.duration = 0.2

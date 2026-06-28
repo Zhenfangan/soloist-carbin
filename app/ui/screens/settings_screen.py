@@ -86,7 +86,7 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         content = BoxLayout(
             orientation="vertical",
             size_hint_y=None,
-            padding=[0, GRID_UNIT, 0, GRASS_INSET + GRID_UNIT],
+            padding=[CARD_PADDING, GRID_UNIT, CARD_PADDING, GRASS_INSET + GRID_UNIT],
             spacing=GRID_UNIT,
         )
         content.bind(minimum_height=content.setter("height"))
@@ -171,8 +171,13 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
 
     @staticmethod
     def _make_vbox() -> BoxLayout:
-        """创建垂直 BoxLayout，自动适应高度。"""
-        box = BoxLayout(orientation="vertical", size_hint_y=None, spacing=2)
+        """创建垂直 BoxLayout，自动适应高度，左右留 CARD_PADDING 边距。"""
+        box = BoxLayout(
+            orientation="vertical",
+            size_hint_y=None,
+            spacing=2,
+            padding=[CARD_PADDING, 0, CARD_PADDING, 0],
+        )
         box.bind(minimum_height=box.setter("height"))
         return box
 
@@ -247,25 +252,34 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         return box
 
     def _build_work_days_row(self) -> Widget:
-        """构建工作日多选行。"""
+        """构建工作日多选行 — 标签左侧与上面对齐，按钮右侧与上面对齐。"""
         container = BoxLayout(
             orientation="horizontal",
-            spacing=4,
+            spacing=CARD_PADDING,
             padding=[CARD_PADDING, 4],
             size_hint=(1, None),
             height=44,
         )
 
+        # 标签固定宽度，左边缘 padding 与 TimePickerRow 标签对齐
         day_label = Label(
             text="工作日",
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, 1),
-            width=80,
+            width=56,
             halign="left",
             valign="middle",
         )
         container.add_widget(day_label)
+
+        # 按钮区填满剩余空间，右边缘与 TimePickerRow 时间按钮对齐
+        btn_row = BoxLayout(
+            orientation="horizontal",
+            spacing=2,
+            size_hint=(1, 1),
+        )
+        container.add_widget(btn_row)
 
         # 读取当前工作日设置
         current_days: list[int] = []
@@ -280,14 +294,13 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             btn = PixelButton(
                 text=label_char,
                 size_mode="small",
-                size_hint=(None, 1),
-                width=40,
+                size_hint=(1, 1),
                 color=COLORS["PRIMARY_YELLOW"] if is_selected else COLORS["CARD_SHADOW"],
             )
             btn._is_day_selected = is_selected
             btn._weekday = weekday
             btn.bind(on_press=lambda _b=btn: self._toggle_work_day(_b))
-            container.add_widget(btn)
+            btn_row.add_widget(btn)
             self._day_buttons.append(btn)
             self._day_values.append(weekday)
 
@@ -811,7 +824,7 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         return True
 
     def _show_dev_panel(self) -> None:
-        """显示开发面板（原始 JSON 数据）。"""
+        """显示开发面板（设置数据 + 虚拟时钟开关）。"""
         raw: dict[str, str] = {}
         if self._settings_service:
             raw = self._settings_service.get_all()
@@ -830,7 +843,6 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
 
         card = FloatLayout()
 
-        # 背景 + 边框
         with card.canvas.before:
             Color(*self._to_rgba(SHADOW_BLACK))
             Rectangle(pos=(card.x + 2, card.y - 2), size=(card.width, card.height))
@@ -857,6 +869,18 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         )
         card.add_widget(title_lbl)
 
+        # 虚拟时钟开关
+        time_toggle = PixelButton(
+            text=self._time_panel_btn_text(),
+            color=DOPAMINE_COLORS["sky"]["light"],
+            size_mode="normal",
+            size_hint=(None, None),
+            size=(180, 42),
+            pos_hint={"center_x": 0.5, "y": 1 - 0.24},
+        )
+        time_toggle.bind(on_press=lambda _: self._toggle_time_panel(time_toggle))
+        card.add_widget(time_toggle)
+
         data_label = Label(
             text=json_text,
             font_size=FONT_SIZE_SMALL,
@@ -867,24 +891,21 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         )
 
         scroll = ScrollView(
-            size_hint=(0.9, 0.5),
-            pos_hint={"x": 0.05, "y": 0.15},
+            size_hint=(0.9, 0.35),
+            pos_hint={"x": 0.05, "y": 0.20},
             do_scroll_x=False,
             do_scroll_y=True,
         )
         scroll.add_widget(data_label)
         card.add_widget(scroll)
 
-        # data_label 的 text_size 跟随 scroll 宽度，实现自动换行
         scroll.bind(
             width=lambda _, w: setattr(data_label, 'text_size', (w * 0.95, None))
         )
-        # Label 高度自适应内容
         data_label.bind(
             texture_size=lambda _, ts: setattr(data_label, 'size', ts)
         )
 
-        # Dump widget tree 按钮 (Wave 2 Phase 1 诊断)
         dump_btn = PixelButton(
             text="Dump widget tree",
             color=COLORS["CARD_SHADOW"],
@@ -909,6 +930,43 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
 
         dev_view.add_widget(card)
         dev_view.open()
+
+    def _time_panel_btn_text(self) -> str:
+        from kivy.app import App
+        app = App.get_running_app()
+        if app and getattr(app, "_time_panel_visible", False):
+            return "关闭虚拟时钟"
+        return "开启虚拟时钟"
+
+    def _toggle_time_panel(self, btn: Any) -> None:
+        from datetime import datetime, timedelta
+        from kivy.app import App
+        from app.utils.clock import SimulatedClock, SystemClock, set_clock, get_clock
+
+        app = App.get_running_app()
+        if app is None:
+            return
+        panel = getattr(app, "_time_panel", None)
+        if panel is None:
+            return
+
+        if app._time_panel_visible:
+            # 关闭 → 切回系统真实时钟
+            set_clock(SystemClock())
+            app._time_panel_visible = False
+            panel.opacity = 0
+            panel.height = 0
+        else:
+            # 开启 → 自动设为本周一 07:00
+            now = datetime.now()
+            monday = now - timedelta(days=now.weekday())
+            clock = SimulatedClock()
+            clock.set_date_and_time(monday.strftime("%Y-%m-%d"), "07:00")
+            set_clock(clock)
+            app._time_panel_visible = True
+            panel.opacity = 1
+            panel.height = 42
+        btn.text = self._time_panel_btn_text()
 
     def _on_dump_widget_tree(self) -> None:
         """Dump 当前 widget 树到 Kivy Logger."""

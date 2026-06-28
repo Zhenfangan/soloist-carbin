@@ -1,0 +1,52 @@
+{
+  "checkin": {
+    "path": "doc\\ui-design\\testreport\\screenshots\\checkin.png",
+    "black_pct": 27.4,
+    "white_pct": 71.1,
+    "brown_pixels": 55,
+    "cream_pixels": 724,
+    "status": "PASS",
+    "issues": [
+      "OK: white background visible",
+      "OK: Chinese text rendering",
+      "OK: BG_CREAM background"
+    ]
+  },
+  "history": {
+    "path": "doc\\ui-design\\testreport\\screenshots\\history.png",
+    "black_pct": 20.2,
+    "white_pct": 72.5,
+    "brown_pixels": 1611,
+    "cream_pixels": 93,
+    "status": "PASS",
+    "issues": [
+      "OK: white background visible",
+      "OK: Chinese text rendering",
+      "OK: BG_CREAM background"
+    ]
+  },
+  "bet": {
+    "path": "doc\\ui-design\\testreport\\screenshots\\bet.png",
+    "black_pct": 37.7,
+    "white_pct": 61.3,
+    "brown_pixels": 5,
+    "cream_pixels": 4639,
+    "status": "PASS",
+    "issues": [
+      "OK: white background visible",
+      "OK: BG_CREAM background"
+    ]
+  },
+  "settings": {
+    "path": "doc\\ui-design\\testreport\\screenshots\\settings.png",
+    "black_pct": 0.0,
+    "white_pct": 99.5,
+    "brown_pixels": 10,
+    "cream_pixels": 285,
+    "status": "PASS",
+    "issues": [
+      "OK: white background visible",
+      "OK: BG_CREAM background"
+    ]
+  }
+}

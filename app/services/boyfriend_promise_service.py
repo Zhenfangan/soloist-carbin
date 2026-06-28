@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.models.ledger import BoyfriendPromise, LedgerEntry
 from app.repositories.ledger_repo import LedgerRepo
 from app.repositories.settings_repo import SettingsRepo
@@ -12,9 +14,15 @@ from app.utils.config import LEDGER_TYPE_BOYFRIEND_PROMISE
 class BoyfriendPromiseService:
     """男友激励承诺管理"""
 
-    def __init__(self, ledger_repo: LedgerRepo, settings_repo: SettingsRepo) -> None:
+    def __init__(
+        self,
+        ledger_repo: LedgerRepo,
+        settings_repo: SettingsRepo,
+        checkin_repo: Any = None,
+    ) -> None:
         self._ledger_repo = ledger_repo
         self._settings_repo = settings_repo
+        self._checkin_repo = checkin_repo
 
         get_event_bus().subscribe(EventType.DAY_FINISHED, self._on_day_finished)
 
@@ -63,9 +71,9 @@ class BoyfriendPromiseService:
 
     def calculate_total_hours(self, date: str) -> float:
         """计算当日总工作时长（小时）"""
-        from app.repositories.checkin_repo import CheckinRepo
-        repo = CheckinRepo()
-        records = repo.get_all_by_date(date)
+        if self._checkin_repo is None:
+            return 0.0
+        records = self._checkin_repo.get_all_by_date(date)
         total = 0.0
         for r in records:
             if r.checkin_time and r.checkout_time:
