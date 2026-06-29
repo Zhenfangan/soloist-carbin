@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.models.checkin import Checkin, CheckinResult, DayStatus, PeriodStatus
 from app.repositories.checkin_repo import CheckinRepo
 from app.repositories.settings_repo import SettingsRepo
@@ -42,16 +44,23 @@ ALL_PERIODS = ["morning", "afternoon", "evening"]
 class CheckinService:
     """考勤业务逻辑"""
 
-    def __init__(self, checkin_repo: CheckinRepo, settings_repo: SettingsRepo) -> None:
+    def __init__(self, checkin_repo: CheckinRepo, settings_repo: SettingsRepo,
+                 shooting_service: Any = None) -> None:
         self._checkin_repo = checkin_repo
         self._settings_repo = settings_repo
+        self._shooting_service = shooting_service
 
     # ── 打卡动作 ──────────────────────────────────────────
 
     def check_in(self, date: str, period: str, photo_path: str | None = None) -> CheckinResult:
-        """执行签到，判定出勤状态"""
+        """执行签到，判定出勤状态。终态(请假/拍摄日)不可被签到覆盖。"""
         clock = get_clock()
         now_time = clock.current_time_str()
+
+        # 防御: 已有终态记录时不允许签到覆盖
+        existing = self._checkin_repo.get_by_date_period(date, period)
+        if existing is not None and existing.status in (STATUS_LEAVE, STATUS_SHOOTING):
+            return self._make_result(existing)
 
         record = Checkin(checkin_date=date, period=period, checkin_time=now_time, photo_path=photo_path)
         record = self._checkin_repo.upsert(record)
@@ -201,6 +210,13 @@ class CheckinService:
 
             # 只有过了时段结束时间还没签到，才判定旷工
             if current_min < end:
+                # 时间倒退: 撤销之前误判的旷工
+                record = self._checkin_repo.get_by_date_period(date, period)
+                if record and record.status in (STATUS_ABSENT_MORNING, STATUS_ABSENT_AFTERNOON):
+                    record.status = STATUS_PENDING
+                    record.checkin_time = None
+                    self._checkin_repo.upsert(record)
+                    results.append(self._make_result(record))
                 continue
 
             record = self._checkin_repo.get_by_date_period(date, period)
@@ -313,6 +329,10 @@ class CheckinService:
         return preserved or STATUS_EARLY_LEAVE
 
     def _is_shooting_day(self, date: str) -> bool:
+        # 优先查 shooting_days 表
+        if self._shooting_service is not None and self._shooting_service.is_shooting_day(date):
+            return True
+        # 回退兼容 checkins.is_shooting 字段
         records = self._checkin_repo.get_all_by_date(date)
         return any(r.is_shooting for r in records)
 
@@ -372,6 +392,7 @@ class CheckinService:
             period=record.period,
             checkin_time=record.checkin_time,
             checkout_time=record.checkout_time,
+            checkout_type=record.checkout_type,
             status=record.status or STATUS_PENDING,
             status_label=labels.get(record.status or STATUS_PENDING, "未知"),
         )

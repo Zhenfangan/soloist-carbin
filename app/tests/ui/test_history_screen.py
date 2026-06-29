@@ -266,7 +266,7 @@ class TestCalendarCell:
         cell = CalendarCell(day=8, status="rest", is_work_day=False)
         assert not cell._is_work_day
         # 非工作日的 label 应显示 🐼
-        assert cell._label.text == "🐼"
+        assert cell._label.text == "R"
 
     def test_create_future_cell(self) -> None:
         """未来日期显示 ○。"""

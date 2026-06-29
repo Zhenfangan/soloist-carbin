@@ -28,6 +28,7 @@ class CheckinResult:
     period: str
     checkin_time: str | None = None
     checkout_time: str | None = None
+    checkout_type: str = "manual"
     status: str = "pending"
     status_label: str = "待判定"
 

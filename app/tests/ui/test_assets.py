@@ -81,18 +81,24 @@ class TestSpriteFiles:
 class TestIconFiles:
     """2.8〜2.9 功能图标文件验证"""
 
-    def test_all_16_icons_exist(self) -> None:
+    def test_all_24_icons_exist(self) -> None:
         assets = _get_assets_dir()
-        assert len(ICON_FILES) == 16, f"Expected 16 icons, got {len(ICON_FILES)}"
+        assert len(ICON_FILES) == 24, f"Expected 24 icons, got {len(ICON_FILES)}"
         for _icon_name, rel_path in ICON_FILES.items():
             path = assets / rel_path
             assert path.exists(), f"Icon missing: {rel_path}"
             assert path.is_file(), f"Not a file: {rel_path}"
 
     def test_icons_are_32x32(self) -> None:
-        """图标生成后应该被 nearest-neighbor 放大至 32×32。"""
+        """基础图标生成后应该被 nearest-neighbor 放大至 32×32。
+        tab_*_active / tab_*_inactive 图标尺寸较大(118-132×97-105),不在 32×32 范围内。
+        """
         assets = _get_assets_dir()
-        for icon_name, rel_path in ICON_FILES.items():
+        base_icons = {
+            k: v for k, v in ICON_FILES.items()
+            if "_active" not in k and "_inactive" not in k
+        }
+        for icon_name, rel_path in base_icons.items():
             path = assets / rel_path
             img = PILImage.open(str(path))
             assert img.width == 32, f"{icon_name}: expected width 32, got {img.width}"
@@ -164,7 +170,7 @@ class TestPreloadAll:
     def test_preload_all_returns_counts(self) -> None:
         result = preload_all()
         assert result["sprites"] == 5
-        assert result["icons"] == 16
+        assert result["icons"] == 24
 
     def test_preload_all_is_idempotent(self) -> None:
         result1 = preload_all()

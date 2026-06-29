@@ -11,6 +11,7 @@ ScrollView 垂直布局:
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from kivy.clock import Clock
@@ -594,13 +595,24 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         if not self._checkin_service:
             return
         try:
+            from app.utils.clock import get_clock
+            from datetime import datetime
+            self._date_str = get_clock().today_str()  # 同步时钟日期
+            # 同步日期头文案
+            try:
+                dt = datetime.strptime(self._date_str, "%Y-%m-%d")
+                weekday = dt.isoweekday() - 1
+                weekday_name = WEEKDAY_NAMES[weekday]
+                chinese_date = self._format_chinese_date(self._date_str)
+                self._date_header.text = f"{emj('📅')} {chinese_date} {weekday_name}"
+            except ValueError:
+                self._date_header.text = f"{emj('📅')} {self._date_str}"
             self._checkin_service.mark_absent(self._date_str)
             day_status = self._checkin_service.get_today_status(self._date_str)
             self._day_status = day_status
             self._periods_data = getattr(day_status, "periods", [])
             self._status_box.update_status(day_status)
             # 同步刷新所有 PeriodCard，确保签到/签退后卡片状态正确 (B10+B11)
-            from app.utils.clock import get_clock
             current_time = get_clock().current_time_str()
             start_times = {
                 "morning": (
@@ -801,7 +813,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
     def _show_promise_area(self, reward_desc: str, reward_qty: int) -> None:
         """承诺区显示 — 从无到有撑开高度。"""
         # 剥离用户数据中可能出现的 "兜兜" 昵称前缀
-        cleaned = reward_desc.replace("兜兜", "").lstrip("：:、, ").strip()
+        nickname = ""
+        if self._settings_service:
+            nickname = self._settings_service.get_user_nickname()
+        cleaned = reward_desc.replace("兜兜", nickname).lstrip("：:、, ").strip()
         self._promise_area.height = 110
         self._promise_area.opacity = 1.0
         self._promise_desc.text = f"如果今天工作满8小时，奖励：{cleaned} ×{reward_qty}"
@@ -908,12 +923,121 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             return
 
         from app.ui.components.report_preview import ReportPreview
+
+        def _save_report() -> None:
+            """导出战报为所见即所得长图 PNG。
+
+            布局: 吸取景观图第一行像素色填充顶部 | 景观图保持比例底部贴合 |
+            内容区居中 | 草地锯齿前景最顶层底边。
+            """
+            import traceback
+            date_str = preview._date_str if hasattr(preview, '_date_str') else data.date
+            try:
+                content = preview._content_box
+                scroll = content.parent
+
+                content_h = int(content.minimum_height)
+                pad_t = content.padding[1]
+                pad_b = content.padding[3]
+
+                from kivy.uix.floatlayout import FloatLayout
+                from kivy.uix.image import Image as KivyImage
+                from kivy.graphics import Color, Rectangle
+                from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path
+
+                img_w = 390
+
+                # ── 天空色: 从景观图顶部吸取 ──
+                from PIL import Image as PILImage
+                pil_bg = PILImage.open(BG_LANDSCAPE)
+                bg_w, bg_h = pil_bg.size  # 600×1080
+                top_pixel = pil_bg.getpixel((bg_w // 2, 0))
+                if len(top_pixel) == 4:
+                    sky_rgba = (top_pixel[0]/255, top_pixel[1]/255, top_pixel[2]/255, 1.0)
+                else:
+                    sky_rgba = (top_pixel[0]/255, top_pixel[1]/255, top_pixel[2]/255, 1.0)
+
+                # 两个图层等比缩放到 390 宽: 高度 = 390 * 1080/600 = 702
+                layer_h = int(img_w * bg_h / bg_w)
+                # 草地前景底部约 15% 是草地+土地(非透明)
+                grass_bottom_h = int(layer_h * 0.15)
+
+                # 总高度: 内容全高 + 草地区(去掉 content 内部的顶部 padding)
+                orig_padding = list(content.padding)
+                content.padding = [orig_padding[0], 4, orig_padding[2], orig_padding[3]]  # 压扁顶部留白
+                content_h = int(content.minimum_height)  # 重新取
+                total_h = grass_bottom_h + content_h + 4
+
+                # 1. 拆 content_box
+                if scroll:
+                    scroll.remove_widget(content)
+
+                # 2. 构建导出画布
+                export_root = FloatLayout(size=(img_w, total_h))
+                # 天空色铺满全背景
+                with export_root.canvas.before:
+                    Color(*sky_rgba)
+                    Rectangle(size=(img_w, total_h))
+
+                # 天空背景层(底部对齐,保持比例)
+                sky_bg = KivyImage(
+                    source=BG_LANDSCAPE,
+                    size_hint=(None, None),
+                    size=(img_w, layer_h),
+                    pos=(0, 0),
+                    allow_stretch=True,
+                    keep_ratio=False,
+                )
+                export_root.add_widget(sky_bg)
+
+                # 内容层(叠在草地上方)
+                content_y = grass_bottom_h - 15
+                content.size = (img_w, content_h)
+                content.pos = (0, content_y)
+                content.size_hint = (None, None)
+                export_root.add_widget(content)
+
+                # 草地前景层(最顶层,底部贴合,保持比例)
+                grass_fg = KivyImage(
+                    source=get_grass_overlay_path(),
+                    size_hint=(None, None),
+                    size=(img_w, layer_h),
+                    pos=(0, 0),
+                    allow_stretch=True,
+                    keep_ratio=False,
+                )
+                export_root.add_widget(grass_fg)
+
+                # 3. 导出
+                from kivy.clock import Clock
+                def _do_export(_dt):
+                    try:
+                        desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+                        filepath = os.path.join(desktop, f"战报_{date_str}.png")
+                        export_root.export_to_png(filepath)
+                        print(f"[战报] 长图已保存: {filepath}")
+                    except Exception as e2:
+                        Logger.error(f"[战报] 导出失败: {e2}")
+                        traceback.print_exc()
+                    finally:
+                        export_root.remove_widget(content)
+                        content.padding = orig_padding  # 恢复原始 padding
+                        content.size_hint = (1, None)
+                        if scroll:
+                            scroll.add_widget(content)
+                Clock.schedule_once(_do_export, 0.1)
+
+            except Exception as e:
+                Logger.error(f"ReportPreview: 保存长图失败 {e}")
+                traceback.print_exc()
+
         preview = ReportPreview(
             image_path="",
             date_str=self._date_str,
             report_data=data,
-            on_save=lambda: Logger.info("ReportPreview: 保存至相册 (Android 端实现)"),
+            on_save=_save_report,
             on_settle=lambda: Logger.info("ReportPreview: 退出并结算"),
+            settings_service=self._settings_service,
         )
         preview.open()
 

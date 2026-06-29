@@ -118,6 +118,7 @@ class TestEventTypeEnum:
             EventType.WEEK_CLOSED,
             EventType.SHOOTING_DAY_SET,
             EventType.BET_SETTLED,
+            EventType.BET_LATE_STARTED,
             EventType.REPORT_GENERATED,
             EventType.SETTINGS_CHANGED,
             EventType.WEEK_SETTLED,

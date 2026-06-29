@@ -357,13 +357,21 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._content_area.height = self._EXPANDED_HEIGHT - self._COLLAPSED_HEIGHT if is_expanded else 0
             self._content_area.opacity = 1.0 if is_expanded else 0
 
-        # 按钮状态 — 旷工时完全隐藏
+        # 按钮状态 — 请假/旷工时签到按钮不可用
+        is_leave = self._status == "leave"
         if self._card_state == "absent":
             self._action_btn.text = ""
             self._action_btn.disabled = True
             self._action_btn.opacity = 0
             self._action_btn.size_hint_y = None
             self._action_btn.height = 0
+        elif is_leave:
+            self._action_btn.text = f"{emj('🛌')} 已请假"
+            self._action_btn.disabled = True
+            self._action_btn.set_color(COLORS["CARD_SHADOW"])
+            self._action_btn.opacity = 0.5
+            self._action_btn.size_hint_y = None
+            self._action_btn.height = 64
         elif self._has_checked_in and not self._has_checked_out:
             self._action_btn.text = f"{emj('✍️')} 签退"
             self._action_btn.set_color(DOPAMINE_COLORS["mint"]["light"])

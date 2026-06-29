@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
+from app.utils.clock import get_clock
 from app.models.ledger import (
     BetConfig,
     BetTask,
@@ -115,8 +116,8 @@ class BetService:
 
         entries: list[LedgerEntry] = []
         settlement_date = self._week_end_date(week_start)
-        today_str = date.today().strftime("%Y-%m-%d")
-        today_dt = date.today()
+        today_str = get_clock().now().date().strftime("%Y-%m-%d")
+        today_dt = get_clock().now().date()
         week_end_dt = datetime.strptime(settlement_date, "%Y-%m-%d").date()
         is_past_deadline = today_dt > week_end_dt  # 只有周一之后才算超时
         late_fee_total = 0.0
@@ -288,7 +289,7 @@ class BetService:
         if not config or config.status != "active":
             return False
 
-        today_str = date.today().strftime("%Y-%m-%d")
+        today_str = get_clock().now().date().strftime("%Y-%m-%d")
         sunday = self._week_end_date(week_start)
         if today_str < sunday:
             return False
@@ -319,7 +320,7 @@ class BetService:
         if late_fee_per_day <= 0:
             return 0
 
-        today_str = date.today().strftime("%Y-%m-%d")
+        today_str = get_clock().now().date().strftime("%Y-%m-%d")
         already_charged = self._bet_repo.get_late_fee_dates(week_start)
         created = 0
 
@@ -371,7 +372,7 @@ class BetService:
         自然周期为一周 7 天，结算日为 week_start + 6 天。
         保留上一周期的赏罚/滞纳金配置。
         """
-        tomorrow = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+        tomorrow = (get_clock().now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
         existing = self._bet_repo.get_config(tomorrow)
         if existing:
             return  # 已存在，幂等跳过
@@ -399,7 +400,7 @@ class BetService:
             return unsettled[0].week_start
 
         # 无活跃周期 → 使用今天之后的最近一个周一（兼容首次使用）
-        today = date.today()
+        today = get_clock().now().date()
         monday = today - timedelta(days=today.weekday())
         return monday.strftime("%Y-%m-%d")
 

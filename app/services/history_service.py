@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import calendar
 from datetime import datetime, timedelta
+
+from app.utils.clock import get_clock
 from typing import TYPE_CHECKING
 
 from app.models.history import (
@@ -273,9 +275,9 @@ class HistoryService:
             if late_start:
                 late_start_dt = datetime.strptime(late_start, "%Y-%m-%d")
                 if status == "late":
-                    late_days = (datetime.now() - late_start_dt).days + 1
+                    late_days = (get_clock().now() - late_start_dt).days + 1
                 else:
-                    late_days = max(0, (datetime.now() - late_start_dt).days)
+                    late_days = max(0, (get_clock().now() - late_start_dt).days)
 
             net = base_reward + extra_reward - penalty - late_fees
 

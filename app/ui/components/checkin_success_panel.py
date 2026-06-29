@@ -92,7 +92,7 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
             self._ip_image.texture = self._frames[0].texture
         self.add_widget(self._ip_image)
 
-        # 右 70% 上半：大字标题（卡片内容区高度约 132px）
+        # 右 70% 上半：大字标题
         title_text = "签到成功！★" if is_checkin else "签退成功！★"
         self._title_lbl = Label(
             text=title_text,

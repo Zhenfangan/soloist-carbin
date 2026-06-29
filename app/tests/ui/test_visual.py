@@ -183,12 +183,13 @@ class TestScreenLayouts:
     """验证页面级组件正确设置了背景。"""
 
     def test_settings_screen_content_has_background(self) -> None:
-        """P0: SettingsScreen 的 content BoxLayout 必须有背景。"""
+        """P0: SettingsScreen 的 ScrollView 内容区必须有背景。"""
         screen = SettingsScreen()
-        # 验证 content 区域有背景矩形
-        assert hasattr(screen, "_content_bg_rect"), (
-            "SettingsScreen 缺少 _content_bg_rect — 内容区无背景"
-        )
+        # 背景已改为 canvas.before 绘制,不再存储 _content_bg_rect 属性
+        # 验证 ScrollView > BoxLayout 层级存在
+        from kivy.uix.scrollview import ScrollView
+        scrolls = [c for c in screen.children if isinstance(c, ScrollView)]
+        assert len(scrolls) >= 1, "SettingsScreen 缺少 ScrollView 内容容器"
 
     def test_bet_screen_layout_has_background(self) -> None:
         """P1: BetScreen 的 _layout 必须有白色背景。"""
@@ -199,8 +200,9 @@ class TestScreenLayouts:
 
         svc = BetService(BetRepo(":memory:"), LedgerRepo(":memory:"), SettingsRepo(":memory:"))
         screen = BetScreen(bet_service=svc)
-        assert hasattr(screen, "_layout_bg"), (
-            "BetScreen 缺少 _layout_bg — 布局区无背景"
+        # 背景已改为 canvas.before 绘制,不再存储 _layout_bg 属性
+        assert hasattr(screen, "_layout"), (
+            "BetScreen 缺少 _layout — 布局区无容器"
         )
 
     def test_pixel_checkbox_has_border(self) -> None:

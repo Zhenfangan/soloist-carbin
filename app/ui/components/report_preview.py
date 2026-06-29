@@ -371,9 +371,12 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         report_data: ReportData | None = None,
         on_save: Any = None,
         on_settle: Any = None,
+        settings_service: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
+        self._date_str = date_str
+        self._settings_service = settings_service
         self.background = ""
         self.background_color = (0, 0, 0, 0)
 
@@ -710,8 +713,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         wrapper.add_widget(pig)
         return wrapper
 
-    @staticmethod
-    def _reward_panel(data: ReportData) -> FloatLayout:
+    def _reward_panel(self, data: ReportData) -> FloatLayout:
         """达标/未达标双态看板，IP 贴纸叠加。"""
         if data.promise is not None:
             achieved = data.promise.fulfilled
@@ -739,9 +741,19 @@ class ReportPreview(ModalView):  # type: ignore[misc]
                 shadow="#208878", content_bg=_COLOR_REWARD_BG,
             )
             if data.promise:
+                nickname = ""
+                if self._settings_service:
+                    nickname = self._settings_service.get_user_nickname()
+                reward_desc = data.promise.reward_desc
+                if nickname:
+                    reward_desc = reward_desc.replace("兜兜", nickname)
+                nickname = ""
+                if self._settings_service:
+                    nickname = self._settings_service.get_user_nickname()
+                who = nickname if nickname else "猪大样"
                 main_text = (
-                    f"{data.promise.reward_qty} 次{data.promise.reward_desc}，"
-                    f"猪大样请客~"
+                    f"{data.promise.reward_qty} 次{reward_desc}，"
+                    f"{who}请客~"
                 )
             else:
                 main_text = f"今天工时 {data.total_work_hours:.1f}h，达标啦！"
@@ -753,8 +765,11 @@ class ReportPreview(ModalView):  # type: ignore[misc]
                 shadow="#807060", content_bg=_COLOR_UNMET_BG,
             )
             if data.promise:
-                # 剥离 reward_desc 中可能存在的 "兜兜" 昵称
-                reward = data.promise.reward_desc.replace("兜兜", "").lstrip("：:、, ").strip()
+                nickname = ""
+                if self._settings_service:
+                    nickname = self._settings_service.get_user_nickname()
+                # 剥离 reward_desc 中可能存在的 "兜兜"→昵称替换
+                reward = data.promise.reward_desc.replace("兜兜", nickname).lstrip("：:、, ").strip()
                 main_text = (
                     f"今天工时 {data.total_work_hours:.1f}h "
                     f"未达 {data.threshold_hours:.0f}h 门槛，"

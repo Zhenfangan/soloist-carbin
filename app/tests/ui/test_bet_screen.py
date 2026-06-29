@@ -592,16 +592,28 @@ class TestBetScreenSettlement:
         assert screen._settle_btn.disabled
         assert "周日" in screen._settle_hint.text
 
-    def test_settle_button_enabled_on_sunday(self, temp_db: str, clock: Any) -> None:
-        """周日结算按钮可用（需有任务）。"""
-        # 设为周日
+    def test_settle_button_disabled_on_sunday_uncompleted(self, temp_db: str, clock: Any) -> None:
+        """周日有未完成任务 → 按钮禁用,提示用户完成全部任务。"""
         clock.set_time(datetime(2026, 6, 7))  # Sunday
 
         svc = create_bet_service(temp_db)
         svc.set_week_config("2026-06-01", 50, 30, 50)
         svc.create_task("2026-06-01", "任务1")
         screen = BetScreen(bet_service=svc)
-        # 刷新以获取 summary 数据
+        screen.refresh()
+
+        assert screen._settle_btn.disabled
+        assert "请完成全部任务" in screen._settle_hint.text
+
+    def test_settle_button_enabled_on_sunday_all_done(self, temp_db: str, clock: Any) -> None:
+        """周日全部任务完成 → 结算按钮可用。"""
+        clock.set_time(datetime(2026, 6, 7))  # Sunday
+
+        svc = create_bet_service(temp_db)
+        svc.set_week_config("2026-06-01", 50, 30, 50)
+        t = svc.create_task("2026-06-01", "任务1")
+        svc.complete_task(t.id)
+        screen = BetScreen(bet_service=svc)
         screen.refresh()
 
         assert not screen._settle_btn.disabled

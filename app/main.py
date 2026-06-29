@@ -25,6 +25,7 @@ from app.repositories.settings_repo import SettingsRepo  # noqa: E402
 from app.interfaces.notifier import NoOpNotifier  # noqa: E402
 from app.repositories.shooting_repo import ShootingRepo  # noqa: E402
 from app.repositories.streak_repo import StreakRepo  # noqa: E402
+from app.services.shooting_service import ShootingService  # noqa: E402
 from app.repositories.sync_repo import SyncRepo  # noqa: E402
 from app.services.bet_service import BetService  # noqa: E402
 from app.services.camera_desktop_mock import DesktopCameraMock  # noqa: E402
@@ -95,13 +96,14 @@ class SoloistApp(App):  # type: ignore[misc]
         settings_repo = SettingsRepo(self.DB_PATH)
         settings_svc = SettingsService(settings_repo)
         checkin_repo = CheckinRepo(self.DB_PATH)
-        checkin_svc = CheckinService(checkin_repo, settings_repo)
         self._camera_svc = DesktopCameraMock()
         ledger_repo = LedgerRepo(self.DB_PATH)
         bet_svc = BetService(BetRepo(self.DB_PATH), ledger_repo, settings_repo)
         # 启动时自动补扣滞纳金
         bet_svc.run_auto_checks()
         shooting_repo = ShootingRepo(self.DB_PATH)
+        self._shooting_svc = ShootingService(shooting_repo)
+        checkin_svc = CheckinService(checkin_repo, settings_repo, shooting_service=self._shooting_svc)
         history_svc = HistoryService(checkin_repo, ledger_repo, shooting_repo, BetRepo(self.DB_PATH))
         self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo, settings_repo)
         # 实例化以触发 ATTENDANCE_JUDGED / DAY_FINISHED 事件订阅 (生成罚款/奖励流水)
@@ -180,6 +182,7 @@ class SoloistApp(App):  # type: ignore[misc]
                 motivation_service=self._motivation_svc,
                 camera_service=self._camera_svc,
                 settings_service=settings_svc,
+                shooting_service=self._shooting_svc,
             ),
             "history": HistoryScreen(history_service=history_svc, report_service=self._report_svc),
             "bet": BetScreen(bet_service=bet_svc),
@@ -187,6 +190,7 @@ class SoloistApp(App):  # type: ignore[misc]
         }
 
         sm = AppScreenManager(screens)
+        self._sm = sm
         sm.size_hint = (1, None)
         sm.pos_hint = {"x": 0, "y": 0}
         sm.height = Window.height

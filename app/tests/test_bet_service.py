@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.repositories.bet_repo import BetRepo
 from app.repositories.ledger_repo import LedgerRepo
 from app.repositories.settings_repo import SettingsRepo
@@ -40,8 +42,10 @@ class TestBetService:
         assert result.total_reward == 50
         assert result.total_penalty == 0
 
-    def test_settle_week_not_completed(self, temp_db: str) -> None:
+    def test_settle_week_not_completed(self, temp_db: str, clock: Any) -> None:
         svc = self.setup_svc(temp_db)
+        # deadline 是周日 2026-06-07,穿越到周一才能进入滞纳期
+        clock.set_date_and_time("2026-06-08", "00:01")
         svc.set_week_config("2026-06-01", 50, 30, 50)
         t1 = svc.create_task("2026-06-01", "任务1")
         assert t1.id is not None
@@ -80,9 +84,11 @@ class TestBetService:
 
     # ── 滞纳期测试 ──
 
-    def test_settle_incomplete_enters_late(self, temp_db: str) -> None:
+    def test_settle_incomplete_enters_late(self, temp_db: str, clock: Any) -> None:
         """未完成任务结算 → status=late (不再直接 settled)"""
         svc = self.setup_svc(temp_db)
+        # deadline 是周日 2026-06-07,穿越到周一才能进入滞纳期
+        clock.set_date_and_time("2026-06-08", "00:01")
         svc.set_week_config("2026-06-01", 50, 30, 50)
         t = svc.create_task("2026-06-01", "任务1")
         assert t.id is not None
@@ -92,9 +98,11 @@ class TestBetService:
         assert result.total_penalty == -50
         assert result.total_reward == 0
 
-    def test_settle_from_late_closes_cycle(self, temp_db: str) -> None:
+    def test_settle_from_late_closes_cycle(self, temp_db: str, clock: Any) -> None:
         """从滞纳期结算 → status=settled"""
         svc = self.setup_svc(temp_db)
+        # deadline 是周日 2026-06-07,穿越到周一才能进入滞纳期
+        clock.set_date_and_time("2026-06-08", "00:01")
         svc.set_week_config("2026-06-01", 50, 30, 50, late_fee_per_day=10)
         t = svc.create_task("2026-06-01", "任务1")
         assert t.id is not None
@@ -105,9 +113,11 @@ class TestBetService:
         result2 = svc.settle_week("2026-06-01")
         assert result2.status == "settled"
 
-    def test_late_fee_accrual_idempotent(self, temp_db: str) -> None:
+    def test_late_fee_accrual_idempotent(self, temp_db: str, clock: Any) -> None:
         """滞纳金补扣幂等：同一天多次调用不重复扣费"""
         svc = self.setup_svc(temp_db)
+        # deadline 是周日 2026-06-07,穿越到周一才能进入滞纳期
+        clock.set_date_and_time("2026-06-08", "00:01")
         svc.set_week_config("2026-06-01", 50, 30, 50, late_fee_per_day=10)
         svc.create_task("2026-06-01", "任务1")
         svc.settle_week("2026-06-01")  # → late
@@ -117,24 +127,27 @@ class TestBetService:
         n2 = svc.accrue_late_fees("2026-06-01")
         assert n2 == 0  # 第二次调用不新增，幂等
 
-    def test_auto_create_next_cycle(self, temp_db: str) -> None:
+    def test_auto_create_next_cycle(self, temp_db: str, clock: Any) -> None:
         """结算完成后自动创建下一周期"""
         svc = self.setup_svc(temp_db)
+        clock.set_date_and_time("2026-06-07", "12:00")  # 周日,可结算
         svc.set_week_config("2026-06-01", 50, 30, 50)
         t = svc.create_task("2026-06-01", "任务1")
         assert t.id is not None
         svc.complete_task(t.id)
         svc.settle_week("2026-06-01")  # 全部完成 → settled → 自动创建新周期
 
-        # 验证新周期已创建
+        # 验证新周期已创建 (应为时钟日期的下一天)
         new_start = svc.get_current_cycle_start()
-        from datetime import date, timedelta
-        expected = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+        from datetime import timedelta
+        expected = (clock.now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
         assert new_start == expected
 
-    def test_can_start_new_week_blocks_unsettled(self, temp_db: str) -> None:
+    def test_can_start_new_week_blocks_unsettled(self, temp_db: str, clock: Any) -> None:
         """未结清周期阻塞新周期"""
         svc = self.setup_svc(temp_db)
+        # deadline 是周日 2026-06-07,穿越到周一才能进入滞纳期
+        clock.set_date_and_time("2026-06-08", "00:01")
         svc.set_week_config("2026-06-01", 50, 30, 50)
         svc.create_task("2026-06-01", "任务1")
         svc.settle_week("2026-06-01")  # → late

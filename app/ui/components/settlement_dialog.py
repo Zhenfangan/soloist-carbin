@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, cast
 
+from app.utils.clock import get_clock
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
@@ -180,7 +181,7 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
                 try:
                     from datetime import date as dt_date
                     late_start_dt = dt_date.fromisoformat(str(late_start_date))
-                    late_days = (dt_date.today() - late_start_dt).days + 1
+                    late_days = (get_clock().now().date() - late_start_dt).days + 1
                 except Exception:
                     pass
             details.append(("滞纳天数", f"{late_days}天", DOPAMINE_COLORS["coral"]["light"]))

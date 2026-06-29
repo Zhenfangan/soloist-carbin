@@ -350,18 +350,20 @@ class TestSettingsScreen:
         assert screen._settings_service is svc
         assert screen._sync_service is sync
 
-    def test_has_four_collapsible_groups(self) -> None:
-        """验证有 4 个 CollapsibleGroup。"""
+    def test_has_six_collapsible_groups(self) -> None:
+        """验证有 6 个 CollapsibleGroup。"""
         svc = MockSettingsService()
         screen = SettingsScreen(settings_service=svc)
 
         # 遍历 widget 树查找 CollapsibleGroup
         groups = _find_widgets(screen, CollapsibleGroup)
-        assert len(groups) == 4
+        assert len(groups) == 6
         titles = [g._title_label.text for g in groups]
         assert "上班时间" in titles
         assert "奖惩金额" in titles
         assert "对赌配置" in titles
+        assert "推送通知" in titles
+        assert "个性化激励语句" in titles
         assert "其他" in titles
 
     # ---- 工作日切换 ----
@@ -402,13 +404,18 @@ class TestSettingsScreen:
     # ---- 分组折叠 ----
 
     def test_collapsible_groups_start_expanded(self) -> None:
-        """验证所有分组默认展开。"""
+        """验证前 4 组默认展开,推送通知和个性化激励默认折叠。"""
         svc = MockSettingsService()
         screen = SettingsScreen(settings_service=svc)
 
         groups = _find_widgets(screen, CollapsibleGroup)
+        collapsed_by_default = {"推送通知", "个性化激励语句"}
         for g in groups:
-            assert not g.collapsed, f"组 '{g._title_label.text}' 默认应展开"
+            title = g._title_label.text
+            if title in collapsed_by_default:
+                assert g.collapsed, f"组 '{title}' 默认应折叠"
+            else:
+                assert not g.collapsed, f"组 '{title}' 默认应展开"
 
     def test_toggle_group_collapse(self) -> None:
         """点击分组标题折叠内容。"""

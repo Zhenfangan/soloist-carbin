@@ -34,6 +34,7 @@ class SettingsService:
         "ntfy_enabled": "0",
         "ntfy_topic": "",
         "ntfy_server": "https://ntfy.sh",
+        "user_nickname": "",
         "encouragements_user": "[]",
     }
 
@@ -103,3 +104,20 @@ class SettingsService:
         """写入用户自定义激励语录，自动 JSON 编码并发布 SETTINGS_CHANGED 事件"""
         encoded = json.dumps(items, ensure_ascii=False)
         self.set("encouragements_user", encoded)
+
+    def get_user_nickname(self) -> str:
+        """获取用户自定义称呼，空字符串表示未设置"""
+        return self.get("user_nickname") or ""
+
+    def set_user_nickname(self, nickname: str) -> None:
+        """设置用户自定义称呼"""
+        self.set("user_nickname", nickname.strip())
+
+    def format_nickname(self, template: str) -> str:
+        """将模板中的 {称呼} 替换为用户昵称，未设置则去掉占位符"""
+        nickname = self.get_user_nickname()
+        if nickname:
+            return template.replace("{称呼}", nickname)
+        # 去掉占位符及紧随的标点空格，保留干净文本
+        import re
+        return re.sub(r"\{称呼\}[，,。.]?\s*", "", template).strip()

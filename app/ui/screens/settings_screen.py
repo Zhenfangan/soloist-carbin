@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from kivy.clock import Clock
+from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle
 from kivy.logger import Logger
 from kivy.uix.boxlayout import BoxLayout
@@ -359,6 +360,15 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
 
     def _build_other_group(self) -> Widget:
         box = self._make_vbox()
+
+        # --- 个性化称呼 ---
+        nickname_row = self._build_text_input_row(
+            label="个性称呼",
+            key="user_nickname",
+            hint="如:老公、宝贝…(留空不使用)",
+            password=False,
+        )
+        box.add_widget(nickname_row)
 
         # --- 男友奖励时长门槛 ---
         threshold_row = AmountPickerRow(
@@ -956,16 +966,23 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             app._time_panel_visible = False
             panel.opacity = 0
             panel.height = 0
+            # 恢复内容区高度
+            if hasattr(app, "_sm"):
+                app._sm.height = Window.height
         else:
             # 开启 → 自动设为本周一 07:00
-            now = datetime.now()
+            now = get_clock().now()
             monday = now - timedelta(days=now.weekday())
             clock = SimulatedClock()
             clock.set_date_and_time(monday.strftime("%Y-%m-%d"), "07:00")
             set_clock(clock)
             app._time_panel_visible = True
             panel.opacity = 1
-            panel.height = 42
+            panel.height = 64
+            panel._refresh_inputs()  # 同步输入框到模拟时钟时间
+            # 内容区下移,面板在上方不遮挡
+            if hasattr(app, "_sm"):
+                app._sm.height = Window.height - 64
         btn.text = self._time_panel_btn_text()
 
     def _on_dump_widget_tree(self) -> None:

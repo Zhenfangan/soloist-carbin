@@ -199,7 +199,8 @@ class TestAbsent:
     def test_mark_morning_absent(self, svc: CheckinService) -> None:
         clock = get_clock()
         assert isinstance(clock, SimulatedClock)
-        clock.set_date_and_time("2026-06-01", "10:05")  # 1h+ after 09:00
+        # mark_absent 要求 current >= period_end(12:00) 才判定,10:05 还在窗口内
+        clock.set_date_and_time("2026-06-01", "12:01")
         results = svc.mark_absent("2026-06-01")
         assert len(results) == 1
         assert results[0].status == "absent_morning"

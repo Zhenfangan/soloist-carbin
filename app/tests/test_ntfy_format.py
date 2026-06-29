@@ -58,9 +58,18 @@ def test_format_absent_afternoon() -> None:
 
 
 def test_format_attendance_judged_non_absent_returns_none() -> None:
-    for status in ("normal", "late", "leave", "shooting"):
+    # leave 现在会推送通知给男友(用户确认保留),不在 None 列表中
+    for status in ("normal", "late"):
         msg = _svc()._format_message(
             EventType.ATTENDANCE_JUDGED,
             {"date": "2026-06-18", "period": "morning", "status": status},
         )
         assert msg is None, f"status={status} 应返回 None"
+
+    # leave / shooting 会生成推送消息
+    for status in ("leave", "shooting"):
+        msg = _svc()._format_message(
+            EventType.ATTENDANCE_JUDGED,
+            {"date": "2026-06-18", "period": "morning", "status": status},
+        )
+        assert msg is not None, f"status={status} 应有推送消息"
