@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 from kivy.clock import Clock
-from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle
 from kivy.logger import Logger
 from kivy.uix.boxlayout import BoxLayout
@@ -36,6 +35,7 @@ from app.ui.tokens import (
     FONT_SIZE_TITLE,
     GRASS_INSET,
     GRID_UNIT,
+    LOGICAL_HEIGHT,
     SHADOW_BLACK,
     TEXT_BROWN,
     TEXT_GRAY,
@@ -968,7 +968,7 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             panel.height = 0
             # 恢复内容区高度
             if hasattr(app, "_sm"):
-                app._sm.height = Window.height
+                app._sm.height = LOGICAL_HEIGHT
         else:
             # 开启 → 自动设为本周一 07:00
             now = get_clock().now()
@@ -982,7 +982,7 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             panel._refresh_inputs()  # 同步输入框到模拟时钟时间
             # 内容区下移,面板在上方不遮挡
             if hasattr(app, "_sm"):
-                app._sm.height = Window.height - 64
+                app._sm.height = LOGICAL_HEIGHT - 64
         btn.text = self._time_panel_btn_text()
 
     def _on_dump_widget_tree(self) -> None:

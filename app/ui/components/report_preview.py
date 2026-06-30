@@ -67,27 +67,31 @@ _ABSENT_BG     = "#FFF0F2"
 _ABSENT_TEXT   = "#E03050"
 
 # ── PNG 资产路径 (无文本 emoji，全部使用图片) ───────────────────────
-_ICON_CAT      = "doc/ui-design/ip/images/gif/小猫庆祝/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_09.png"
+# IP 动画帧统一存于 app/ui/assets/animations/<role>/frame_NN.png (ASCII 路径)。
+# 注意: 原 doc/ui-design/.../<中文目录名>/ 路径在安卓打包/运行时无法可靠解析
+# 中文文件名 (桌面端因 CWD=项目根凑巧能找到, 真机上贴图为空 → 渲染成白方块)，
+# 故全部改为引用已规范化的 ASCII 路径副本。
+_ICON_CAT      = "app/ui/assets/animations/cat/frame_02.png"
 _ICON_WARNING  = "app/ui/assets/icons/warning.png"
 _ICON_CHECKIN  = "app/ui/assets/icons/btn_checkin.png"   # 签到格图标
 _ICON_CHECKOUT = "app/ui/assets/icons/btn_checkout.png"  # 签退格图标
 _ICON_SAVE     = "app/ui/assets/icons/btn_save.png"      # 保存按钮图标
-_SPRITE_DOG        = "doc/ui-design/ip/images/gif/小狗摘星星/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_15.png"
-_SPRITE_RABBIT     = "doc/ui-design/ip/images/gif/小兔胜利/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_01.png"
-_SPRITE_CAT_CORNER = "doc/ui-design/ip/images/gif/小猫庆祝/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_08.png"
-_SPRITE_BEAR       = "doc/ui-design/ip/images/gif/小熊熬夜/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_28.png"   # 最后一帧
-_SPRITE_PIG        = "doc/ui-design/ip/images/gif/小猪倒下/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_29.png"   # 第一帧(开心站立)
+_SPRITE_DOG        = "app/ui/assets/animations/dog/frame_01.png"
+_SPRITE_RABBIT     = "app/ui/assets/animations/rabbit/frame_01.png"
+_SPRITE_CAT_CORNER = "app/ui/assets/animations/cat/frame_01.png"
+_SPRITE_BEAR       = "app/ui/assets/animations/bear/frame_07.png"  # 最后一帧
+_SPRITE_PIG        = "app/ui/assets/animations/pig/frame_01.png"   # 第一帧(开心站立)
 _PIG_FRAMES = [
-    f"doc/ui-design/ip/images/gif/小猪倒下/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_{i:02d}.png"
-    for i in range(29, 36)
+    f"app/ui/assets/animations/pig/frame_{i:02d}.png"
+    for i in range(1, 8)
 ]
 
 _CAT_FRAMES = [
-    f"doc/ui-design/ip/images/gif/小猫庆祝/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_{i:02d}.png"
-    for i in range(8, 15)
+    f"app/ui/assets/animations/cat/frame_{i:02d}.png"
+    for i in range(1, 8)
 ]
 _RABBIT_FRAMES = [
-    f"doc/ui-design/ip/images/gif/小兔胜利/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_{i:02d}.png"
+    f"app/ui/assets/animations/rabbit/frame_{i:02d}.png"
     for i in range(1, 8)
 ]
 _PHOTO_BASE    = Path("user_data/photos")

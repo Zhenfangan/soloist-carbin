@@ -15,6 +15,7 @@ from kivy.graphics import Color, Rectangle  # noqa: E402
 from kivy.uix.boxlayout import BoxLayout  # noqa: E402
 from kivy.uix.floatlayout import FloatLayout  # noqa: E402
 from kivy.uix.image import Image as KivyImage  # noqa: E402
+from kivy.uix.scatter import Scatter  # noqa: E402
 from kivy.core.window import Window  # noqa: E402
 
 from app.db import init_db  # noqa: E402
@@ -48,7 +49,13 @@ from app.ui.screens.checkin_screen import CheckinScreen  # noqa: E402
 from app.ui.screens.history_screen import HistoryScreen  # noqa: E402
 from app.ui.screens.onboarding_screen import OnboardingScreen  # noqa: E402
 from app.ui.screens.settings_screen import SettingsScreen  # noqa: E402
-from app.ui.tokens import BG_CREAM, GRASS_INSET, NAV_HEIGHT  # noqa: E402
+from app.ui.tokens import (  # noqa: E402
+    BG_CREAM,
+    GRASS_INSET,
+    LOGICAL_HEIGHT,
+    LOGICAL_WIDTH,
+    NAV_HEIGHT,
+)
 from app.utils.clock import SimulatedClock, SystemClock, set_clock  # noqa: E402
 
 
@@ -196,7 +203,7 @@ class SoloistApp(App):  # type: ignore[misc]
         self._sm = sm
         sm.size_hint = (1, None)
         sm.pos_hint = {"x": 0, "y": 0}
-        sm.height = Window.height
+        sm.height = LOGICAL_HEIGHT
 
         # Layer 4: 天空背景 — 与 report_preview 一致的渲染方式
         _sky = _PassthroughImage(
@@ -227,11 +234,40 @@ class SoloistApp(App):  # type: ignore[misc]
         )
         self._time_panel_visible = False
 
+        # 真机适配: 全部裸像素值按 LOGICAL_WIDTH x LOGICAL_HEIGHT 设计画布设计,
+        # 桌面靠 Config.set 锁定窗口尺寸天然对齐, 真机无法锁定窗口尺寸(系统给原生
+        # 分辨率), 故用 Scatter 把内容区/导航栏按真实窗口尺寸整体等比缩放
+        # (取宽高缩放比中较小者, 避免任一方向超出屏幕), 缩放对触摸坐标自动生效。
+        scale = min(Window.width / LOGICAL_WIDTH, Window.height / LOGICAL_HEIGHT)
+        self._content_scale = scale
+
+        content_scatter = Scatter(
+            size=(LOGICAL_WIDTH, LOGICAL_HEIGHT),
+            size_hint=(None, None),
+            do_rotation=False,
+            do_translation=False,
+            do_scale=False,
+        )
+        content_scatter.scale = scale
+        content_scatter.pos = (0, 0)
+        content_scatter.add_widget(sm)
+
+        nav_scatter = Scatter(
+            size=(LOGICAL_WIDTH, NAV_HEIGHT),
+            size_hint=(None, None),
+            do_rotation=False,
+            do_translation=False,
+            do_scale=False,
+        )
+        nav_scatter.scale = scale
+        nav_scatter.pos = (0, 0)
+        nav_scatter.add_widget(tab_bar)
+
         # z-order 决定渲染顺序: 先添加=底层, 后添加=顶层
         self._root.add_widget(_sky)
-        self._root.add_widget(sm)
+        self._root.add_widget(content_scatter)
         self._root.add_widget(_grass)
-        self._root.add_widget(tab_bar)
+        self._root.add_widget(nav_scatter)
         self._root.add_widget(self._time_panel)
 
     def _make_camera_service(self) -> object:

@@ -24,9 +24,12 @@ from app.ui.tokens import (
     SHADOW_BLACK,
 )
 
+# IP 动画帧统一存于 app/ui/assets/animations/dog/frame_NN.png (ASCII 路径)。
+# 原 doc/ui-design/.../小狗摘星星/ 中文路径在安卓真机上无法解析 (桌面端因
+# CWD=项目根凑巧能找到, 真机贴图为空 → 渲染成白方块), 故改用规范化副本。
 _DOG_FRAMES = [
-    f"doc/ui-design/ip/images/gif/小狗摘星星/Gemini_Generated_Image_l6nfzkl6nfzkl6nf_{i:02d}.png"
-    for i in range(15, 22)
+    f"app/ui/assets/animations/dog/frame_{i:02d}.png"
+    for i in range(1, 8)
 ]
 _DOG_FPS = 4
 _DOG_LOOP_PAUSE = 3.0
