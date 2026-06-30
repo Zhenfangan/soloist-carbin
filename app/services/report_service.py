@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import random
 
-from jinja2 import Template
-
 from app.models.report import PeriodDetail, PromiseDetail, ReportData
 from app.repositories.checkin_repo import CheckinRepo
 from app.repositories.ledger_repo import LedgerRepo
@@ -22,7 +20,7 @@ ENCOURAGEMENTS = [
     "坚持下去，你就是自己的光。",
 ]
 
-DAILY_REPORT_TEMPLATE = Template("""<!DOCTYPE html>
+DAILY_REPORT_TEMPLATE = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 body { font-family: sans-serif; padding: 16px; max-width: 400px; margin: 0 auto; }
 .header { text-align: center; margin-bottom: 16px; }
@@ -97,9 +95,9 @@ body { font-family: sans-serif; padding: 16px; max-width: 400px; margin: 0 auto;
 {% endif %}
 
 <div class="encourage">{{ data.encouragement }}</div>
-</body></html>""")
+</body></html>"""
 
-SHOOTING_REPORT_TEMPLATE = Template("""<!DOCTYPE html>
+SHOOTING_REPORT_TEMPLATE = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><style>
 body { font-family: sans-serif; padding: 16px; max-width: 400px; margin: 0 auto; }
 .header { text-align: center; margin-bottom: 16px; }
@@ -127,7 +125,7 @@ body { font-family: sans-serif; padding: 16px; max-width: 400px; margin: 0 auto;
 {% endif %}
 
 <div class="encourage">{{ data.encouragement }}</div>
-</body></html>""")
+</body></html>"""
 
 
 class ReportService:
@@ -231,9 +229,11 @@ class ReportService:
         )
 
     def generate_html(self, data: ReportData) -> str:
-        """Jinja2 渲染 HTML"""
-        template = SHOOTING_REPORT_TEMPLATE if data.is_shooting_day else DAILY_REPORT_TEMPLATE
-        return template.render(data=data)
+        """Jinja2 渲染 HTML。移动端不走此路径(战报用 Kivy FBO 长图导出),
+        故惰性导入 jinja2, 避免安卓打包未含该依赖时在 import 阶段直接崩溃。"""
+        from jinja2 import Template
+        template_src = SHOOTING_REPORT_TEMPLATE if data.is_shooting_day else DAILY_REPORT_TEMPLATE
+        return Template(template_src).render(data=data)
 
     def generate_and_save(self, date: str) -> str:
         """一键生成战报 HTML（截图逻辑在 Android 层实现）"""
