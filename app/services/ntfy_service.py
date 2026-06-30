@@ -7,11 +7,12 @@ import logging
 import queue
 import threading
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
-
-import requests
 
 from app.services.event_bus import EventType, get_event_bus
 from app.services.settings_service import SettingsService
@@ -53,8 +54,8 @@ class NtfyPushService:
         self._settings = settings_service
         self._monotonic = monotonic or time.monotonic
         self._queue_path = queue_path or Path("user_data/push_queue.json")
-        self._session: requests.Session | None = requests.Session() if http_post is None else None
-        self._http_post = http_post or self._session.post  # type: ignore[union-attr]
+        # 默认用 urllib(stdlib)发送, 避免在安卓上打包 requests; 测试可注入 http_post
+        self._http_post = http_post or self._default_http_post
         self._sleep = sleep or time.sleep
         self._memory_queue: "queue.Queue[str]" = queue.Queue()
         self._recent: dict[str, float] = {}
@@ -94,9 +95,6 @@ class NtfyPushService:
                 break
         if remaining:
             self._append_persisted(remaining)
-        if self._session is not None:
-            self._session.close()
-            self._session = None
 
     # ── 消费 ─────────────────────────────
 
@@ -126,6 +124,16 @@ class NtfyPushService:
             return 200 <= getattr(resp, "status_code", 0) < 300
         except Exception:
             return False
+
+    @staticmethod
+    def _default_http_post(url: str, data: bytes, timeout: float) -> Any:
+        """stdlib urllib 实现, 避免在安卓上打包 requests。"""
+        req = urllib.request.Request(url, data=data, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return SimpleNamespace(status_code=resp.status)
+        except urllib.error.HTTPError as e:
+            return SimpleNamespace(status_code=e.code)
 
     # ── 测试推送（设置页按钮）─────────────
 

@@ -108,6 +108,34 @@ class TestCheckIn:
             f"迟到签到不应被正常签退覆盖，期望 late，实际 {result.status}"
         )
 
+    def test_day_status_flags_late_and_early_leave(self, svc: CheckinService) -> None:
+        """迟到签到 + 早退签退：status 被压成 late，但 get_today_status 必须
+        同时给出 is_late=True 与 is_early_leave=True，供 UI 完整展示两个违规。"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-01", "09:10")
+        svc.check_in("2026-06-01", "morning")            # 迟到
+        clock.set_date_and_time("2026-06-01", "11:30")
+        svc.check_out("2026-06-01", "morning")           # 早退
+        status = svc.get_today_status("2026-06-01")
+        morning = next(p for p in status.periods if p.period == "morning")
+        assert morning.status == "late"          # 单值枚举仍是 late
+        assert morning.is_late is True
+        assert morning.is_early_leave is True    # 早退不再被吞
+
+    def test_day_status_flags_early_leave_only(self, svc: CheckinService) -> None:
+        """正常签到 + 早退签退：is_late=False, is_early_leave=True"""
+        clock = get_clock()
+        assert isinstance(clock, SimulatedClock)
+        clock.set_date_and_time("2026-06-01", "08:55")
+        svc.check_in("2026-06-01", "morning")
+        clock.set_date_and_time("2026-06-01", "11:30")
+        svc.check_out("2026-06-01", "morning")
+        status = svc.get_today_status("2026-06-01")
+        morning = next(p for p in status.periods if p.period == "morning")
+        assert morning.is_late is False
+        assert morning.is_early_leave is True
+
     def test_checkout_after_window_closed_normal(self, svc: CheckinService) -> None:
         """签退时间超过下班时间 → 正常（加班）"""
         clock = get_clock()

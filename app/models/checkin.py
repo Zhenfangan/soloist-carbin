@@ -52,3 +52,7 @@ class PeriodStatus:
     checkout_time: str | None = None
     checkout_type: str = "manual"
     penalty_amount: float | None = None
+    # 迟到/早退为可并存的独立事实 — status 单值枚举装不下二者并存的情况，
+    # 故由 service 按签到/签退时间另行判定，供 UI 同时展示。
+    is_late: bool = False
+    is_early_leave: bool = False

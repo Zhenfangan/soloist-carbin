@@ -1012,9 +1012,11 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 from kivy.clock import Clock
                 def _do_export(_dt):
                     try:
-                        desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-                        filepath = os.path.join(desktop, f"战报_{date_str}.png")
+                        from app.utils.storage import get_pictures_dir, scan_media
+                        save_dir = get_pictures_dir()
+                        filepath = str(save_dir / f"战报_{date_str}.png")
                         export_root.export_to_png(filepath)
+                        scan_media(save_dir / f"战报_{date_str}.png")
                         print(f"[战报] 长图已保存: {filepath}")
                     except Exception as e2:
                         Logger.error(f"[战报] 导出失败: {e2}")

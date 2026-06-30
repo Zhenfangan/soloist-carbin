@@ -175,6 +175,10 @@ class CheckinService:
                 penalty: float | None = None
                 if status in absent_statuses:
                     penalty = -abs(float(self._get_setting("absent_penalty") or "0"))
+                # 迟到/早退为可并存的独立事实 — status 单值装不下二者并存，
+                # 故按时间另行判定供 UI 同时展示
+                is_late = status == STATUS_LATE
+                is_early_leave = self._is_early_leave(period, match.checkout_time)
                 day.periods.append(
                     PeriodStatus(
                         period=period,
@@ -183,6 +187,8 @@ class CheckinService:
                         checkout_time=match.checkout_time,
                         checkout_type=match.checkout_type,
                         penalty_amount=penalty,
+                        is_late=is_late,
+                        is_early_leave=is_early_leave,
                     )
                 )
                 if match.is_shooting:
@@ -358,6 +364,15 @@ class CheckinService:
         """返回时段结束时间字符串（HH:MM），晚间弹性时段返回空字符串。"""
         key = _PERIOD_END_KEY.get(period, "")
         return self._get_setting(key) if key else ""
+
+    def _is_early_leave(self, period: str, checkout_time: str | None) -> bool:
+        """签退时间是否早于该时段下班时间（弹性时段或未签退恒为 False）。"""
+        if not checkout_time:
+            return False
+        end = self.get_period_end_time(period)
+        if not end:
+            return False
+        return self._time_to_minutes(checkout_time) < self._time_to_minutes(end)
 
     def _get_setting(self, key: str) -> str:
         val = self._settings_repo.get(key)

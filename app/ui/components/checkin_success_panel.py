@@ -1,7 +1,7 @@
 """打卡成功反馈面板 — 卡片头部下方的内嵌反馈。
 
 每次签到 / 签退成功后，覆盖在触发的 PeriodCard 头部以下的内容区，
-~13 秒后自动消失。卡片头部（period 名 + 时间范围）始终保留可见，
+~4.5 秒后自动消失。卡片头部（period 名 + 时间范围）始终保留可见，
 卡片本身的高度、位置不变。
 
 面板自己不画背景 —— 卡片本身的玻璃背景就是它的底；同时把卡片原本
@@ -36,7 +36,8 @@ from app.ui.tokens import (
     TEXT_BROWN,
 )
 
-DISPLAY_DURATION = 6.5  # 总时长匹配帧序列：0.3 + 0.7×3 + 1.3×3 + 末帧驻留
+ANIM_SPEED = 1.5  # 帧序列播放倍速 (1.0=原速, >1=加速)
+DISPLAY_DURATION = 4.5  # 总时长匹配帧序列加速后: (0.3+0.7×3+1.3×3)/1.5 ≈ 4.2s + 末帧驻留
 BOUNCE_HEIGHT = 8
 BOUNCE_HALF_DURATION = 0.2
 HEADER_HEIGHT = 48  # 与 PeriodCard._COLLAPSED_HEIGHT 一致
@@ -101,22 +102,22 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
             outline_color=_hex_to_rgba(TEXT_BROWN),
             outline_width=2,
             bold=True,
-            size_hint=(0.66, 0.45),
-            pos_hint={"x": 0.32, "center_y": 0.68},
+            size_hint=(0.66, 0.38),
+            pos_hint={"x": 0.32, "center_y": 0.74},
             halign="center",
             valign="middle",
         )
         self._title_lbl.bind(size=lambda i, _: setattr(i, "text_size", i.size))
         self.add_widget(self._title_lbl)
 
-        # 右 70% 下半：激励语
+        # 右 70% 下半：激励语 (与标题间距充足，避免重叠)
         message = self._pick_encouragement()
         self._msg_lbl = Label(
             text=message,
             font_size=FONT_SIZE_BODY,
             color=_hex_to_rgba(TEXT_BROWN),
-            size_hint=(0.66, 0.35),
-            pos_hint={"x": 0.32, "center_y": 0.25},
+            size_hint=(0.66, 0.32),
+            pos_hint={"x": 0.32, "center_y": 0.20},
             halign="center",
             valign="middle",
         )
@@ -195,9 +196,9 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         """启动分阶段变速帧序列: frame_01 已是初始纹理, 从 frame_02 开始推进。"""
         if not self._frames or len(self._frames) <= 1:
             return
-        # frame_01(索引0) → frame_02(索引1): 0.3s 展开后
+        # frame_01(索引0) → frame_02(索引1): 0.3/ANIM_SPEED 后
         self._next_frame_event = Clock.schedule_once(
-            lambda dt: self._advance_to(1, 0.7), 0.3
+            lambda dt: self._advance_to(1, 0.7 / ANIM_SPEED), 0.3 / ANIM_SPEED
         )
 
     def _advance_to(self, frame_idx: int, next_delay: float) -> None:
@@ -218,13 +219,11 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
             self._next_frame_event = None
             return  # 最后一帧，不再推进
 
-        # 根据下一帧索引决定展示时长
-        # 索引 4=frame_05(打哈欠), 5=frame_06, 6=frame_07 → 1.3s
-        # 其余 → 0.7s
+        # 根据下一帧索引决定展示时长 (已按 ANIM_SPEED 缩放)
         if next_idx >= 4:
-            delay = 1.3
+            delay = 1.3 / ANIM_SPEED
         else:
-            delay = 0.7
+            delay = 0.7 / ANIM_SPEED
 
         self._next_frame_event = Clock.schedule_once(
             lambda dt, n=next_idx, d=delay: self._advance_to(n, d), next_delay

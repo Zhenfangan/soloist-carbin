@@ -9,9 +9,7 @@ from .camera_service import CameraService
 
 
 class AndroidCameraService(CameraService):
-    """Android 实现：调 plyer.camera.take_picture，保存到 user_data/photos。"""
-
-    _BASE_DIR = Path("user_data/photos")
+    """Android 实现：调 plyer.camera.take_picture，保存到公共 Pictures/Soloist。"""
 
     def take_photo(
         self,
@@ -20,8 +18,9 @@ class AndroidCameraService(CameraService):
         on_done: Callable[[Path | None], None],
     ) -> None:
         from app.utils.clock import get_clock
+        from app.utils.storage import get_pictures_dir, scan_media
         date_str = get_clock().today_str()
-        dest = self._BASE_DIR / date_str / f"{period}_{action}.jpg"
+        dest = get_pictures_dir() / date_str / f"{period}_{action}.jpg"
         dest.parent.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -29,6 +28,7 @@ class AndroidCameraService(CameraService):
 
             def _on_complete(filename: str | None) -> None:
                 if filename and Path(filename).exists():
+                    scan_media(Path(filename))
                     on_done(Path(filename))
                 else:
                     on_done(None)

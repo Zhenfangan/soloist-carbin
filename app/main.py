@@ -82,6 +82,9 @@ class SoloistApp(App):  # type: ignore[misc]
         # 诊断脚手架 (Wave 2 Phase 1) — 必须在任何 widget 实例化之前
         _setup_debug_hooks()
 
+        # 安卓: 启动即请求相机/存储运行时权限
+        self._request_android_permissions()
+
         # 默认使用系统真实时钟（虚拟时钟在开发面板中手动开启）
         set_clock(SystemClock())
 
@@ -96,7 +99,7 @@ class SoloistApp(App):  # type: ignore[misc]
         settings_repo = SettingsRepo(self.DB_PATH)
         settings_svc = SettingsService(settings_repo)
         checkin_repo = CheckinRepo(self.DB_PATH)
-        self._camera_svc = DesktopCameraMock()
+        self._camera_svc = self._make_camera_service()
         ledger_repo = LedgerRepo(self.DB_PATH)
         bet_svc = BetService(BetRepo(self.DB_PATH), ledger_repo, settings_repo)
         # 启动时自动补扣滞纳金
@@ -230,6 +233,32 @@ class SoloistApp(App):  # type: ignore[misc]
         self._root.add_widget(_grass)
         self._root.add_widget(tab_bar)
         self._root.add_widget(self._time_panel)
+
+    def _make_camera_service(self) -> object:
+        """按平台选相机实现: 安卓→真相机(plyer), 桌面→mock。"""
+        try:
+            from kivy.utils import platform  # type: ignore[import]
+            if str(platform) == "android":
+                from app.services.camera_android import AndroidCameraService
+                return AndroidCameraService()
+        except Exception:
+            pass
+        return DesktopCameraMock()
+
+    def _request_android_permissions(self) -> None:
+        """安卓运行时权限请求(相机/存储); 非安卓或失败均静默跳过。"""
+        try:
+            from kivy.utils import platform  # type: ignore[import]
+            if str(platform) != "android":
+                return
+            from android.permissions import Permission, request_permissions  # type: ignore[import]
+            request_permissions([
+                Permission.CAMERA,
+                Permission.WRITE_EXTERNAL_STORAGE,
+                Permission.READ_EXTERNAL_STORAGE,
+            ])
+        except Exception:
+            pass
 
     def on_stop(self) -> None:
         """应用退出时清理资源。"""

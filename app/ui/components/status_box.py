@@ -162,24 +162,23 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 status_w.color = self._to_rgba(color_hex)
 
     def _build_status_text(self, ps: Any, is_shooting_day: bool) -> str:
-        """根据 PeriodStatus 构建状态文案（前缀彩色 emoji）。"""
+        """根据 PeriodStatus 构建状态文案（前缀彩色 emoji）。
+
+        迟到/早退为可并存的独立事实，由 service 在 is_late/is_early_leave
+        标志位中给出，这里按"签到段 / 签退段"分别拼接，二者都违规则都展示。
+        """
         status = ps.status
         checkin_time = ps.checkin_time
         checkout_time = ps.checkout_time
+        # 优先用 service 给的独立标志位；缺失时回退 status 单值(向后兼容)
+        is_late = getattr(ps, "is_late", False) or status == "late"
+        is_early_leave = getattr(ps, "is_early_leave", False) or status == "early_leave"
 
+        # 终态 / 非出勤态 — 直接返回
         if status == "pending":
             if is_shooting_day:
                 return f"{emj('📸')} 拍摄中"
             return f"{emj('⏳')} 等待签到..."
-        if status == "normal":
-            parts = [f"{emj('✅')} 正常签到 {checkin_time}" if checkin_time else f"{emj('✅')} 正常"]
-            if checkout_time:
-                parts.append(f"{emj('🌙')} 签退 {checkout_time}")
-            return " / ".join(parts)
-        if status == "late":
-            return f"{emj('⏰')} 迟到 {checkin_time}" if checkin_time else f"{emj('⏰')} 迟到"
-        if status == "early_leave":
-            return f"{emj('🏃')} 早退 {checkout_time}" if checkout_time else f"{emj('🏃')} 早退"
         if status in ("absent", "absent_morning", "absent_afternoon"):
             penalty = getattr(ps, "penalty_amount", None)
             amount_str = f" {int(penalty)}" if penalty is not None else ""
@@ -193,10 +192,20 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         if status == "shooting":
             return f"{emj('📸')} 拍摄中"
 
-        if checkin_time and not checkout_time and status != "leave":
-            return f"{emj('💼')} 工作中..."
-        if checkin_time and checkout_time:
-            return f"{emj('✅')} 签到 {checkin_time} / {emj('🌙')} 签退 {checkout_time}"
+        # 出勤态 — 签到段 + 签退段独立拼接（迟到与早退可并存）
+        parts: list[str] = []
+        if checkin_time:
+            if is_late:
+                parts.append(f"{emj('⏰')} 迟到 {checkin_time}")
+            else:
+                parts.append(f"{emj('✅')} 正常签到 {checkin_time}")
+        if checkout_time:
+            if is_early_leave:
+                parts.append(f"{emj('🏃')} 早退 {checkout_time}")
+            else:
+                parts.append(f"{emj('🌙')} 签退 {checkout_time}")
+        if parts:
+            return " / ".join(parts)
 
         return f"{emj('⏳')} 等待签到..."
 

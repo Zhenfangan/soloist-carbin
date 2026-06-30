@@ -252,6 +252,8 @@ class TestStatusBox:
         status: str = "pending",
         checkin_time: str | None = None,
         checkout_time: str | None = None,
+        is_late: bool = False,
+        is_early_leave: bool = False,
     ) -> Any:
         """创建模拟 PeriodStatus。"""
         from types import SimpleNamespace
@@ -261,6 +263,8 @@ class TestStatusBox:
             checkin_time=checkin_time,
             checkout_time=checkout_time,
             checkout_type="manual",
+            is_late=is_late,
+            is_early_leave=is_early_leave,
         )
 
     @staticmethod
@@ -314,6 +318,25 @@ class TestStatusBox:
 
         morning_info = {"status_w": box._status_widgets["morning"]}
         assert "迟到" in morning_info["status_w"].text
+
+    def test_late_and_early_leave_status(self) -> None:
+        """既迟到又早退：service 把 status 压成 late，但 is_early_leave 标志位为真，
+        汇总栏应同时显示「迟到」和「早退」，不丢任何一个。"""
+        box = StatusBox()
+        day_status = self._make_day_status([
+            self._make_period_status(
+                "morning", "late", "09:15", "11:30",
+                is_late=True, is_early_leave=True,
+            ),
+            self._make_period_status("afternoon", "pending"),
+            self._make_period_status("evening", "pending"),
+        ])
+        box.update_status(day_status)
+
+        text = box._status_widgets["morning"].text
+        assert "迟到" in text, f"应含迟到: {text!r}"
+        assert "早退" in text, f"应含早退: {text!r}"
+        assert "09:15" in text and "11:30" in text
 
     def test_leave_status(self) -> None:
         """测试请假状态。"""

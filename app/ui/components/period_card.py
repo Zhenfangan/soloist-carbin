@@ -123,15 +123,19 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             size_hint=(1, 1),
             halign="left", valign="middle",
             markup=True,
+            shorten=True, shorten_from="right",
         )
-        # 完成徽章 — 放在 header 内，默认不可见
+        self._summary_label.bind(size=lambda i, _: setattr(i, "text_size", i.size))
+        # 完成徽章 — 放在 header 内，默认不可见。
+        # 宽度按文案自适应(随 texture_size)，不抢占摘要空间，保证"迟到早退"双状态完整显示不截断。
         self._check_label = Label(
             text="", font_size=FONT_SIZE_BODY,
             color=self._to_rgba(DOPAMINE_COLORS["mint"]["dark"]),
-            size_hint=(None, 1), width=120,
-            halign="left", valign="middle", opacity=0,
+            size_hint=(None, 1), width=0,
+            halign="right", valign="middle", opacity=0,
             markup=True,
         )
+        self._check_label.bind(texture_size=lambda i, ts: setattr(i, "width", ts[0]))
 
         self._header.add_widget(self._icon_label)
         self._header.add_widget(self._name_label)
@@ -335,13 +339,14 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._summary_label.text = f"{emj('🚨')} 旷工"
             self._summary_label.color = self._to_rgba(SEMANTIC_COLORS["absent"]["icon"])
         elif self._card_state == "completed":
+            # 完成态: 摘要只显示签到/签退时间(裁到 HH:MM 紧凑显示),
+            # 迟到/早退由右侧徽章统一表达, 避免双重来源不一致
             parts = []
             if self._checkin_time:
-                parts.append(f"{self._get_status_text()} {self._checkin_time}")
+                parts.append(f"{emj('✍️')} {self._checkin_time[:5]}")
             if self._checkout_time:
-                checkout_label = f"{emj('🏃')} 早退" if self._is_early_checkout() else f"{emj('🌙')} 签退"
-                parts.append(f"{checkout_label} {self._checkout_time}")
-            self._summary_label.text = "  ".join(parts) if parts else f"{emj('✅')} 已完成"
+                parts.append(f"{emj('🌙')} {self._checkout_time[:5]}")
+            self._summary_label.text = "  ".join(parts) if parts else "已完成"
             color = COLORS["PRIMARY_DARK"] if self._is_violation() else DOPAMINE_COLORS["mint"]["dark"]
             self._summary_label.color = self._to_rgba(color)
         elif self._card_state == "expanded":
@@ -353,6 +358,15 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
 
         # 内容区可见性 — 吉祥物动画期间不重置高度
         is_expanded = self._card_state == "expanded"
+
+        # 完成/旷工态隐藏时段名称 (图标已足够), 腾出空间给摘要+徽章
+        if self._card_state in ("completed", "absent"):
+            self._name_label.opacity = 0
+            self._name_label.width = 0
+        else:
+            self._name_label.opacity = 1
+            self._name_label.width = 50
+
         if not self._mascot_active:
             self._content_area.height = self._EXPANDED_HEIGHT - self._COLLAPSED_HEIGHT if is_expanded else 0
             self._content_area.opacity = 1.0 if is_expanded else 0
@@ -393,10 +407,18 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._action_btn.size_hint_y = None
             self._action_btn.height = 64
 
-        # 完成徽章 — 全正常才显示 [OK]，违规只显示状态文字
+        # 完成徽章 — 迟到/早退独立判定, 二者可并存; 全正常才显示 ✅
         if self._card_state == "completed":
-            if self._is_violation():
-                self._check_label.text = self._get_status_text()
+            is_late = self._status == "late"
+            is_early = self._is_early_checkout()
+            if is_late and is_early:
+                self._check_label.text = f"{emj('⏰')}迟到{emj('🏃')}早退"
+                self._check_label.color = self._to_rgba(COLORS["PRIMARY_DARK"])
+            elif is_late:
+                self._check_label.text = f"{emj('⏰')} 迟到"
+                self._check_label.color = self._to_rgba(COLORS["PRIMARY_DARK"])
+            elif is_early:
+                self._check_label.text = f"{emj('🏃')} 早退"
                 self._check_label.color = self._to_rgba(COLORS["PRIMARY_DARK"])
             else:
                 self._check_label.text = f"{emj('✅')} 完成"
@@ -404,6 +426,7 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._check_label.opacity = 1.0
         else:
             self._check_label.opacity = 0
+            self._check_label.text = ""  # 清空使 texture_size→0、不占据 header 宽度
 
         # 请假按钮 — 仅 expanded + morning/afternoon 时段显示
         if self._card_state == "expanded" and self._can_leave:
