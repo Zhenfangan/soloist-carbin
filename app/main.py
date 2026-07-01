@@ -201,9 +201,10 @@ class SoloistApp(App):  # type: ignore[misc]
 
         sm = AppScreenManager(screens)
         self._sm = sm
-        sm.size_hint = (1, None)
-        sm.pos_hint = {"x": 0, "y": 0}
-        sm.height = LOGICAL_HEIGHT
+        # Scatter 不是 Layout, 不处理 size_hint → 必须显式给宽高,
+        # 否则宽度塌回 Widget 默认 100px (缩放后成左侧窄条)。
+        sm.size_hint = (None, None)
+        sm.size = (LOGICAL_WIDTH, LOGICAL_HEIGHT)
 
         # Layer 4: 天空背景 — 与 report_preview 一致的渲染方式
         _sky = _PassthroughImage(
@@ -221,8 +222,8 @@ class SoloistApp(App):  # type: ignore[misc]
             fit_mode="fill",
         )
 
-        # Layer 1: 底部导航
-        tab_bar = BottomTabBar(sm, size_hint=(1, None), height=NAV_HEIGHT, pos_hint={"x": 0, "y": 0})
+        # Layer 1: 底部导航 (同理显式给宽度, Scatter 忽略 size_hint)
+        tab_bar = BottomTabBar(sm, size_hint=(None, None), width=LOGICAL_WIDTH, height=NAV_HEIGHT)
 
         # 虚拟时钟浮动条（默认隐藏，开发面板中开启）
         self._time_panel = TimeControlPanel(
