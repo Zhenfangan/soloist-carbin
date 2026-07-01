@@ -15,6 +15,7 @@ from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
 
 from app.ui.components.pixel_button import PixelButton
+from app.ui.scale_util import scale_wrap
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -245,7 +246,7 @@ class PixelTimePicker(ModalView):  # type: ignore[misc]
         btn_layout.add_widget(confirm_btn)
         card.add_widget(btn_layout)
 
-        root.add_widget(card)
+        root.add_widget(scale_wrap(card))
 
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:

@@ -18,6 +18,7 @@ from kivy.uix.modalview import ModalView
 from app.ui.components.pixel_button import PixelButton
 from app.ui.components.pixel_input import PixelInput
 from app.ui.components.pixel_stepper import PixelStepper
+from app.ui.scale_util import scale_wrap
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -198,7 +199,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
         card.add_widget(self._qty_stepper)
         card.add_widget(self._error_label)
         card.add_widget(btn_layout)
-        root.add_widget(card)
+        root.add_widget(scale_wrap(card))
 
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:

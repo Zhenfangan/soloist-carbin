@@ -20,17 +20,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from kivy.animation import Animation
+from kivy.core.window import Window
 from kivy.graphics import Color, Rectangle, RoundedRectangle
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
 from kivy.uix.modalview import ModalView
+from kivy.uix.scatter import Scatter
 from kivy.uix.scrollview import ScrollView
 
 from app.services.report_service import ENCOURAGEMENTS
 from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path
 from app.ui.components.pixel_button import PixelButton
+from app.ui.scale_util import scale_wrap
 from app.ui.tokens import (
     BG_CREAM,
     CARD_PADDING,
@@ -39,6 +42,8 @@ from app.ui.tokens import (
     FONT_SIZE_TITLE,
     GRASS_INSET,
     GRID_UNIT,
+    LOGICAL_HEIGHT,
+    LOGICAL_WIDTH,
     PRIMARY_YELLOW,
     TEXT_BROWN,
     TEXT_GRAY,
@@ -390,7 +395,8 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             self._mask = Rectangle(size=root.size, pos=root.pos)
         root.bind(size=self._update_mask, pos=self._update_mask)
 
-        panel = FloatLayout(size_hint=(1, 1), pos_hint={"x": 0, "y": 0})
+        # panel 固定为逻辑设计画布尺寸, 稍后用 Scatter 整体等比缩放到屏幕。
+        panel = FloatLayout(size=(LOGICAL_WIDTH, LOGICAL_HEIGHT), size_hint=(None, None))
 
         # ── 底层 [Image #6]: 完整景观背景（天空+彩虹+草地+土壤）─────
         def _redraw_panel_bg(w: Any, *_: Any) -> None:
@@ -402,6 +408,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         _redraw_panel_bg(panel)
 
         scroll = ScrollView(size_hint=(1, None), pos_hint={"x": 0, "y": 0.10})
+        scroll.height = LOGICAL_HEIGHT - 72  # panel 尺寸固定, 手动设初值
         panel.bind(size=lambda w, _: setattr(scroll, "height", w.height - 72))
 
         self._content_box = BoxLayout(
@@ -480,7 +487,7 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         btn_area.add_widget(save_row)
         panel.add_widget(btn_area)
 
-        root.add_widget(panel)
+        root.add_widget(scale_wrap(panel))
         self.add_widget(root)
 
         panel.y = -panel.height

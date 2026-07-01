@@ -21,6 +21,7 @@ from kivy.uix.modalview import ModalView
 from app.services.bet_service import BetService
 from app.ui.assets.loader import SequenceLoader
 from app.ui.components.pixel_button import PixelButton
+from app.ui.scale_util import scale_wrap
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -273,7 +274,7 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
         card.add_widget(detail_box)
         card.add_widget(self._tuantuan_img)
         card.add_widget(btn_layout)
-        root.add_widget(card)
+        root.add_widget(scale_wrap(card))
 
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
