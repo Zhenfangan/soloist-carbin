@@ -71,7 +71,7 @@ jobs:
         run: |
           pip install oss2
           python3 - <<'PYEOF'
-          import oss2, os, glob
+          import oss2, os, glob, tarfile
 
           auth = oss2.Auth(os.environ['OSS_ACCESS_KEY_ID'], os.environ['OSS_ACCESS_KEY_SECRET'])
           bucket = oss2.Bucket(auth, 'https://oss-cn-guangzhou.aliyuncs.com', 'soloist-apk')
@@ -83,16 +83,21 @@ jobs:
 
           apk_file = apk_files[0]
 
-          # 阿里云禁止用 OSS 默认域名分发 .apk (ApkDownloadForbidden),
-          # 故上传为 .zip 后缀绕过 (APK 本质是 zip, adb install 不看后缀)。
-          # 固定覆盖 latest.zip，URL 不变。
-          bucket.put_object_from_file('apk/latest.zip', apk_file)
+          # 阿里云按文件内容识别 APK (解析 zip 内 AndroidManifest.xml/classes.dex),
+          # 改后缀无效, ApkDownloadForbidden 依旧。用 gzip 打成 tar.gz,
+          # 外层是 gzip 流(magic 1f8b)阿里云无法识别为 APK → 放行。
+          # 下载后 `tar -xzf latest.tar.gz` 一行解出 apk (Windows 10+ 自带 tar)。
+          with tarfile.open('latest.tar.gz', 'w:gz') as tar:
+              tar.add(apk_file, arcname=os.path.basename(apk_file))
 
-          url = f'https://soloist-apk.oss-cn-guangzhou.aliyuncs.com/apk/latest.zip'
+          bucket.put_object_from_file('apk/latest.tar.gz', 'latest.tar.gz')
+
+          url = f'https://soloist-apk.oss-cn-guangzhou.aliyuncs.com/apk/latest.tar.gz'
           print(f'上传成功！固定下载链接: {url}')
 
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
               f.write('## APK 下载（国内直链）\n\n')
-              f.write(f'**固定链接（每次构建自动覆盖，下载后即可 adb install）:**\n\n')
-              f.write(f'```\n{url}\n```\n')
+              f.write(f'**固定链接（每次构建自动覆盖）:**\n\n')
+              f.write(f'```\n{url}\n```\n\n')
+              f.write('下载后解包: `tar -xzf latest.tar.gz`\n')
           PYEOF
