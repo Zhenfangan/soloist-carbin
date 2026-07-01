@@ -82,18 +82,17 @@ jobs:
               exit(1)
 
           apk_file = apk_files[0]
-          apk_name = os.path.basename(apk_file)
 
-          # 上传原始文件名版本
-          bucket.put_object_from_file(f'apk/{apk_name}', apk_file)
-          # 同时覆盖 latest.apk，URL 固定不变
-          bucket.put_object_from_file('apk/latest.apk', apk_file)
+          # 阿里云禁止用 OSS 默认域名分发 .apk (ApkDownloadForbidden),
+          # 故上传为 .zip 后缀绕过 (APK 本质是 zip, adb install 不看后缀)。
+          # 固定覆盖 latest.zip，URL 不变。
+          bucket.put_object_from_file('apk/latest.zip', apk_file)
 
-          url = f'https://soloist-apk.oss-cn-guangzhou.aliyuncs.com/apk/latest.apk'
+          url = f'https://soloist-apk.oss-cn-guangzhou.aliyuncs.com/apk/latest.zip'
           print(f'上传成功！固定下载链接: {url}')
 
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
               f.write('## APK 下载（国内直链）\n\n')
-              f.write(f'**固定链接（每次构建自动覆盖）:**\n\n')
+              f.write(f'**固定链接（每次构建自动覆盖，下载后即可 adb install）:**\n\n')
               f.write(f'```\n{url}\n```\n')
           PYEOF
