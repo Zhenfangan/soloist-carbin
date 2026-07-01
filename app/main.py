@@ -5,17 +5,21 @@
 
 from __future__ import annotations
 
+import os
+
 from kivy.config import Config
 
-Config.set("graphics", "width", "420")
-Config.set("graphics", "height", "750")
+# 桌面窗口尺寸; 真机全屏会忽略此设置。开发时可用环境变量
+# SOLOIST_WIN_W / SOLOIST_WIN_H 模拟真机分辨率, 在本地验证等比缩放布局。
+Config.set("graphics", "width", os.environ.get("SOLOIST_WIN_W", "420"))
+Config.set("graphics", "height", os.environ.get("SOLOIST_WIN_H", "750"))
 
 from kivy.app import App  # noqa: E402
 from kivy.graphics import Color, Rectangle  # noqa: E402
 from kivy.uix.boxlayout import BoxLayout  # noqa: E402
 from kivy.uix.floatlayout import FloatLayout  # noqa: E402
 from kivy.uix.image import Image as KivyImage  # noqa: E402
-from kivy.uix.scatter import Scatter  # noqa: E402
+from kivy.uix.scatterlayout import ScatterLayout  # noqa: E402
 from kivy.core.window import Window  # noqa: E402
 
 from app.db import init_db  # noqa: E402
@@ -201,10 +205,11 @@ class SoloistApp(App):  # type: ignore[misc]
 
         sm = AppScreenManager(screens)
         self._sm = sm
-        # Scatter 不是 Layout, 不处理 size_hint → 必须显式给宽高,
-        # 否则宽度塌回 Widget 默认 100px (缩放后成左侧窄条)。
-        sm.size_hint = (None, None)
-        sm.size = (LOGICAL_WIDTH, LOGICAL_HEIGHT)
+        # design_canvas 是 FloatLayout(会处理 size_hint/pos_hint), 故这里用回
+        # 相对布局: 宽度撑满画布, 高度=逻辑画布高, 底部对齐。
+        sm.size_hint = (1, None)
+        sm.height = LOGICAL_HEIGHT
+        sm.pos_hint = {"x": 0, "y": 0}
 
         # Layer 4: 天空背景 — 与 report_preview 一致的渲染方式
         _sky = _PassthroughImage(
@@ -222,8 +227,8 @@ class SoloistApp(App):  # type: ignore[misc]
             fit_mode="fill",
         )
 
-        # Layer 1: 底部导航 (同理显式给宽度, Scatter 忽略 size_hint)
-        tab_bar = BottomTabBar(sm, size_hint=(None, None), width=LOGICAL_WIDTH, height=NAV_HEIGHT)
+        # Layer 1: 底部导航
+        tab_bar = BottomTabBar(sm, size_hint=(1, None), height=NAV_HEIGHT, pos_hint={"x": 0, "y": 0})
 
         # 虚拟时钟浮动条（默认隐藏，开发面板中开启）
         self._time_panel = TimeControlPanel(
@@ -235,41 +240,41 @@ class SoloistApp(App):  # type: ignore[misc]
         )
         self._time_panel_visible = False
 
-        # 真机适配: 全部裸像素值按 LOGICAL_WIDTH x LOGICAL_HEIGHT 设计画布设计,
-        # 桌面靠 Config.set 锁定窗口尺寸天然对齐, 真机无法锁定窗口尺寸(系统给原生
-        # 分辨率), 故用 Scatter 把内容区/导航栏按真实窗口尺寸整体等比缩放
-        # (取宽高缩放比中较小者, 避免任一方向超出屏幕), 缩放对触摸坐标自动生效。
+        # ── 单根 ScatterLayout 整体等比缩放 ─────────────────────────────
+        # ScatterLayout = Scatter + 内置 FloatLayout: 既能整体等比缩放, 又用
+        # RelativeLayout 式坐标正确变换触摸。纯 Scatter 对深层 ScrollView
+        # (CheckinScreen 即 ScrollView) 的触摸命中会错位 → 必须用 ScatterLayout。
+        # 所有 UI 层直接加入, 内部 FloatLayout 按 size_hint/pos_hint 布局(与桌面一致)。
         scale = min(Window.width / LOGICAL_WIDTH, Window.height / LOGICAL_HEIGHT)
         self._content_scale = scale
 
-        content_scatter = Scatter(
+        root_scatter = ScatterLayout(
             size=(LOGICAL_WIDTH, LOGICAL_HEIGHT),
             size_hint=(None, None),
             do_rotation=False,
             do_translation=False,
             do_scale=False,
         )
-        content_scatter.scale = scale
-        content_scatter.pos = (0, 0)
-        content_scatter.add_widget(sm)
+        root_scatter.scale = scale
+        # 水平居中, 垂直底部对齐(草地/导航栏贴屏幕底, 拇指够得到)。
+        root_scatter.pos = ((Window.width - LOGICAL_WIDTH * scale) / 2.0, 0)
+        # z-order: 先加=底层
+        root_scatter.add_widget(_sky)
+        root_scatter.add_widget(sm)
+        root_scatter.add_widget(_grass)
+        root_scatter.add_widget(tab_bar)
+        root_scatter.add_widget(self._time_panel)
 
-        nav_scatter = Scatter(
-            size=(LOGICAL_WIDTH, NAV_HEIGHT),
-            size_hint=(None, None),
-            do_rotation=False,
-            do_translation=False,
-            do_scale=False,
+        # 全屏天空垫底: 填充画布等比缩放后顶部露出的空白, 视觉上仍是天空。
+        _sky_full = _PassthroughImage(
+            source=BG_LANDSCAPE,
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+            fit_mode="fill",
         )
-        nav_scatter.scale = scale
-        nav_scatter.pos = (0, 0)
-        nav_scatter.add_widget(tab_bar)
 
-        # z-order 决定渲染顺序: 先添加=底层, 后添加=顶层
-        self._root.add_widget(_sky)
-        self._root.add_widget(content_scatter)
-        self._root.add_widget(_grass)
-        self._root.add_widget(nav_scatter)
-        self._root.add_widget(self._time_panel)
+        self._root.add_widget(_sky_full)
+        self._root.add_widget(root_scatter)
 
     def _make_camera_service(self) -> object:
         """按平台选相机实现: 安卓→真相机(plyer), 桌面→mock。"""
