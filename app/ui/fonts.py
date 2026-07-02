@@ -10,13 +10,17 @@ from kivy.uix.label import Label as KivyLabel
 _FONT_DIR = (Path(__file__).parent / "assets" / "fonts").resolve()
 _FONT_PATH = _FONT_DIR / "QiuYeYuanTi-16.ttf"
 
-# Windows 自带 Segoe UI Emoji；Android(AOSP)系统自带 Noto Color Emoji。
-# 原列表只有 Windows 路径, 真机上一个都找不到 → 'emoji' 字体从未注册 →
-# emj() 退回裸 emoji 字符, 用不含 emoji 字形的秋叶圆体渲染 → 显示成方块/点。
+# Windows 自带 Segoe UI Emoji（彩色 emoji 字体）
+#
+# 曾尝试加入 /system/fonts/NotoColorEmoji.ttf 修复安卓真机 emoji 显示成方块的
+# 问题, 但真机测试出现启动即崩溃循环 (logcat: Fatal signal 11 SIGSEGV,
+# tid=Jit thread pool) —— Kivy 的 SDL2_ttf/FreeType 文字渲染管线对
+# NotoColorEmoji 使用的 CBDT/CBLC 彩色位图字形表兼容性差, 是已知的崩溃诱因。
+# 显示成方块是外观问题, 崩溃是致命问题, 两害相权已回退, 不要重新加入
+# 这个字体路径, 除非先验证目标设备的 Kivy 版本明确支持彩色位图字体。
 _EMOJI_FONT_CANDIDATES = [
     Path("C:/Windows/Fonts/seguiemj.ttf"),
     Path("C:/Windows/Fonts/segoeuiemoji.ttf"),
-    Path("/system/fonts/NotoColorEmoji.ttf"),
 ]
 
 _Label___init__ = KivyLabel.__init__
