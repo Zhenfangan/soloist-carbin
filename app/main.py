@@ -258,6 +258,10 @@ class SoloistApp(App):  # type: ignore[misc]
         root_scatter.scale = scale
         # 水平居中, 垂直底部对齐(草地/导航栏贴屏幕底, 拇指够得到)。
         root_scatter.pos = ((Window.width - LOGICAL_WIDTH * scale) / 2.0, 0)
+        # 暴露给需要挂到"缩放后的设计画布"而非裸 Window 的组件
+        # (如 CheckinSuccessPanel), 否则组件会以未缩放的逻辑尺寸画在真机原生
+        # 分辨率的 Window 上, 显得极小甚至看不见。
+        self._root_scatter = root_scatter
         # z-order: 先加=底层
         root_scatter.add_widget(_sky)
         root_scatter.add_widget(sm)

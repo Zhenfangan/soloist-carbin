@@ -24,6 +24,7 @@ from app.ui.components.pixel_button import PixelButton
 from app.ui.components.pixel_dialog import ConfirmDialog
 from app.ui.components.pixel_input import PixelInput
 from app.ui.components.time_picker_row import TimePickerRow
+from app.ui.scale_util import scale_wrap
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -196,13 +197,23 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
     # ------------------------------------------------------------------
 
     def show_toast(self, message: str, duration: float = 2.0) -> None:
-        """显示临时 Toast 通知。"""
+        """显示临时 Toast 通知。
+
+        ModalView.open() 内部把自身直接挂到 Window 上, 绕开了 main.py 的整体
+        缩放体系; box 用固定像素(300x50)是按 420 逻辑画布设计的, 真机上不缩放
+        会显得很小。用 scale_wrap 把 box 包进按屏幕等比缩放的容器再挂载。
+        """
         toast = ModalView(
-            size_hint=(None, None),
-            size=(300, 50),
+            size_hint=(1, 1),
             background="",
             background_color=(0, 0, 0, 0),
             auto_dismiss=True,
+        )
+
+        box = FloatLayout(
+            size_hint=(None, None),
+            size=(300, 50),
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
         )
 
         toast_label = Label(
@@ -212,23 +223,22 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             halign="center",
             valign="middle",
         )
+        toast_label.bind(size=lambda i, _v: setattr(i, "text_size", i.size))
 
         # 带背景的 Toast 容器
-        with toast.canvas.before:
+        with box.canvas.before:
             Color(0, 0, 0, 0.85)
-            Rectangle(pos=toast.pos, size=toast.size)
-        toast.bind(pos=lambda _t, _v: toast.canvas.before.clear() or self._redraw_toast(toast))
-        toast.bind(size=lambda _t, _v: toast.canvas.before.clear() or self._redraw_toast(toast))
+            self._toast_bg_rect = Rectangle(pos=box.pos, size=box.size)
+        box.bind(pos=self._redraw_toast_box, size=self._redraw_toast_box)
 
-        toast.add_widget(toast_label)
+        box.add_widget(toast_label)
+        toast.add_widget(scale_wrap(box))
         toast.open()
         Clock.schedule_once(lambda dt: toast.dismiss(), duration)
 
-    @staticmethod
-    def _redraw_toast(toast: ModalView) -> None:
-        with toast.canvas.before:
-            Color(0, 0, 0, 0.85)
-            Rectangle(pos=toast.pos, size=toast.size)
+    def _redraw_toast_box(self, box: FloatLayout, _value: object) -> None:
+        self._toast_bg_rect.pos = box.pos
+        self._toast_bg_rect.size = box.size
 
     # ------------------------------------------------------------------
     # 上班时间组

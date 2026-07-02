@@ -231,11 +231,12 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
             row.add_widget(val)
             detail_box.add_widget(row)
 
-        # 结算动画区域 (隐藏)
+        # 结算动画区域 (隐藏) — 右上角贴纸风格, 一半探出卡片顶边(与战报小猪贴纸一致),
+        # 避免压在中间的结算明细文字上。
         self._tuantuan_img = Image(
             size_hint=(None, None),
-            size=(64, 64),
-            pos_hint={"center_x": 0.5, "center_y": 0.65},
+            size=(88, 88),
+            pos_hint={"right": 1.0, "center_y": 1.0},
             opacity=0,
             allow_stretch=True,
             keep_ratio=True,

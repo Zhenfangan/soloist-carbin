@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import queue
+import ssl
 import threading
 import time
 import urllib.error
@@ -13,6 +14,16 @@ from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+
+# Android(python-for-android)上 ssl 模块找不到系统 CA 证书路径, urlopen 请求
+# https 会因证书验证失败被静默吞掉(呈现为"推送发不出去但看不到任何报错")。
+# 显式用 certifi 的证书包建 SSLContext; certifi 不可用时(如某些桌面环境)
+# 退回 ssl 默认上下文, 行为不变。
+try:
+    import certifi
+    _SSL_CONTEXT: ssl.SSLContext | None = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    _SSL_CONTEXT = None
 
 from app.services.event_bus import EventType, get_event_bus
 from app.services.settings_service import SettingsService
@@ -121,8 +132,12 @@ class NtfyPushService:
         url = f"{server.rstrip('/')}/{topic}"
         try:
             resp = self._http_post(url, data=msg.encode("utf-8"), timeout=HTTP_TIMEOUT)
-            return 200 <= getattr(resp, "status_code", 0) < 300
-        except Exception:
+            ok = 200 <= getattr(resp, "status_code", 0) < 300
+            if not ok:
+                _logger.warning(f"ntfy 推送非 2xx: status={getattr(resp, 'status_code', '?')}")
+            return ok
+        except Exception as e:
+            _logger.error(f"ntfy 推送失败: {e!r}")
             return False
 
     @staticmethod
@@ -130,7 +145,7 @@ class NtfyPushService:
         """stdlib urllib 实现, 避免在安卓上打包 requests。"""
         req = urllib.request.Request(url, data=data, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
                 return SimpleNamespace(status_code=resp.status)
         except urllib.error.HTTPError as e:
             return SimpleNamespace(status_code=e.code)

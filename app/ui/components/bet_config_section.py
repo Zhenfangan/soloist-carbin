@@ -18,6 +18,7 @@ from app.services.bet_service import BetService
 from app.ui.components.collapsible_group import CollapsibleGroup
 from app.ui.components.pixel_button import PixelButton
 from app.ui.components.pixel_input import PixelInput
+from app.ui.scale_util import scale_wrap
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -126,7 +127,7 @@ class _EditDialog(ModalView):  # type: ignore[misc]
         card.add_widget(title_label)
         card.add_widget(self._input)
         card.add_widget(btn_layout)
-        root.add_widget(card)
+        root.add_widget(scale_wrap(card))
 
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:

@@ -21,6 +21,7 @@ from collections.abc import Callable
 from typing import Any
 
 from kivy.animation import Animation
+from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.uix.floatlayout import FloatLayout
@@ -131,9 +132,24 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
     # 位置/大小同步（仅覆盖 header 以下的内容区）
     # --------------------------------------------------------------
 
+    @staticmethod
+    def _overlay_container() -> Any:
+        """挂载目标: 优先挂到 main.py 暴露的 root_scatter(随整体缩放变换),
+        取不到时(如独立单测)退回裸 Window。"""
+        app = App.get_running_app()
+        container = getattr(app, "_root_scatter", None)
+        return container if container is not None else Window
+
     def _sync_to_card(self) -> None:
         card = self._target_card
+        container = self._overlay_container()
+        # to_window 顺着父级链(含 ScrollView 滚动偏移 + Scatter 缩放)算出窗口坐标;
+        # 再用 container.to_widget 转回 container 的本地坐标系, 使 pos 在缩放后的
+        # 设计画布坐标系下才是正确的(否则挂到裸 Window 上时 to_window 的位置虽准,
+        # 但 size 仍是未缩放的逻辑尺寸, 真机上会显得极小)。
         wx, wy = card.to_window(card.x, card.y)
+        if container is not Window:
+            wx, wy = container.to_widget(wx, wy)
         new_h = max(0, card.height - HEADER_HEIGHT)
         self.size = (card.width, new_h)
         self.pos = (wx, wy)
@@ -162,7 +178,9 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
     # --------------------------------------------------------------
 
     def open(self) -> None:
-        Window.add_widget(self)
+        self._container = self._overlay_container()
+        self._container.add_widget(self)
+        self._sync_to_card()
         # 隐藏底下卡片的签到 / 请假按钮，避免半透明玻璃透出
         for attr in ("_action_btn", "_leave_btn"):
             w = getattr(self._target_card, attr, None)
@@ -271,8 +289,8 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
             self._target_card.unbind(pos=self._on_card_changed, size=self._on_card_changed)
         except Exception:
             pass
-        if self.parent is Window:
-            Window.remove_widget(self)
+        if self.parent is not None:
+            self.parent.remove_widget(self)
         if self._on_dismiss_callback:
             try:
                 self._on_dismiss_callback()
