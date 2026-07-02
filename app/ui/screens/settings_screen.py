@@ -976,9 +976,9 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             app._time_panel_visible = False
             panel.opacity = 0
             panel.height = 0
-            # 恢复内容区高度
+            # 恢复内容区高度(用真机动态拉伸后的画布高度, 而非固定 750 常量)
             if hasattr(app, "_sm"):
-                app._sm.height = LOGICAL_HEIGHT
+                app._sm.height = getattr(app, "_canvas_height", LOGICAL_HEIGHT)
         else:
             # 开启 → 自动设为本周一 07:00
             now = get_clock().now()
@@ -992,7 +992,7 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             panel._refresh_inputs()  # 同步输入框到模拟时钟时间
             # 内容区下移,面板在上方不遮挡
             if hasattr(app, "_sm"):
-                app._sm.height = LOGICAL_HEIGHT - 64
+                app._sm.height = getattr(app, "_canvas_height", LOGICAL_HEIGHT) - 64
         btn.text = self._time_panel_btn_text()
 
     def _on_dump_widget_tree(self) -> None:

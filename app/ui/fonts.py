@@ -10,10 +10,13 @@ from kivy.uix.label import Label as KivyLabel
 _FONT_DIR = (Path(__file__).parent / "assets" / "fonts").resolve()
 _FONT_PATH = _FONT_DIR / "QiuYeYuanTi-16.ttf"
 
-# Windows 自带 Segoe UI Emoji（彩色 emoji 字体）
+# Windows 自带 Segoe UI Emoji；Android(AOSP)系统自带 Noto Color Emoji。
+# 原列表只有 Windows 路径, 真机上一个都找不到 → 'emoji' 字体从未注册 →
+# emj() 退回裸 emoji 字符, 用不含 emoji 字形的秋叶圆体渲染 → 显示成方块/点。
 _EMOJI_FONT_CANDIDATES = [
     Path("C:/Windows/Fonts/seguiemj.ttf"),
     Path("C:/Windows/Fonts/segoeuiemoji.ttf"),
+    Path("/system/fonts/NotoColorEmoji.ttf"),
 ]
 
 _Label___init__ = KivyLabel.__init__

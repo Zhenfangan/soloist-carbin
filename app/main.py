@@ -206,9 +206,8 @@ class SoloistApp(App):  # type: ignore[misc]
         sm = AppScreenManager(screens)
         self._sm = sm
         # design_canvas 是 FloatLayout(会处理 size_hint/pos_hint), 故这里用回
-        # 相对布局: 宽度撑满画布, 高度=逻辑画布高, 底部对齐。
+        # 相对布局: 宽度撑满画布, 高度=画布高(见下方动态计算), 底部对齐。
         sm.size_hint = (1, None)
-        sm.height = LOGICAL_HEIGHT
         sm.pos_hint = {"x": 0, "y": 0}
 
         # Layer 4: 天空背景 — 与 report_preview 一致的渲染方式
@@ -245,11 +244,27 @@ class SoloistApp(App):  # type: ignore[misc]
         # RelativeLayout 式坐标正确变换触摸。纯 Scatter 对深层 ScrollView
         # (CheckinScreen 即 ScrollView) 的触摸命中会错位 → 必须用 ScatterLayout。
         # 所有 UI 层直接加入, 内部 FloatLayout 按 size_hint/pos_hint 布局(与桌面一致)。
-        scale = min(Window.width / LOGICAL_WIDTH, Window.height / LOGICAL_HEIGHT)
+        #
+        # 画布高度动态拉伸: 设计画布是 420x750 (宽高比 0.56), 但真机手机普遍比这
+        # "更细长"(如 1260x2844≈0.44) — 若固定按 750 高缩放, 按宽度撑满后高度会
+        # 比屏幕矮一截, 顶部露出大片空背景。CheckinScreen 本身是可滚动 ScrollView,
+        # 故当设备比画布更细长时, 直接按宽度撑满 + 画布高度拉伸到刚好铺满屏幕高度
+        # (顶部空白消失, 且能一屏多看到些内容); 只有当设备比画布更"矮胖"(如平板/
+        # 横屏, 按宽度撑满会超出屏幕高)时才回退到取小值防止内容溢出。
+        width_scale = Window.width / LOGICAL_WIDTH
+        height_scale_if_fixed = Window.height / LOGICAL_HEIGHT
+        if width_scale <= height_scale_if_fixed:
+            scale = width_scale
+            canvas_height = Window.height / scale
+        else:
+            scale = height_scale_if_fixed
+            canvas_height = LOGICAL_HEIGHT
         self._content_scale = scale
+        self._canvas_height = canvas_height
+        sm.height = canvas_height
 
         root_scatter = ScatterLayout(
-            size=(LOGICAL_WIDTH, LOGICAL_HEIGHT),
+            size=(LOGICAL_WIDTH, canvas_height),
             size_hint=(None, None),
             do_rotation=False,
             do_translation=False,
@@ -269,7 +284,8 @@ class SoloistApp(App):  # type: ignore[misc]
         root_scatter.add_widget(tab_bar)
         root_scatter.add_widget(self._time_panel)
 
-        # 全屏天空垫底: 填充画布等比缩放后顶部露出的空白, 视觉上仍是天空。
+        # 全屏天空垫底: 手机等细长设备画布已动态拉伸铺满, 此层通常不可见;
+        # 仅在平板/横屏等"矮胖"设备回退到取小值缩放时, 兜底填充露出的空白。
         _sky_full = _PassthroughImage(
             source=BG_LANDSCAPE,
             size_hint=(1, 1),

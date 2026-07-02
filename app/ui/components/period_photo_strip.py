@@ -23,7 +23,15 @@ _COLS_NORMAL = [("morning", "上午"), ("afternoon", "下午")]
 _COLS_OVERTIME = [("morning", "上午"), ("afternoon", "下午"), ("evening", "晚上")]
 _ACTIONS = [("in", "签到"), ("out", "签退")]
 
-_PHOTO_BASE = Path("user_data/photos")
+def _photo_base() -> Path:
+    """图片根目录 — 与 AndroidCameraService/DesktopCameraMock 实际存盘位置保持一致。
+
+    真机拍照存到公共 Pictures/Soloist (get_pictures_dir()), 而非旧的
+    user_data/photos (仅桌面 mock 用); 硬编码旧路径导致相册条在真机上永远
+    找不到照片, photo_count 恒为 0 → strip 高度恒为 0, 直接不可见。
+    """
+    from app.utils.storage import get_pictures_dir
+    return get_pictures_dir()
 _MASCOT_LAST_FRAME = Path("app/ui/assets/animations/rabbit/frame_07.png")
 _THUMB = 96
 _LABEL_H = 18
@@ -99,7 +107,7 @@ class PeriodPhotoStrip(BoxLayout):
 
 
 def _find_photo(date: str, period: str, action: str) -> Path | None:
-    base = _PHOTO_BASE / date
+    base = _photo_base() / date
     for ext in ("jpg", "jpeg", "png"):
         p = base / f"{period}_{action}.{ext}"
         if p.exists():

@@ -99,7 +99,15 @@ _RABBIT_FRAMES = [
     f"app/ui/assets/animations/rabbit/frame_{i:02d}.png"
     for i in range(1, 8)
 ]
-_PHOTO_BASE    = Path("user_data/photos")
+def _photo_base() -> Path:
+    """图片根目录 — 与 AndroidCameraService/DesktopCameraMock 实际存盘位置保持一致。
+
+    真机拍照存到公共 Pictures/Soloist (get_pictures_dir()), 而非旧的
+    user_data/photos (仅桌面 mock 用); 硬编码旧路径会导致战报永远找不到
+    真机拍摄的照片, 格子一直显示占位图。
+    """
+    from app.utils.storage import get_pictures_dir
+    return get_pictures_dir()
 
 # 格标签：纯文本，无 emoji（SmileySans 不含 emoji 字形）
 _SLOT_LABELS: dict[tuple[str, str], str] = {
@@ -152,7 +160,7 @@ def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, f
 
 
 def _find_photo(date: str, period: str, action: str) -> Path | None:
-    base = _PHOTO_BASE / date
+    base = _photo_base() / date
     for ext in ("jpg", "jpeg", "png"):
         p = base / f"{period}_{action}.{ext}"
         if p.exists():
@@ -1014,6 +1022,7 @@ class _ReportSlot(BoxLayout):
         thumb = BoxLayout(size_hint=(1, None), height=_THUMB_H)
 
         is_absent = "absent" in status
+        is_shooting = status == "shooting"
         if is_absent:
             outer, inner, shadow, content_bg = (
                 _ABSENT_OUTER, _ABSENT_INNER, _ABSENT_SHADOW, _ABSENT_BG
@@ -1050,6 +1059,18 @@ class _ReportSlot(BoxLayout):
                     bold=True,
                     color=_to_rgba(_ABSENT_TEXT),
                     size_hint=(1, 0.45),
+                    halign="center",
+                    valign="middle",
+                ))
+            elif is_shooting:
+                # 拍摄日无打卡照片时不应显示成"待打卡"(像什么都没发生),
+                # 用已定义好的拍摄专属文案+配色明确标注状态。
+                placeholder.add_widget(Label(
+                    text=_STATUS_LABEL.get("shooting", "拍摄"),
+                    font_size=_FONT_STATUS,
+                    bold=True,
+                    color=_to_rgba(_STATUS_COLOR.get("shooting", TEXT_GRAY)),
+                    size_hint=(1, 1),
                     halign="center",
                     valign="middle",
                 ))

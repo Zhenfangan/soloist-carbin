@@ -473,14 +473,20 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 self._date_str, period,
                 str(photo_path) if photo_path else None,
             )
-            card = self._period_cards.get(period)
-            if card:
-                card.has_checked_in = True
-                card.checkin_time = result.checkin_time
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
+            return
 
-            self._morning_checked_in = True
+        card = self._period_cards.get(period)
+        if card:
+            card.has_checked_in = True
+            card.checkin_time = result.checkin_time
+        self._morning_checked_in = True
 
-            if card:
+        # 动画面板显示失败不应阻塞卡片刷新/折叠 — 单独兜底, 出错则直接
+        # 走 dismiss 回调, 保证签到本身的后续状态更新一定发生。
+        if card:
+            try:
                 panel = CheckinSuccessPanel(
                     target_card=card,
                     is_checkin=True,
@@ -489,8 +495,9 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     on_dismiss_callback=lambda p=period: self._after_checkin_animation(p),
                 )
                 panel.open()
-        except Exception as e:
-            Logger.error(f"CheckinScreen: {e}")
+            except Exception as e:
+                Logger.error(f"CheckinScreen: 打卡成功动画显示失败 {e!r}")
+                self._after_checkin_animation(period)
 
     def _on_checkout(self, period: str) -> None:
         """签退回调 — 若在时段结束时间前签退，先弹确认框。"""
@@ -542,35 +549,42 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 self._date_str, period,
                 str(photo_path) if photo_path else None,
             )
-            card = self._period_cards.get(period)
-            if card:
-                card.has_checked_out = True
-                card.checkout_time = result.checkout_time
+        except Exception as e:
+            Logger.error(f"CheckinScreen: {e}")
+            return
 
-            def _after_checkout_anim() -> None:
-                self._refresh_status()
-                self._check_all_completed()
-                # 推进到下一个非终态时段（跳过请假/旷工/拍摄）
-                period_order = ["morning", "afternoon", "evening"]
-                terminal = {"absent", "absent_morning", "absent_afternoon", "leave", "shooting"}
-                current_idx = period_order.index(period) if period in period_order else -1
-                for next_idx in range(current_idx + 1, len(period_order)):
-                    next_period = period_order[next_idx]
-                    next_card = self._period_cards.get(next_period)
-                    if next_card is None:
-                        continue
-                    # 从当前 _periods_data 读取该时段状态判断是否终态
-                    next_ps = next(
-                        (p for p in self._periods_data if p.period == next_period), None
-                    )
-                    next_status = next_ps.status if next_ps else "pending"
-                    if next_status not in terminal:
-                        next_card.height = next_card._EXPANDED_HEIGHT
-                        next_card.card_state = "expanded"
-                        next_card.is_current = True
-                        break
+        card = self._period_cards.get(period)
+        if card:
+            card.has_checked_out = True
+            card.checkout_time = result.checkout_time
 
-            if card:
+        def _after_checkout_anim() -> None:
+            self._refresh_status()
+            self._check_all_completed()
+            # 推进到下一个非终态时段（跳过请假/旷工/拍摄）
+            period_order = ["morning", "afternoon", "evening"]
+            terminal = {"absent", "absent_morning", "absent_afternoon", "leave", "shooting"}
+            current_idx = period_order.index(period) if period in period_order else -1
+            for next_idx in range(current_idx + 1, len(period_order)):
+                next_period = period_order[next_idx]
+                next_card = self._period_cards.get(next_period)
+                if next_card is None:
+                    continue
+                # 从当前 _periods_data 读取该时段状态判断是否终态
+                next_ps = next(
+                    (p for p in self._periods_data if p.period == next_period), None
+                )
+                next_status = next_ps.status if next_ps else "pending"
+                if next_status not in terminal:
+                    next_card.height = next_card._EXPANDED_HEIGHT
+                    next_card.card_state = "expanded"
+                    next_card.is_current = True
+                    break
+
+        # 动画面板显示失败不应阻塞卡片刷新/折叠 — 单独兜底, 出错则直接
+        # 走 dismiss 回调, 保证签退本身的后续状态更新一定发生。
+        if card:
+            try:
                 panel = CheckinSuccessPanel(
                     target_card=card,
                     is_checkin=False,
@@ -579,10 +593,11 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     on_dismiss_callback=_after_checkout_anim,
                 )
                 panel.open()
-            else:
+            except Exception as e:
+                Logger.error(f"CheckinScreen: 签退成功动画显示失败 {e!r}")
                 _after_checkout_anim()
-        except Exception as e:
-            Logger.error(f"CheckinScreen: {e}")
+        else:
+            _after_checkout_anim()
 
     def _after_checkin_animation(self, period: str) -> None:
         """打卡动画完成后的处理。"""
