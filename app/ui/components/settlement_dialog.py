@@ -235,7 +235,7 @@ class SettlementDialog(ModalView):  # type: ignore[misc]
         # 避免压在中间的结算明细文字上。
         self._tuantuan_img = Image(
             size_hint=(None, None),
-            size=(88, 88),
+            size=(132, 132),  # 88 * 1.5
             pos_hint={"right": 1.0, "center_y": 1.0},
             opacity=0,
             allow_stretch=True,

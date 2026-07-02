@@ -12,6 +12,7 @@ ScrollView 垂直布局:
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from typing import Any
 
 from kivy.clock import Clock
@@ -463,6 +464,23 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         else:
             self._finish_checkin(period, None)
 
+    @staticmethod
+    def _fire_once(fn: Callable[[], Any]) -> Callable[[], None]:
+        """包一层防重复调用: 首次调用执行 fn, 之后的调用全部忽略。
+
+        用于同一个收尾动作可能被多条路径触发的场景(成功动画正常 dismiss /
+        超时兜底 / 异常兜底), 保证 fn 只真正执行一次。
+        """
+        fired = {"done": False}
+
+        def _guarded() -> None:
+            if fired["done"]:
+                return
+            fired["done"] = True
+            fn()
+
+        return _guarded
+
     def _finish_checkin(self, period: str, photo_path: Any) -> None:
         """拍照完成后执行实际签到写库。photo_path=None 且有相机服务 → 用户取消，不写记录。"""
         if self._camera_service and photo_path is None:
@@ -485,19 +503,27 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
         # 动画面板显示失败不应阻塞卡片刷新/折叠 — 单独兜底, 出错则直接
         # 走 dismiss 回调, 保证签到本身的后续状态更新一定发生。
+        # 拍照签到会先把 APP 切到后台调系统相机, 真机上 Kivy Clock 从后台
+        # 恢复前台后偶发不再正常推进面板内部的帧动画/自动关闭定时器
+        # (面板卡在 opacity=0 隐藏按钮的中间态, 不报错也不崩溃, 只是卡住)。
+        # 用 _fire_once 包一层防重复调用的兜底: 面板正常关闭时用掉这次机会;
+        # 若 6 秒后仍未关闭(超过面板自身 4.5 秒展示时长 + 缓冲), 强制推进,
+        # set_status_from_period 本身是幂等的, 重复调用无副作用。
         if card:
+            guard = self._fire_once(lambda p=period: self._after_checkin_animation(p))
             try:
                 panel = CheckinSuccessPanel(
                     target_card=card,
                     is_checkin=True,
                     is_night=period in ("evening", "night"),
                     settings_service=self._settings_service,
-                    on_dismiss_callback=lambda p=period: self._after_checkin_animation(p),
+                    on_dismiss_callback=guard,
                 )
                 panel.open()
+                Clock.schedule_once(lambda dt: guard(), 6.0)
             except Exception as e:
                 Logger.error(f"CheckinScreen: 打卡成功动画显示失败 {e!r}")
-                self._after_checkin_animation(period)
+                guard()
 
     def _on_checkout(self, period: str) -> None:
         """签退回调 — 若在时段结束时间前签退，先弹确认框。"""
@@ -582,20 +608,24 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     break
 
         # 动画面板显示失败不应阻塞卡片刷新/折叠 — 单独兜底, 出错则直接
-        # 走 dismiss 回调, 保证签退本身的后续状态更新一定发生。
+        # 走 dismiss 回调, 保证签退本身的后续状态更新一定发生。拍照签退同样
+        # 先切到后台调系统相机, 真机偶发导致面板内部定时器卡住不触发, 用
+        # 6 秒超时兜底强制推进 (见 _finish_checkin 同款注释)。
         if card:
+            guard = self._fire_once(_after_checkout_anim)
             try:
                 panel = CheckinSuccessPanel(
                     target_card=card,
                     is_checkin=False,
                     is_night=period in ("evening", "night"),
                     settings_service=self._settings_service,
-                    on_dismiss_callback=_after_checkout_anim,
+                    on_dismiss_callback=guard,
                 )
                 panel.open()
+                Clock.schedule_once(lambda dt: guard(), 6.0)
             except Exception as e:
                 Logger.error(f"CheckinScreen: 签退成功动画显示失败 {e!r}")
-                _after_checkout_anim()
+                guard()
         else:
             _after_checkout_anim()
 

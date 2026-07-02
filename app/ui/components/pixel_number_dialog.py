@@ -22,6 +22,7 @@ from app.ui.tokens import (
     CARD_PADDING,
     CARD_WHITE,
     COLORS,
+    FONT_SIZE_BODY,
     FONT_SIZE_TITLE,
     GRID_UNIT,
     SHADOW_BLACK,
@@ -104,7 +105,7 @@ class PixelNumberDialog(ModalView):  # type: ignore[misc]
         # 标题
         title_label = Label(
             text=title,
-            font_size=FONT_SIZE_TITLE,
+            font_size=FONT_SIZE_TITLE + 4,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=40,
@@ -145,6 +146,7 @@ class PixelNumberDialog(ModalView):  # type: ignore[misc]
             text="取消",
             color=COLORS["CARD_SHADOW"],
             size_mode="small",
+            font_size=FONT_SIZE_BODY,
             size_hint=(1, None),
         )
         cancel_btn.bind(on_press=lambda _: self.dismiss())
@@ -153,6 +155,7 @@ class PixelNumberDialog(ModalView):  # type: ignore[misc]
             text="确认",
             color=COLORS["PRIMARY_YELLOW"],
             size_mode="small",
+            font_size=FONT_SIZE_BODY,
             size_hint=(1, None),
         )
         confirm_btn.bind(on_press=lambda _: self._handle_confirm())

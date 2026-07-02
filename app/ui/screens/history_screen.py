@@ -18,7 +18,7 @@ from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
 
 from app.models.history import CalendarCell as CalendarCellModel
-from app.models.history import CycleSummary, DayCard as DayCardModel
+from app.models.history import CycleSummary
 from app.models.history import MonthViewData, WeekViewData, YearViewData
 from app.services.history_service import HistoryService
 from app.services.report_service import ReportService
@@ -298,10 +298,12 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
                     cell_model = cells_by_day.get(day_num)
                     if cell_model and cell_model.has_data:
                         status = self._model_color_to_status(cell_model.color)
+                        cell_date = cell_model.date
                         cell_widget = CalendarCell(
                             day=day_num,
                             status=status,
                             is_work_day=True,
+                            on_press=lambda d=cell_date: self._on_day_click(d),
                             size_hint=(1, 1),
                         )
                     else:
@@ -449,14 +451,14 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
     # DayCard 点击
     # ================================================================
 
-    def _on_day_click(self, day_summary: DayCardModel) -> None:
-        """DayCard 点击回调 — 生成 + 弹出该日战报 ReportPreview。"""
+    def _on_day_click(self, date: str) -> None:
+        """日期格子点击回调 — 生成 + 弹出该日战报 ReportPreview。"""
         if not self._report_service:
             Logger.warning("HistoryScreen: report_service 未注入, 无法弹出战报")
             return
 
         try:
-            data = self._report_service.collect_data(day_summary.date)
+            data = self._report_service.collect_data(date)
         except Exception as e:
             Logger.error(f"HistoryScreen: 生成战报失败 {e}")
             return
@@ -464,7 +466,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         from app.ui.components.report_preview import ReportPreview
         preview = ReportPreview(
             image_path="",
-            date_str=day_summary.date,
+            date_str=date,
             report_data=data,
             on_save=lambda: Logger.info("ReportPreview: 保存至相册 (Android 端实现)"),
             on_settle=lambda: Logger.info("ReportPreview: 退出并结算"),

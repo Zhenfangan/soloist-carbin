@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from kivy.graphics import Color, Rectangle
@@ -47,6 +48,7 @@ class CalendarCell(FloatLayout):  # type: ignore[misc]
         day: int,
         status: str = "future",
         is_work_day: bool = True,
+        on_press: Callable[[], Any] | None = None,
         **kwargs: Any,
     ) -> None:
         kwargs.setdefault("size_hint", (None, None))
@@ -54,6 +56,7 @@ class CalendarCell(FloatLayout):  # type: ignore[misc]
         self._day = day
         self._status = status
         self._is_work_day = is_work_day
+        self._on_press = on_press
 
         self.size = (36, 36)
 
@@ -72,6 +75,20 @@ class CalendarCell(FloatLayout):  # type: ignore[misc]
         self.bind(pos=self._redraw, size=self._redraw)
         # 立即更新 label 文本
         self._update_label_text()
+
+    def on_touch_down(self, touch: Any) -> bool:
+        if self._on_press is not None and self.collide_point(*touch.pos):
+            touch.grab(self)
+            return True
+        return bool(super().on_touch_down(touch))
+
+    def on_touch_up(self, touch: Any) -> bool:
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            if self._on_press is not None and self.collide_point(*touch.pos):
+                self._on_press()
+            return True
+        return bool(super().on_touch_up(touch))
 
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:

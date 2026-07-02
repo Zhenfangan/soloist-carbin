@@ -43,6 +43,7 @@ class PixelButton(Button):  # type: ignore[misc]
         size_mode: str = "normal",
         **kwargs: Any,
     ) -> None:
+        explicit_font_size = kwargs.pop("font_size", None)
         super().__init__(text=text, **kwargs)
         self._btn_color = color
         self._dark_color = self._compute_dark(color)
@@ -61,7 +62,10 @@ class PixelButton(Button):  # type: ignore[misc]
         self.background_color = (0, 0, 0, 0)  # 透明底，用 canvas 画
         self.color = self._to_rgba(TEXT_BROWN)
         self.disabled_color = self._to_rgba(TEXT_BROWN)
-        if size_mode == "large":
+        if explicit_font_size is not None:
+            # 调用方显式指定了字号 — 尊重它, 不用 size_mode 的默认值覆盖。
+            self.font_size = explicit_font_size
+        elif size_mode == "large":
             self.font_size = FONT_SIZE_TITLE
         elif size_mode == "small":
             self.font_size = FONT_SIZE_SMALL

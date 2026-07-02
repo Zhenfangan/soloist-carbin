@@ -24,6 +24,7 @@ from app.ui.tokens import (
     CARD_PADDING,
     CARD_WHITE,
     COLORS,
+    FONT_SIZE_BODY,
     FONT_SIZE_SMALL,
     FONT_SIZE_TITLE,
     GRID_UNIT,
@@ -102,7 +103,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
         # 标题
         title_label = Label(
             text=self._title_text,
-            font_size=FONT_SIZE_TITLE,
+            font_size=FONT_SIZE_TITLE + 4,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=40,
@@ -114,7 +115,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
         # 任务描述输入
         desc_label = Label(
             text="任务描述",
-            font_size=FONT_SIZE_SMALL,
+            font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_GRAY),
             size_hint=(1, None),
             height=20,
@@ -134,7 +135,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
         # 目标数量
         qty_label = Label(
             text="目标数量",
-            font_size=FONT_SIZE_SMALL,
+            font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_GRAY),
             size_hint=(1, None),
             height=20,
@@ -177,6 +178,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
             text="取消",
             color=COLORS["CARD_SHADOW"],
             size_mode="small",
+            font_size=FONT_SIZE_BODY,
             size_hint=(1, None),
         )
         cancel_btn.bind(on_press=lambda _: self._handle_cancel())
@@ -185,6 +187,7 @@ class AddTaskDialog(ModalView):  # type: ignore[misc]
             text=self._confirm_text,
             color=COLORS["PRIMARY_YELLOW"],
             size_mode="small",
+            font_size=FONT_SIZE_BODY,
             size_hint=(1, None),
         )
         confirm_btn.bind(on_press=lambda _: self._handle_confirm())

@@ -29,7 +29,6 @@ _CYCLE_GREEN = DOPAMINE_COLORS["mint"]["light"]   # 正常周期
 _CYCLE_GREEN_DARK = DOPAMINE_COLORS["mint"]["dark"]
 _CYCLE_RED = DOPAMINE_COLORS["coral"]["light"]     # 滞纳期
 _CYCLE_RED_DARK = DOPAMINE_COLORS["coral"]["dark"]
-_BAR_BG = "#E8E4E0"    # 背景底色
 _DOT_W = 10             # 像素点宽度
 _DOT_H = 14             # 像素点高度
 _DOT_GAP = 3            # 点间距
@@ -154,12 +153,10 @@ class CycleBar(FloatLayout):  # type: ignore[misc]
                 dot_w, dot_h, gap = self._calc_dot_geom(bar_area_w, total_dots)
                 dot_y = bar_y + (_DOT_H - dot_h) / 2
 
-                # 背景条只画到点阵实际占用的宽度, 不铺满 bar_area_w —
-                # 否则点数少(如无滞纳的 7 点)的周期会拖出一截空灰尾巴,
-                # 与点数多的周期视觉不一致, 像是没画完/出错。
-                dots_span = total_dots * dot_w + (total_dots - 1) * gap
-                Color(*self._to_rgba(_BAR_BG))
-                Rectangle(pos=(bar_x, bar_y), size=(dots_span, _DOT_H))
+                # 不再画整条实心背景条 — 方块间按设计留有间隙(像素点风格),
+                # 之前铺一块 _BAR_BG 矩形垫底会从间隙里透出灰色, 点数越多
+                # (如滞纳期 12 点)间隙越密集越明显, 看起来像没画完/出错。
+                # 去掉背景矩形后间隙直接透出卡片自身的玻璃背景, 更干净。
 
                 # 绘制绿色方块（正常周期）
                 for i in range(7):

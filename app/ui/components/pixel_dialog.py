@@ -104,7 +104,7 @@ class ConfirmDialog(ModalView):  # type: ignore[misc]
         # 标题
         title_label = Label(
             text=title,
-            font_size=FONT_SIZE_TITLE,
+            font_size=FONT_SIZE_TITLE + 4,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=40,
@@ -116,7 +116,7 @@ class ConfirmDialog(ModalView):  # type: ignore[misc]
         # 正文
         msg_label = Label(
             text=message,
-            font_size=FONT_SIZE_BODY,
+            font_size=FONT_SIZE_BODY + 2,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=60,
@@ -140,6 +140,7 @@ class ConfirmDialog(ModalView):  # type: ignore[misc]
             text=cancel_text,
             color=COLORS["CARD_SHADOW"],
             size_mode="small",
+            font_size=FONT_SIZE_BODY,
             size_hint=(1, None),
         )
         cancel_btn.bind(on_press=lambda _: self._handle_cancel())
@@ -148,6 +149,7 @@ class ConfirmDialog(ModalView):  # type: ignore[misc]
             text=confirm_text,
             color=confirm_color,
             size_mode="small",
+            font_size=FONT_SIZE_BODY,
             size_hint=(1, None),
         )
         confirm_btn.bind(on_press=lambda _: self._handle_confirm())
@@ -252,8 +254,8 @@ class TaskActionDialog(ModalView):  # type: ignore[misc]
         short_desc = (task_desc[:24] + "…") if len(task_desc) > 24 else task_desc
         desc_label = Label(
             text=short_desc,
-            font_size=FONT_SIZE_SMALL,
-            color=self._to_rgba(TEXT_BROWN, 0.6),
+            font_size=FONT_SIZE_BODY,
+            color=self._to_rgba(TEXT_BROWN, 0.8),
             size_hint=(1, None),
             height=28,
             pos_hint={"x": 0, "top": 1},
@@ -283,6 +285,7 @@ class TaskActionDialog(ModalView):  # type: ignore[misc]
             text="删除",
             color="#FF5070",
             size_mode="small",
+            font_size=FONT_SIZE_BODY,
             size_hint=(1, None),
         )
         delete_btn.bind(on_press=lambda _: self._handle_delete())
@@ -291,6 +294,7 @@ class TaskActionDialog(ModalView):  # type: ignore[misc]
             text="取消",
             color=COLORS["CARD_SHADOW"],
             size_mode="small",
+            font_size=FONT_SIZE_BODY,
             size_hint=(1, None),
         )
         cancel_btn.bind(on_press=lambda _: self.dismiss())
