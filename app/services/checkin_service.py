@@ -159,6 +159,34 @@ class CheckinService:
 
         return results
 
+    # ── 拍摄日编排 ────────────────────────────────────────
+
+    def set_shooting_day(self, date: str, reward_desc: str = "") -> None:
+        """将整天定为拍摄日 — 同时写两套表示(shooting_days 表 + checkins.is_shooting)"""
+        if self._shooting_service is not None:
+            self._shooting_service.set_shooting_day(date, reward_desc)
+        for period in ALL_PERIODS:
+            record = self._checkin_repo.get_by_date_period(date, period)
+            if record is None:
+                record = Checkin(checkin_date=date, period=period)
+            record.is_shooting = 1
+            record.status = STATUS_SHOOTING
+            self._checkin_repo.upsert(record)
+
+    def cancel_shooting_day(self, date: str) -> bool:
+        """取消拍摄日 — 窗口校验交给 shooting_service，通过后镜像撤销 checkins"""
+        if self._shooting_service is not None:
+            if not self._shooting_service.cancel_shooting_day(date):
+                return False
+        for period in ALL_PERIODS:
+            record = self._checkin_repo.get_by_date_period(date, period)
+            if record and record.is_shooting:
+                record.is_shooting = 0
+                record.status = STATUS_PENDING
+                record.checkin_time = None
+                self._checkin_repo.upsert(record)
+        return True
+
     # ── 状态查询 ──────────────────────────────────────────
 
     def get_today_status(self, date: str) -> DayStatus:

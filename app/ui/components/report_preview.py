@@ -516,52 +516,75 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         _add(self._date_card(data))
         _add(self._spacer(GRID_UNIT * 2))
 
-        # ③ 自律时光机：小狗前置 + 双行标题（字号有差别）
-        has_evening = any(p.period == "evening" for p in data.periods)
-        frame_count = 6 if has_evening else 4
+        # ②.5 拍摄复盘（仅拍摄日且有复盘时出现，办公日战报零改动）
+        refl_section = self._shooting_reflection_section(data)
+        if refl_section is not None:
+            _add(refl_section)
+            _add(self._spacer(GRID_UNIT * 2))
 
-        sec_row = BoxLayout(
-            orientation="horizontal",
-            size_hint=(1, None),
-            height=63,
-            spacing=GRID_UNIT,
-        )
-        sec_dog = Image(
-            source=_SPRITE_DOG,
-            size_hint=(None, 1),
-            width=63,
-            fit_mode="contain",
-        )
-        title_col = BoxLayout(orientation="vertical", size_hint=(None, 1), width=100, spacing=2)
-        t_sub = Label(
-            text=f"一日{frame_count}帧",
-            font_size=12,
-            color=_to_rgba(TEXT_GRAY),
-            size_hint_y=0.4,
-            halign="left",
-            valign="bottom",
-        )
-        t_sub.bind(size=t_sub.setter("text_size"))
-        t_main = Label(
-            text="自律时光机",
-            font_size=_FONT_SECTION,
-            bold=True,
-            color=_to_rgba(TEXT_BROWN),
-            size_hint_y=0.6,
-            halign="left",
-            valign="top",
-        )
-        t_main.bind(size=t_main.setter("text_size"))
-        title_col.add_widget(t_sub)
-        title_col.add_widget(t_main)
-        sec_row.add_widget(BoxLayout(size_hint_x=1))
-        sec_row.add_widget(sec_dog)
-        sec_row.add_widget(title_col)
-        sec_row.add_widget(BoxLayout(size_hint_x=1))
-        _add(sec_row)
-        _add(self._spacer(GRID_UNIT))
-        _add(_ReportPhotoGrid(data))
-        _add(self._spacer(GRID_UNIT * 2))
+        # ③ 拍摄日：一张大幅现场照(占四帧)；办公日：自律时光机六格打卡
+        if data.is_shooting_day:
+            scene_title = Label(
+                text="拍摄现场",
+                font_size=_FONT_SECTION,
+                bold=True,
+                color=_to_rgba(TEXT_BROWN),
+                size_hint=(1, None),
+                height=28,
+                halign="center",
+                valign="middle",
+            )
+            scene_title.bind(size=scene_title.setter("text_size"))
+            _add(scene_title)
+            _add(self._spacer(GRID_UNIT))
+            _add(_ShootingSceneBig(data))
+            _add(self._spacer(GRID_UNIT * 2))
+        else:
+            has_evening = any(p.period == "evening" for p in data.periods)
+            frame_count = 6 if has_evening else 4
+
+            sec_row = BoxLayout(
+                orientation="horizontal",
+                size_hint=(1, None),
+                height=63,
+                spacing=GRID_UNIT,
+            )
+            sec_dog = Image(
+                source=_SPRITE_DOG,
+                size_hint=(None, 1),
+                width=63,
+                fit_mode="contain",
+            )
+            title_col = BoxLayout(orientation="vertical", size_hint=(None, 1), width=100, spacing=2)
+            t_sub = Label(
+                text=f"一日{frame_count}帧",
+                font_size=12,
+                color=_to_rgba(TEXT_GRAY),
+                size_hint_y=0.4,
+                halign="left",
+                valign="bottom",
+            )
+            t_sub.bind(size=t_sub.setter("text_size"))
+            t_main = Label(
+                text="自律时光机",
+                font_size=_FONT_SECTION,
+                bold=True,
+                color=_to_rgba(TEXT_BROWN),
+                size_hint_y=0.6,
+                halign="left",
+                valign="top",
+            )
+            t_main.bind(size=t_main.setter("text_size"))
+            title_col.add_widget(t_sub)
+            title_col.add_widget(t_main)
+            sec_row.add_widget(BoxLayout(size_hint_x=1))
+            sec_row.add_widget(sec_dog)
+            sec_row.add_widget(title_col)
+            sec_row.add_widget(BoxLayout(size_hint_x=1))
+            _add(sec_row)
+            _add(self._spacer(GRID_UNIT))
+            _add(_ReportPhotoGrid(data))
+            _add(self._spacer(GRID_UNIT * 2))
 
         # ④ 男友奖励联动看板 (FloatLayout 包裹，右下角圆圆贴纸)
         _add(self._reward_panel(data))
@@ -731,6 +754,73 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         _Clock.schedule_once(_pig_bounce, 0.5)
         wrapper.add_widget(pig)
         return wrapper
+
+    @staticmethod
+    def _shooting_reflection_section(data: ReportData) -> BoxLayout | None:
+        """拍摄复盘卡片 — 仅拍摄日且有复盘时出现，复用面板双重线边框(暖橙)。
+
+        办公日战报不受影响(data.shooting_reflection 为空则返回 None)。
+        """
+        if not data.shooting_reflection:
+            return None
+
+        box = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, None),
+            padding=[CARD_PADDING, GRID_UNIT],
+            spacing=6,
+        )
+        _bind_panel_frame(
+            box,
+            outer="#FF9040", inner="#FFD4A0",
+            shadow="#C07028", content_bg="#FFF8F0",
+        )
+
+        title = Label(
+            text="拍摄复盘",
+            font_size=_FONT_SECTION,
+            bold=True,
+            color=_to_rgba(TEXT_BROWN),
+            size_hint_y=None,
+            height=28,
+            halign="center",
+            valign="middle",
+        )
+        title.bind(size=title.setter("text_size"))
+        box.add_widget(title)
+
+        meta_parts = []
+        if data.shooting_content:
+            meta_parts.append(f"内容：{data.shooting_content}")
+        if data.shooting_location:
+            meta_parts.append(f"地点：{data.shooting_location}")
+        if meta_parts:
+            meta = Label(
+                text="    ".join(meta_parts),
+                font_size=_FONT_SUB,
+                color=_to_rgba(TEXT_GRAY),
+                size_hint_y=None,
+                height=24,
+                halign="center",
+                valign="middle",
+            )
+            meta.bind(size=meta.setter("text_size"))
+            box.add_widget(meta)
+
+        refl = Label(
+            text=data.shooting_reflection,
+            font_size=_FONT_SUB,
+            color=_to_rgba(TEXT_BROWN),
+            size_hint=(1, None),
+            halign="center",
+            valign="top",
+        )
+        refl.bind(width=lambda w, _v: setattr(w, "text_size", (w.width, None)))
+        refl.bind(texture_size=lambda w, ts: setattr(w, "height", ts[1]))
+        box.add_widget(refl)
+
+        box.bind(minimum_height=box.setter("height"))
+        return box
 
     def _reward_panel(self, data: ReportData) -> FloatLayout:
         """达标/未达标双态看板，IP 贴纸叠加。"""
@@ -971,6 +1061,61 @@ class _ReportPhotoGrid(BoxLayout):
                     frame=frame,
                 ))
             self.add_widget(row)
+
+
+class _ShootingSceneBig(BoxLayout):
+    """拍摄日战报的大幅现场照 — 占原四帧网格大小，替代打卡六格。
+
+    有 shooting_scene 照片则大图铺满(cover)；无则暖橙占位标注"今日拍摄现场"。
+    """
+
+    def __init__(self, data: ReportData, **kwargs: Any) -> None:
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("size_hint", (1, None))
+        super().__init__(**kwargs)
+
+        big_h = 2 * _SLOT_H   # 占原四帧(2×2)高度
+        self.height = big_h
+
+        thumb = BoxLayout(size_hint=(1, None), height=big_h)
+        _bind_slot_frame(thumb, "#FF9040", "#FFD4A0", "#C07028", "#FFF8F0")
+
+        photo = _find_photo(data.date, "shooting", "scene")
+        if photo is not None:
+            img = Image(
+                source=photo.as_posix(),
+                size_hint=(1, 1),
+                fit_mode="cover",
+            )
+            thumb.add_widget(img)
+            from kivy.clock import Clock
+            Clock.schedule_once(lambda dt, i=img: i.reload(), 0)
+        else:
+            placeholder = BoxLayout(orientation="vertical", size_hint=(1, 1), padding=[10, 10])
+            top = Label(
+                text="今日拍摄现场",
+                font_size=_FONT_SECTION,
+                bold=True,
+                color=_to_rgba("#FF9040"),
+                size_hint=(1, 0.55),
+                halign="center",
+                valign="bottom",
+            )
+            top.bind(size=top.setter("text_size"))
+            sub = Label(
+                text="(未拍现场照)",
+                font_size=_FONT_SUB,
+                color=_to_rgba(TEXT_GRAY),
+                size_hint=(1, 0.45),
+                halign="center",
+                valign="top",
+            )
+            sub.bind(size=sub.setter("text_size"))
+            placeholder.add_widget(top)
+            placeholder.add_widget(sub)
+            thumb.add_widget(placeholder)
+
+        self.add_widget(thumb)
 
 
 class _ReportSlot(BoxLayout):

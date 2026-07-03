@@ -38,3 +38,7 @@ class ReportData:
     completed_tasks: list[str] = field(default_factory=list)
     encouragement: str = ""
     threshold_hours: float = 8.0
+    # 拍摄日复盘（仅拍摄日填充）
+    shooting_content: str = ""
+    shooting_location: str = ""
+    shooting_reflection: str = ""

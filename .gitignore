@@ -40,3 +40,8 @@ Thumbs.db
 
 # Wave 2 诊断 log (用户操作 trace, 不入库)
 doc/wave2-traces/
+
+# CI 构建产物 (从 OSS 下载的 apk 包, 装机后可删)
+*.tar.gz
+# 本地 UI 预览截图产物
+ui_preview/

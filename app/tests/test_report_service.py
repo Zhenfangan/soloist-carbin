@@ -66,6 +66,34 @@ class TestReportService:
         html = svc.generate_html(data)
         assert "拍摄日" in html
 
+    def _seed_shooting_with_reflection(self, temp_db: str) -> None:
+        from app.models.shooting import ShootingDay, ShootingReflection
+        shooting_repo = ShootingRepo(temp_db)
+        shooting_repo.set_shooting_day(ShootingDay(shoot_date="2026-06-15"))
+        shooting_repo.save_reflection(ShootingReflection(
+            shoot_date="2026-06-15", content="宣传片", location="创意园",
+            was_smooth="smooth", thoughts="很顺利",
+            summary="今天在创意园顺利完成了宣传片的拍摄",
+        ))
+        CheckinRepo(temp_db).upsert(Checkin(
+            checkin_date="2026-06-15", period="morning",
+            status="shooting", is_shooting=1,
+        ))
+
+    def test_collect_data_shooting_reflection_fields(self, temp_db: str) -> None:
+        self._seed_shooting_with_reflection(temp_db)
+        data = self.setup_svc(temp_db).collect_data("2026-06-15")
+        assert data.shooting_content == "宣传片"
+        assert data.shooting_location == "创意园"
+        assert "宣传片" in data.shooting_reflection
+
+    def test_shooting_html_includes_reflection(self, temp_db: str) -> None:
+        self._seed_shooting_with_reflection(temp_db)
+        svc = self.setup_svc(temp_db)
+        html = svc.generate_html(svc.collect_data("2026-06-15"))
+        assert "拍摄复盘" in html
+        assert "创意园" in html
+
     def test_over_8_hours_shows_overtime(self, temp_db: str) -> None:
         checkin_repo = CheckinRepo(temp_db)
         checkin_repo.upsert(Checkin(

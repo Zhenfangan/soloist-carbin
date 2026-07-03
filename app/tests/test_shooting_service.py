@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from app.repositories.ledger_repo import LedgerRepo
+from app.repositories.settings_repo import SettingsRepo
 from app.repositories.shooting_repo import ShootingRepo
 from app.services.shooting_service import ShootingService
 from app.utils.clock import SimulatedClock, get_clock
+from app.utils.config import LEDGER_TYPE_SHOOTING_REWARD
 
 
 class TestShootingService:
@@ -81,3 +84,31 @@ class TestShootingService:
         })
         assert ref.summary is not None
         assert ref.summary != ""
+
+    def test_submit_reflection_credits_shooting_reward(self, temp_db: str) -> None:
+        ledger = LedgerRepo(temp_db)
+        svc = ShootingService(ShootingRepo(temp_db), ledger, SettingsRepo(temp_db))
+        svc.submit_reflection("2026-06-01", {
+            "content": "宣传片",
+            "location": "创意园",
+            "smoothness": "smooth",
+            "thoughts": "光线很好",
+        })
+        rewards = [
+            e for e in ledger.get_by_date("2026-06-01")
+            if e.type == LEDGER_TYPE_SHOOTING_REWARD
+        ]
+        assert len(rewards) == 1
+        assert rewards[0].amount == 30  # shooting_reward 默认值
+
+    def test_submit_reflection_no_double_credit(self, temp_db: str) -> None:
+        ledger = LedgerRepo(temp_db)
+        svc = ShootingService(ShootingRepo(temp_db), ledger, SettingsRepo(temp_db))
+        answers = {"content": "x", "location": "y", "smoothness": "normal", "thoughts": "z"}
+        svc.submit_reflection("2026-06-01", answers)
+        svc.submit_reflection("2026-06-01", answers)  # 再次编辑复盘
+        rewards = [
+            e for e in ledger.get_by_date("2026-06-01")
+            if e.type == LEDGER_TYPE_SHOOTING_REWARD
+        ]
+        assert len(rewards) == 1  # 仍只入账一次

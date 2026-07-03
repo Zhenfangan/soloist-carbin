@@ -1,7 +1,28 @@
 """测试 ReportPreview 用 Kivy widget 渲染 ReportData。"""
 from __future__ import annotations
 
+from kivy.uix.label import Label
+
 from app.ui.components.report_preview import ReportPreview
+
+
+def _all_label_texts(widget: object) -> list[str]:
+    """递归收集 widget 树中所有 Label 的文本。"""
+    texts: list[str] = []
+    if isinstance(widget, Label):
+        texts.append(widget.text)
+    for child in getattr(widget, "children", []):
+        texts.extend(_all_label_texts(child))
+    return texts
+
+
+def _find_widgets(widget: object, cls: type) -> list:
+    out: list = []
+    if isinstance(widget, cls):
+        out.append(widget)
+    for child in getattr(widget, "children", []):
+        out.extend(_find_widgets(child, cls))
+    return out
 
 
 class TestReportPreviewRender:
@@ -94,3 +115,72 @@ class TestReportPreviewRender:
         assert len(content_box.children) > 2, (
             f"含 promise 和 completed_tasks 时应有多个子 widget, 实际 {len(content_box.children)}"
         )
+
+    def test_shooting_report_shows_reflection(self):
+        """拍摄日战报应在 widget 树中显示复盘内容。"""
+        from app.models.report import PeriodDetail, ReportData
+
+        data = ReportData(
+            date="2026-06-15",
+            is_shooting_day=True,
+            periods=[PeriodDetail(period="morning", status="shooting", status_label="拍摄日")],
+            encouragement="加油",
+            shooting_content="宣传片",
+            shooting_location="创意园",
+            shooting_reflection="今天在创意园顺利完成了宣传片的拍摄",
+        )
+        preview = ReportPreview(image_path="", report_data=data, date_str="2026-06-15")
+        joined = " ".join(_all_label_texts(preview._content_box))
+        assert "拍摄复盘" in joined
+        assert "创意园" in joined
+        assert "今天在创意园顺利完成了宣传片的拍摄" in joined
+
+    def test_office_report_has_no_reflection_section(self):
+        """办公日战报(无复盘数据)不应出现拍摄复盘 section。"""
+        from app.models.report import PeriodDetail, ReportData
+
+        data = ReportData(
+            date="2026-06-15",
+            is_shooting_day=False,
+            periods=[PeriodDetail(period="morning", status="normal", status_label="正常")],
+            encouragement="加油",
+        )
+        preview = ReportPreview(image_path="", report_data=data, date_str="2026-06-15")
+        joined = " ".join(_all_label_texts(preview._content_box))
+        assert "拍摄复盘" not in joined
+
+    def test_shooting_report_uses_big_scene_not_grid(self):
+        """拍摄日战报用一张大现场照替代六格打卡网格。"""
+        from app.models.report import PeriodDetail, ReportData
+        from app.ui.components.report_preview import _ReportPhotoGrid, _ShootingSceneBig
+
+        data = ReportData(
+            date="2026-06-15",
+            is_shooting_day=True,
+            periods=[
+                PeriodDetail(period=p, status="shooting", status_label="拍摄")
+                for p in ("morning", "afternoon", "evening")
+            ],
+            encouragement="加油",
+        )
+        preview = ReportPreview(image_path="", report_data=data, date_str="2026-06-15")
+        assert len(_find_widgets(preview._content_box, _ShootingSceneBig)) == 1
+        assert len(_find_widgets(preview._content_box, _ReportPhotoGrid)) == 0
+
+    def test_office_report_still_uses_photo_grid(self):
+        """办公日战报仍用六格网格(回归)。"""
+        from app.models.report import PeriodDetail, ReportData
+        from app.ui.components.report_preview import _ReportPhotoGrid, _ShootingSceneBig
+
+        data = ReportData(
+            date="2026-06-15",
+            is_shooting_day=False,
+            periods=[
+                PeriodDetail(period="morning", status="normal", status_label="正常"),
+                PeriodDetail(period="afternoon", status="normal", status_label="正常"),
+            ],
+            encouragement="加油",
+        )
+        preview = ReportPreview(image_path="", report_data=data, date_str="2026-06-15")
+        assert len(_find_widgets(preview._content_box, _ReportPhotoGrid)) == 1
+        assert len(_find_widgets(preview._content_box, _ShootingSceneBig)) == 0

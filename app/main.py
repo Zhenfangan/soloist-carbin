@@ -116,7 +116,7 @@ class SoloistApp(App):  # type: ignore[misc]
         # 启动时自动补扣滞纳金
         bet_svc.run_auto_checks()
         shooting_repo = ShootingRepo(self.DB_PATH)
-        self._shooting_svc = ShootingService(shooting_repo)
+        self._shooting_svc = ShootingService(shooting_repo, ledger_repo, settings_repo)
         checkin_svc = CheckinService(checkin_repo, settings_repo, shooting_service=self._shooting_svc)
         history_svc = HistoryService(checkin_repo, ledger_repo, shooting_repo, BetRepo(self.DB_PATH))
         self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo, settings_repo)

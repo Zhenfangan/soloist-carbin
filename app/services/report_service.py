@@ -115,6 +115,15 @@ body { font-family: sans-serif; padding: 16px; max-width: 400px; margin: 0 auto;
   <p>✨ 今日拍摄奖励已计入账本</p>
 </div>
 
+{% if data.shooting_reflection %}
+<div class="section">
+  <b>拍摄复盘</b>
+  {% if data.shooting_content %}<p>内容：{{ data.shooting_content }}</p>{% endif %}
+  {% if data.shooting_location %}<p>地点：{{ data.shooting_location }}</p>{% endif %}
+  <p>{{ data.shooting_reflection }}</p>
+</div>
+{% endif %}
+
 {% if data.completed_tasks %}
 <div class="section">
   <b>完成的任务</b>
@@ -149,6 +158,17 @@ class ReportService:
         """从各 Repository 收集当天数据"""
         records = self._checkin_repo.get_all_by_date(date)
         is_shooting = any(r.is_shooting for r in records)
+
+        # 拍摄日复盘数据
+        shooting_content = ""
+        shooting_location = ""
+        shooting_reflection = ""
+        if is_shooting:
+            refl = self._shooting_repo.get_reflection(date)
+            if refl:
+                shooting_content = refl.content or ""
+                shooting_location = refl.location or ""
+                shooting_reflection = refl.summary or refl.thoughts or ""
 
         status_labels = {
             "pending": "待判定", "normal": "正常", "late": "迟到",
@@ -226,6 +246,9 @@ class ReportService:
             completed_tasks=completed_tasks,
             encouragement=self._pick_encouragement(date),
             threshold_hours=threshold,
+            shooting_content=shooting_content,
+            shooting_location=shooting_location,
+            shooting_reflection=shooting_reflection,
         )
 
     def generate_html(self, data: ReportData) -> str:

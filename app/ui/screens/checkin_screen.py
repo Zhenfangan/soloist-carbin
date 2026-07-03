@@ -26,6 +26,7 @@ from app.ui.components.checkin_success_panel import CheckinSuccessPanel
 from app.ui.components.period_card import PeriodCard
 from app.ui.components.pixel_button import PixelButton
 from app.ui.components.promise_input import PromiseInput
+from app.ui.components.shooting_day_card import ShootingDayCard
 from app.ui.components.status_box import StatusBox
 from app.ui.components.task_inline_list import TaskInlineList
 from app.ui.fonts import emj
@@ -132,6 +133,22 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         )
         self._streak_label.bind(text=self._update_streak_height)
         self._container.add_widget(self._streak_label)
+
+        # 2.5 拍摄日卡片 — 非拍摄日上午上班前显示"设为拍摄日"入口；
+        #     拍摄日则替代三时段卡显示"完成拍摄/查看战报"。初始隐藏，
+        #     由 _apply_shooting_ui() 按当天状态切换。
+        self._shooting_card = ShootingDayCard(
+            on_set=self._on_set_shooting_day,
+            on_complete=self._on_complete_shooting,
+            on_cancel=self._on_cancel_shooting_day,
+            on_view_report=self._on_report,
+            on_capture=self._on_capture_scene,
+            size_hint=(1, None),
+            height=0,
+            opacity=0,
+            disabled=True,
+        )
+        self._container.add_widget(self._shooting_card)
 
         # 3. 三时段卡片
         self._period_cards: dict[str, PeriodCard] = {}
@@ -366,6 +383,12 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
                 # 检查是否应该显示战报按钮
                 self._check_all_completed()
+
+                # 拍摄日 UI 切换 + 次日复盘提醒
+                self._apply_shooting_ui()
+                Clock.schedule_once(
+                    lambda dt: self._check_yesterday_reflection_reminder(), 1.5
+                )
             except Exception as e:
                 Logger.error(f"CheckinScreen: {e}")
 
@@ -697,6 +720,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     )
             # 重新确定当前时段（终态不阻塞后续）
             self._determine_current_period()
+            # 拍摄日 UI 切换(拍摄日卡片 ⇄ 正常时段卡)
+            self._apply_shooting_ui()
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")
 
@@ -745,6 +770,140 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 self._report_btn.disabled = True
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")
+
+    # ── 拍摄日 ──────────────────────────────────────────────
+
+    def _is_before_morning_start(self) -> bool:
+        """当前是否早于上午上班时间(拍摄日可设置/可取消的窗口)。"""
+        from app.utils.clock import get_clock
+        now = get_clock().current_time_str()
+        start = "09:00"
+        if self._settings_service:
+            start = self._settings_service.get("morning_start") or "09:00"
+        return now < start
+
+    def _apply_shooting_ui(self) -> None:
+        """按当天拍摄日状态切换整套 UI(拍摄日卡片 ⇄ 正常时段卡)。"""
+        if not self._shooting_service:
+            self._set_shooting_card_visible(False)
+            return
+        try:
+            is_shooting = self._shooting_service.is_shooting_day(self._date_str)
+            before_morning = self._is_before_morning_start()
+            if is_shooting:
+                reflection = self._shooting_service.get_reflection(self._date_str)
+                self._shooting_card.set_state(
+                    "done" if reflection else "active",
+                    can_cancel=before_morning,
+                )
+                self._set_shooting_card_visible(True)
+                self._set_normal_day_visible(False)
+            else:
+                self._set_normal_day_visible(True)
+                if before_morning:
+                    self._shooting_card.set_state("idle")
+                    self._set_shooting_card_visible(True)
+                else:
+                    self._set_shooting_card_visible(False)
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 拍摄日 UI 刷新失败 {e}")
+
+    def _set_shooting_card_visible(self, show: bool) -> None:
+        self._shooting_card.opacity = 1.0 if show else 0.0
+        self._shooting_card.disabled = not show
+        self._shooting_card.height = self._shooting_card.natural_height if show else 0
+
+    def _set_normal_day_visible(self, visible: bool) -> None:
+        """拍摄日时收起正常时段 UI(时段卡 + 状态框 + 承诺区 + 战报按钮)。"""
+        op = 1.0 if visible else 0.0
+        for card in self._period_cards.values():
+            card.opacity = op
+            card.disabled = not visible
+            if not visible:
+                card.height = 0
+        self._status_box.opacity = op
+        if visible:
+            self._status_box.height = 130
+        else:
+            self._status_box.height = 0
+            self._promise_area.opacity = 0
+            self._promise_area.height = 0
+            self._report_btn.opacity = 0
+            self._report_btn.disabled = True
+
+    def _on_set_shooting_day(self) -> None:
+        """点击"设为拍摄日" — 一次性定死整天。"""
+        if not self._checkin_service:
+            return
+        try:
+            self._checkin_service.set_shooting_day(self._date_str)
+            self._refresh_status()
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 设置拍摄日失败 {e}")
+
+    def _on_cancel_shooting_day(self) -> None:
+        """点击"取消"拍摄日(仅上午上班前窗口内有效)。"""
+        if not self._checkin_service:
+            return
+        try:
+            ok = self._checkin_service.cancel_shooting_day(self._date_str)
+            if not ok:
+                from app.ui.components.toast import show_toast
+                show_toast("已过上午上班时间，无法取消拍摄日")
+            self._refresh_status()
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 取消拍摄日失败 {e}")
+
+    def _on_complete_shooting(self) -> None:
+        """点击"完成拍摄" — 弹复盘弹窗。"""
+        from app.ui.components.shooting_reflection_dialog import ShootingReflectionDialog
+        dialog = ShootingReflectionDialog(on_submit=self._on_reflection_submit)
+        dialog.open()
+
+    def _on_reflection_submit(self, answers: dict[str, str]) -> None:
+        """复盘提交回调 — 写库计奖励 + 刷新。"""
+        if self._shooting_service:
+            try:
+                self._shooting_service.submit_reflection(self._date_str, answers)
+                from app.ui.components.toast import show_reward_celebration
+                show_reward_celebration("拍摄复盘已记录，奖励已入账")
+            except Exception as e:
+                Logger.error(f"CheckinScreen: 提交复盘失败 {e}")
+        self._refresh_status()
+
+    def _on_capture_scene(self) -> None:
+        """拍摄日「拍张现场」— 可选留念, 不考勤、不影响奖励, 拍完存 shooting_scene 供战报读取。"""
+        if not self._camera_service:
+            return
+        try:
+            self._camera_service.take_photo(
+                period="shooting",
+                action="scene",
+                on_done=self._on_scene_captured,
+            )
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 拍摄现场失败 {e}")
+
+    def _on_scene_captured(self, path: Any) -> None:
+        """现场照拍完回调 — 有照片则轻提示(战报会自动读取该照片)。"""
+        if path:
+            from app.ui.components.toast import show_toast
+            show_toast("现场照已记录，会出现在战报里~")
+
+    def _check_yesterday_reflection_reminder(self) -> None:
+        """次日温和提醒 — 昨天是拍摄日但没写复盘。"""
+        if not self._shooting_service or not self._date_str:
+            return
+        try:
+            from datetime import datetime, timedelta
+            today = datetime.strptime(self._date_str, "%Y-%m-%d")
+            yesterday = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+            if (self._shooting_service.is_shooting_day(yesterday)
+                    and self._shooting_service.get_reflection(yesterday) is None):
+                from app.ui.components.toast import show_toast
+                show_toast("昨天的拍摄还没写复盘哦~", duration=3.0)
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 复盘提醒检查失败 {e}")
 
     # ── 请假 ────────────────────────────────────────────────
 
