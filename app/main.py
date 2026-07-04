@@ -46,7 +46,7 @@ from app.services.ntfy_service import NtfyPushService  # noqa: E402
 from app.services.sync_service import SyncService  # noqa: E402
 from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path  # noqa: E402
 from app.ui.assets.loader import apply_pixel_filter, preload_all  # noqa: E402
-from app.ui.fonts import apply_global_font  # noqa: E402
+from app.ui.fonts import apply_global_font, set_supersample_scale  # noqa: E402
 from app.ui.navigation import AppScreenManager, BottomTabBar  # noqa: E402
 from app.ui.components.time_control_panel import TimeControlPanel  # noqa: E402
 from app.ui.screens.bet_screen import BetScreen  # noqa: E402
@@ -268,6 +268,9 @@ class SoloistApp(App):  # type: ignore[misc]
             canvas_height = LOGICAL_HEIGHT
         self._content_scale = scale
         self._canvas_height = canvas_height
+        # 文字超采样系数 = 整体缩放比: 让所有 Label 按最终屏幕像素高清光栅化, 抵消
+        # 下方 ScatterLayout ×scale 线性放大造成的文字模糊(桌面 scale=1 时自动不生效)。
+        set_supersample_scale(scale)
         sm.height = canvas_height
 
         root_scatter = ScatterLayout(
