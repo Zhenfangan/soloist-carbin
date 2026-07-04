@@ -13,7 +13,7 @@ from kivy.clock import Clock
 from kivy.uix.image import Image as KivyImage
 from kivy.uix.widget import Widget
 
-from app.ui.assets.loader import SpriteLoader
+from app.ui.assets.loader import SpriteLoader, apply_sprite_texture
 from app.ui.tokens import GRID_UNIT
 
 
@@ -139,8 +139,7 @@ class SpritePlayer(Widget):  # type: ignore[misc]
         if not self._animator.is_playing:
             return
         frame = self._animator.current_frame
-        if frame and frame.texture:
-            self._image.texture = frame.texture
+        apply_sprite_texture(self._image, frame)  # 挂帧纹理 + nearest 过滤(防放大糊)
 
 
 def pixel_expand(widget: Widget, height_delta: int, duration: float = 0.2) -> None:

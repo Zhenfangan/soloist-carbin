@@ -30,6 +30,27 @@ def apply_pixel_filter(texture: Any) -> None:
     texture.mag_filter = "nearest"
     texture.min_filter = "nearest"
 
+
+def apply_sprite_texture(image_widget: Any, core_frame: Any) -> None:
+    """把角色 sprite 帧纹理挂到 Image widget 并应用 nearest 过滤。
+
+    统一入口: 各处显示角色精灵时都经此设置纹理, 顺带补上 nearest 过滤,
+    使角色像素放大时保持硬边、不被线性过滤抹糊(此前唯独 sprite 漏加)。
+
+    为什么放在消费点而非加载点: SpriteLoader 用 BytesIO 加载帧, 在
+    offscreen(无头测试)后端 / 首帧前(启动 preload)访问 .texture 会段错误
+    (已取证)。而消费点必在首帧后、屏幕真正显示精灵时触发, GL 已就绪;
+    单元测试里 core_frame 为 mock, 亦安全。故绝不引入启动期崩溃风险。
+    """
+    if core_frame is None:
+        return
+    texture = core_frame.texture
+    if texture is None:
+        return
+    image_widget.texture = texture
+    apply_pixel_filter(texture)
+
+
 # sprite 帧配置: {mascot_id: (filename, frame_width, frame_count)}
 SPRITE_CONFIG: dict[str, tuple[str, int, int]] = {
     "dudu": ("sprites/dudu_32x32.png", 32, 4),

@@ -618,6 +618,8 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         outer.add_widget(BoxLayout(size_hint_x=1))
 
         cat = Image(source=_ICON_CAT, size_hint=(None, 1), width=84, fit_mode="contain")
+        apply_pixel_filter(cat.texture)  # 品牌小猫像素图放大保持硬边
+        cat.bind(texture=lambda _i, t: apply_pixel_filter(t))  # 异步/重载后仍 nearest
         text_col = BoxLayout(orientation="vertical", size_hint=(None, 1), width=144, spacing=4)
         t1 = Label(
             text="Soloist Cabin",

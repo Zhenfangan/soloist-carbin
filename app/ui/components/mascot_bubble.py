@@ -98,10 +98,9 @@ class MascotBubble(FloatLayout):  # type: ignore[misc]
     def _load_sprite_texture(self, mascot_id: str) -> None:
         """加载角色精灵第一帧作为静态展示。"""
         try:
-            from app.ui.assets.loader import SpriteLoader
+            from app.ui.assets.loader import SpriteLoader, apply_sprite_texture
             frame = SpriteLoader.load_frame(mascot_id, 0)
-            if frame and frame.texture:
-                self._sprite.texture = frame.texture
+            apply_sprite_texture(self._sprite, frame)  # 挂帧纹理 + nearest 过滤
         except Exception:
             pass
 

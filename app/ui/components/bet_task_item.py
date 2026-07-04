@@ -18,7 +18,7 @@ from kivy.uix.widget import Widget
 
 from app.models.ledger import BetTask
 from app.ui.components.glass_bg import draw_glass_card_bg
-from app.ui.assets.loader import SpriteLoader
+from app.ui.assets.loader import SpriteLoader, apply_sprite_texture
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_WHITE,
@@ -453,7 +453,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
         try:
             frames = SpriteLoader.load_sprite("wangzai")
             if frames:
-                self._wangzai_img.texture = frames[0].texture
+                apply_sprite_texture(self._wangzai_img, frames[0])  # nearest 过滤
         except Exception:
             pass
 
@@ -471,7 +471,7 @@ class BetTaskItem(FloatLayout):  # type: ignore[misc]
                 frames = SpriteLoader.load_sprite("wangzai")
                 if frames and len(frames) > 1:
                     frame_idx = step % min(2, len(frames))
-                    self._wangzai_img.texture = frames[frame_idx].texture
+                    apply_sprite_texture(self._wangzai_img, frames[frame_idx])  # nearest
             except Exception:
                 pass
 

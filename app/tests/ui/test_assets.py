@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from PIL import Image as PILImage
@@ -145,9 +146,52 @@ class TestSpriteLoader:
             frames = SpriteLoader.load_sprite(mascot_id)
             assert len(frames) == 4, f"{mascot_id}: expected 4 frames"
 
-    # 注意: SpriteLoader 帧(BytesIO 内存缓冲区加载)访问 .texture 时在本机
-    # 桌面环境下会段错误(access violation), 是与本次清晰度修复无关的独立
-    # 潜在 bug, 未在此处修复/测试, 已单独反馈给用户。
+
+class TestApplySpriteTexture:
+    """apply_sprite_texture —— 角色精灵纹理统一入口 + nearest 过滤。
+
+    真机反馈: 角色精灵放大后模糊 —— 图标/序列动画早已 nearest 过滤, 唯独
+    SpriteLoader(BytesIO 加载)漏了。难点: offscreen(无头测试)后端 / 启动
+    preload(首帧前)访问 BytesIO 帧 .texture 会段错误(已子进程取证)。故过滤
+    放在消费点(widget 显示精灵时, 首帧后 GL 就绪)统一处理, 绝不在加载/启动
+    期触碰 .texture。
+    """
+
+    def test_sets_widget_texture_from_frame(self) -> None:
+        from app.ui.assets.loader import apply_sprite_texture
+        widget, frame = MagicMock(), MagicMock()
+        apply_sprite_texture(widget, frame)
+        assert widget.texture is frame.texture
+
+    def test_applies_nearest_filter(self) -> None:
+        from app.ui.assets.loader import apply_sprite_texture
+        widget, frame = MagicMock(), MagicMock()
+        apply_sprite_texture(widget, frame)
+        assert frame.texture.mag_filter == "nearest"
+        assert frame.texture.min_filter == "nearest"
+
+    def test_none_frame_is_noop(self) -> None:
+        from app.ui.assets.loader import apply_sprite_texture
+
+        class _W:
+            texture = "UNSET"
+
+        w = _W()
+        apply_sprite_texture(w, None)
+        assert w.texture == "UNSET"
+
+    def test_none_texture_is_noop(self) -> None:
+        from app.ui.assets.loader import apply_sprite_texture
+
+        class _W:
+            texture = "UNSET"
+
+        class _F:
+            texture = None
+
+        w = _W()
+        apply_sprite_texture(w, _F())
+        assert w.texture == "UNSET"
 
 
 class TestIconLoader:
