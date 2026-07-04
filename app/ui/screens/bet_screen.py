@@ -22,6 +22,7 @@ from app.ui.components.add_task_dialog import AddTaskDialog
 from app.ui.components.bet_config_section import BetConfigSection
 from app.ui.components.bet_task_item import BetTaskItem
 from app.ui.components.pixel_button import PixelButton
+from app.ui.components.rest_days_dialog import RestDaysDialog
 from app.ui.components.settlement_dialog import SettlementDialog
 from app.ui.components.week_summary_header import WeekSummaryHeader
 from app.ui.tokens import (
@@ -43,9 +44,10 @@ class BetScreen(ScrollView):  # type: ignore[misc]
         bet_service: BetService 实例
     """
 
-    def __init__(self, bet_service: BetService, **kwargs: Any) -> None:
+    def __init__(self, bet_service: BetService, settings_service: Any = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._bet_service = bet_service
+        self._settings_service = settings_service
 
         # 灵活周期起点：优先未结算周期，否则自动创建
         self._week_start = bet_service.get_current_cycle_start()
@@ -82,6 +84,19 @@ class BetScreen(ScrollView):  # type: ignore[misc]
         }
         self._header = WeekSummaryHeader(summary=empty_summary, size_hint_y=None)
         self._layout.add_widget(self._header)
+
+        # 1.5 其他收入(如拍摄日奖励) —— 独立于赌约结算之外, 仅当非零时显示
+        self._other_income_label = Label(
+            text="",
+            font_size=FONT_SIZE_SMALL,
+            color=self._to_rgba(TEXT_GRAY),
+            size_hint=(1, None),
+            height=20,
+            halign="center",
+            valign="middle",
+            opacity=0,
+        )
+        self._layout.add_widget(self._other_income_label)
 
         # 2. 任务列表容器
         self._task_container = BoxLayout(
@@ -149,6 +164,15 @@ class BetScreen(ScrollView):  # type: ignore[misc]
 
             # 更新总结
             self._header.update_summary(summary)
+
+            # 其他收入(如拍摄日奖励) —— 仅非零时显示, 避免空条目占地方
+            other_income = self._bet_service.get_other_income(self._week_start)
+            if other_income > 0:
+                self._other_income_label.text = f"其他收入: 拍摄奖励 +{other_income:.0f} 元"
+                self._other_income_label.opacity = 1
+            else:
+                self._other_income_label.text = ""
+                self._other_income_label.opacity = 0
 
             # 重建任务列表
             self._rebuild_task_list(tasks)
@@ -335,11 +359,29 @@ class BetScreen(ScrollView):  # type: ignore[misc]
             Logger.error(f"BetScreen: {e}")
 
     def _on_settled(self) -> None:
-        """结算完成回调 —— 切换到新周期并刷新。"""
+        """结算完成回调 —— 切换到新周期、刷新, 并询问这个周期休息几天。"""
         self._week_start = self._bet_service.get_current_cycle_start()
         self._config_section._week_start = self._week_start
         self._config_section._load_config()
         self.refresh()
+        self._prompt_rest_days()
+
+    def _prompt_rest_days(self) -> None:
+        """弹出"休息几天"弹窗 —— 独立于赌约结算之外, 不影响赌约本身的数据。"""
+        if not self._settings_service:
+            return
+        dialog = RestDaysDialog(on_confirm=self._on_rest_days_chosen)
+        dialog.open()
+
+    def _on_rest_days_chosen(self, days: int | None) -> None:
+        """休息天数确认回调 —— days=None 表示用户选择不休息。"""
+        if days is None or not self._settings_service:
+            return
+        try:
+            today = get_clock().today_str()
+            self._settings_service.start_rest_period(today, days)
+        except Exception as e:
+            Logger.error(f"BetScreen: 开始休息期失败 {e}")
 
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:

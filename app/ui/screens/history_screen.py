@@ -7,8 +7,8 @@
 from __future__ import annotations
 
 import calendar
-from datetime import datetime, timedelta
-from typing import Any, cast
+from datetime import timedelta
+from typing import Any
 
 from kivy.logger import Logger
 from kivy.uix.boxlayout import BoxLayout
@@ -16,18 +16,19 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.widget import Widget
 
 from app.models.history import CalendarCell as CalendarCellModel
-from app.models.history import CycleSummary
 from app.models.history import MonthViewData, WeekViewData, YearViewData
 from app.services.history_service import HistoryService
 from app.services.report_service import ReportService
-from app.ui.components.calendar_cell import CalendarCell
+from app.ui.components.calendar_cell import CELL_SIZE, CalendarCell
 from app.ui.components.cycle_bar import CycleBar
 from app.ui.components.day_card import DayCard
 from app.ui.components.history_tabs import HistoryTabs
 from app.ui.components.month_card import MonthCard
 from app.ui.components.pixel_button import PixelButton
+from app.ui.components.status_stat_card import StatusStatCard
 from app.ui.tokens import (
     BTN_HEIGHT,
     FONT_SIZE_BODY,
@@ -38,6 +39,13 @@ from app.ui.tokens import (
     TEXT_GRAY,
 )
 from app.utils.clock import get_clock
+
+# 状态统计卡片展示顺序(与 calendar_cell.CALENDAR_STATUS_LABELS 一致,
+# 固定顺序方便用户记忆位置; "future" 永远不会有计数, 天然被跳过)
+_LEGEND_ORDER = [
+    "normal", "late", "early_leave", "absent",
+    "leave", "shooting", "rest", "future",
+]
 
 # 星期表头
 WEEKDAY_HEADERS = ["一", "二", "三", "四", "五", "六", "日"]
@@ -252,7 +260,7 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
         self._month_calendar.clear_widgets()
 
         # 表头: 周一~周日
-        header = BoxLayout(orientation="horizontal", size_hint=(1, None), height=24)
+        header = BoxLayout(orientation="horizontal", size_hint=(1, None), height=28)
         for wd_name in WEEKDAY_HEADERS:
             lbl = Label(
                 text=wd_name,
@@ -265,7 +273,8 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             header.add_widget(lbl)
         self._month_calendar.add_widget(header)
 
-        # 构建日历格子
+        # 构建日历格子: color 字段现在直接就是语义状态名(normal/late/...),
+        # 无需再经过映射表转换。
         cells_by_day: dict[int, CalendarCellModel] = {}
         for cell in data.cells:
             try:
@@ -274,87 +283,85 @@ class HistoryScreen(FloatLayout):  # type: ignore[misc]
             except (IndexError, ValueError):
                 continue
 
-        # 构建按周的汇总映射
-        week_summaries: dict[int, str] = {}
-        for ws in data.weekly_summaries:
-            ws_start = cast(str, ws.get("week_start", ""))
-            ws_net = cast(float, ws.get("net", 0.0))
-            sign = "+" if ws_net >= 0 else ""
-            try:
-                ws_dt = datetime.strptime(ws_start, "%Y-%m-%d")
-                week_num = ws_dt.isocalendar()[1]  # ISO week number
-                week_summaries[week_num] = f"{ws_start} 小计: {sign}{ws_net}"
-            except (ValueError, KeyError):
-                pass
-
         cal_weeks = calendar.monthcalendar(year, month)
         for week in cal_weeks:
-            row = BoxLayout(orientation="horizontal", size_hint=(1, None), height=36)
+            row = BoxLayout(
+                orientation="horizontal", size_hint=(1, None), height=CELL_SIZE, spacing=2
+            )
             for day_num in week:
                 if day_num == 0:
-                    placeholder = BoxLayout(size_hint=(1, 1))
-                    row.add_widget(placeholder)
+                    # 月初/月末的占位格 —— 仍按同样列宽占位, 保持网格对齐,
+                    # 但不绘制任何内容(不属于本月, 没有"未来/正常"之类的状态可言)。
+                    row.add_widget(Widget(size_hint=(1, 1)))
+                    continue
+
+                cell_model = cells_by_day.get(day_num)
+                if cell_model and cell_model.has_data:
+                    cell_date = cell_model.date
+                    cell_widget = CalendarCell(
+                        day=day_num,
+                        status=cell_model.color,
+                        is_work_day=True,
+                        on_press=lambda d=cell_date: self._on_day_click(d),
+                        size_hint=(1, 1),
+                    )
                 else:
-                    cell_model = cells_by_day.get(day_num)
-                    if cell_model and cell_model.has_data:
-                        status = self._model_color_to_status(cell_model.color)
-                        cell_date = cell_model.date
-                        cell_widget = CalendarCell(
-                            day=day_num,
-                            status=status,
-                            is_work_day=True,
-                            on_press=lambda d=cell_date: self._on_day_click(d),
-                            size_hint=(1, 1),
-                        )
-                    else:
-                        cell_widget = CalendarCell(
-                            day=day_num,
-                            status="future",
-                            is_work_day=False,
-                            size_hint=(1, 1),
-                        )
-                    row.add_widget(cell_widget)
+                    cell_widget = CalendarCell(
+                        day=day_num,
+                        status="future",
+                        is_work_day=False,
+                        size_hint=(1, 1),
+                    )
+                row.add_widget(cell_widget)
             self._month_calendar.add_widget(row)
 
-            # 嵌入周汇总于行末
-            days_in_week = [d for d in week if d != 0]
-            if days_in_week:
-                ref_dt = datetime(year, month, days_in_week[0])
-                iso_week = ref_dt.isocalendar()[1]
-                summary_text = week_summaries.get(iso_week, "")
-                if summary_text:
-                    summary_row = BoxLayout(
-                        orientation="horizontal",
-                        size_hint=(1, None),
-                        height=20,
-                        padding=[GRID_UNIT * 2, 0],
-                    )
-                    summary_label = Label(
-                        text=summary_text,
-                        font_size=FONT_SIZE_SMALL,
-                        color=self._to_rgba(TEXT_GRAY),
-                        size_hint=(1, 1),
-                        halign="right",
-                        valign="middle",
-                    )
-                    summary_label.bind(
-                        width=lambda inst, w: setattr(inst, "text_size", (w, None))
-                    )
-                    summary_row.add_widget(summary_label)
-                    self._month_calendar.add_widget(summary_row)
+        # 各状态统计: 原独立图例的色块+文字并入每张卡片, 当月没出现过的
+        # 状态类型不显示卡片(见 StatusStatCard)。
+        self._month_calendar.add_widget(self._build_status_stats_section(data.status_counts))
 
-    @staticmethod
-    def _model_color_to_status(color: str) -> str:
-        """将 CalendarCell 的 color 字段映射为 status。"""
-        mapping = {
-            "green": "normal",
-            "yellow": "late",
-            "red": "absent",
-            "blue": "leave",
-            "orange": "shooting",
-            "empty": "future",
-        }
-        return mapping.get(color, "future")
+    def _build_status_stats_section(self, status_counts: dict[str, int]) -> Widget:
+        """"本月统计"区块 —— 当月每个出现过的状态类型一张 StatusStatCard。"""
+        box = BoxLayout(
+            orientation="vertical",
+            size_hint=(1, None),
+            spacing=GRID_UNIT // 2,
+            padding=[0, GRID_UNIT, 0, 0],
+        )
+
+        title = Label(
+            text="本月统计",
+            font_size=FONT_SIZE_BODY,
+            color=self._to_rgba(TEXT_BROWN),
+            size_hint=(1, None),
+            height=28,
+            halign="left",
+            valign="middle",
+        )
+        title.bind(size=lambda inst, _v: setattr(inst, "text_size", inst.size))
+        box.add_widget(title)
+
+        shown_any = False
+        for status in _LEGEND_ORDER:
+            count = status_counts.get(status, 0)
+            if count <= 0:
+                continue
+            box.add_widget(StatusStatCard(status=status, count=count))
+            shown_any = True
+
+        if not shown_any:
+            empty_label = Label(
+                text="本月暂无数据",
+                font_size=FONT_SIZE_SMALL,
+                color=self._to_rgba(TEXT_GRAY),
+                size_hint=(1, None),
+                height=40,
+                halign="center",
+                valign="middle",
+            )
+            box.add_widget(empty_label)
+
+        box.bind(minimum_height=box.setter("height"))
+        return box
 
     # ================================================================
     # 年视图

@@ -20,6 +20,7 @@ from app.utils.config import (
     LEDGER_TYPE_BET_LATE_FEE,
     LEDGER_TYPE_BET_PENALTY,
     LEDGER_TYPE_BET_REWARD,
+    LEDGER_TYPE_SHOOTING_REWARD,
 )
 
 
@@ -265,6 +266,11 @@ class BetService:
             "accrued_late_fees": self._calc_accrued_late_fees(week_start) if (config and config.status == "late") else 0.0,
         }
         return result
+
+    def get_other_income(self, week_start: str) -> float:
+        """本周"其他收入"(如拍摄奖励) —— 独立于赌约任务结算之外的账本收入汇总。"""
+        entries = self._ledger_repo.get_by_week(week_start)
+        return sum(e.amount for e in entries if e.type == LEDGER_TYPE_SHOOTING_REWARD)
 
     def _get_setting(self, key: str) -> str:
         val = self._settings_repo.get(key)

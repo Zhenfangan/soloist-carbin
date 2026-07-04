@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from kivy.config import Config
 
@@ -44,7 +45,7 @@ from app.services.settings_service import SettingsService  # noqa: E402
 from app.services.ntfy_service import NtfyPushService  # noqa: E402
 from app.services.sync_service import SyncService  # noqa: E402
 from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path  # noqa: E402
-from app.ui.assets.loader import preload_all  # noqa: E402
+from app.ui.assets.loader import apply_pixel_filter, preload_all  # noqa: E402
 from app.ui.fonts import apply_global_font  # noqa: E402
 from app.ui.navigation import AppScreenManager, BottomTabBar  # noqa: E402
 from app.ui.components.time_control_panel import TimeControlPanel  # noqa: E402
@@ -70,6 +71,10 @@ def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, f
 
 class _PassthroughImage(KivyImage):  # type: ignore[misc]
     """触控穿透 Image — 与 report_preview._PassthroughImage 完全一致。"""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        apply_pixel_filter(self.texture)  # 像素风背景放大时保持硬边, 不被线性过滤抹糊
 
     def collide_point(self, x: float, y: float) -> bool:  # type: ignore[override]
         return False
@@ -118,7 +123,9 @@ class SoloistApp(App):  # type: ignore[misc]
         shooting_repo = ShootingRepo(self.DB_PATH)
         self._shooting_svc = ShootingService(shooting_repo, ledger_repo, settings_repo)
         checkin_svc = CheckinService(checkin_repo, settings_repo, shooting_service=self._shooting_svc)
-        history_svc = HistoryService(checkin_repo, ledger_repo, shooting_repo, BetRepo(self.DB_PATH))
+        history_svc = HistoryService(
+            checkin_repo, ledger_repo, shooting_repo, BetRepo(self.DB_PATH), settings_repo
+        )
         self._report_svc = ReportService(checkin_repo, ledger_repo, shooting_repo, settings_repo)
         # 实例化以触发 ATTENDANCE_JUDGED / DAY_FINISHED 事件订阅 (生成罚款/奖励流水)
         self._penalty_svc = PenaltyService(checkin_repo, ledger_repo, settings_repo)
@@ -199,7 +206,7 @@ class SoloistApp(App):  # type: ignore[misc]
                 shooting_service=self._shooting_svc,
             ),
             "history": HistoryScreen(history_service=history_svc, report_service=self._report_svc),
-            "bet": BetScreen(bet_service=bet_svc),
+            "bet": BetScreen(bet_service=bet_svc, settings_service=settings_svc),
             "settings": SettingsScreen(settings_service=settings_svc, sync_service=SyncService(SyncRepo(self.DB_PATH))),
         }
 

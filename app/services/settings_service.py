@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 
 from kivy.logger import Logger
 
@@ -83,6 +84,30 @@ class SettingsService:
     def is_work_day(self, weekday: int) -> bool:
         """判断指定星期几是否为工作日 (1=周一, 7=周日)"""
         return weekday in self.get_work_days()
+
+    def start_rest_period(self, start_date: str, days: int) -> None:
+        """从 start_date 起休息 days 天(含首尾) —— 对赌周期结算后手动指定。"""
+        end_date = (
+            datetime.strptime(start_date, "%Y-%m-%d") + timedelta(days=days - 1)
+        ).strftime("%Y-%m-%d")
+        self.set("rest_start", start_date)
+        self.set("rest_end", end_date)
+
+    def get_rest_period(self) -> tuple[str, str] | None:
+        """当前休息期起止日期, 未设置(或已被覆盖为空)时返回 None。"""
+        start = self.get("rest_start")
+        end = self.get("rest_end")
+        if not start or not end:
+            return None
+        return (start, end)
+
+    def is_rest_day(self, date_str: str) -> bool:
+        """指定日期是否落在当前休息期内(含首尾)。"""
+        period = self.get_rest_period()
+        if period is None:
+            return False
+        start, end = period
+        return start <= date_str <= end
 
     def get_user_encouragements(self) -> list[str]:
         """读取用户自定义激励语录，JSON 解析失败或类型异常时返回空列表"""

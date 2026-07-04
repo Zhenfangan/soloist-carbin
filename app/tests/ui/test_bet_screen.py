@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from unittest.mock import MagicMock
 
 from app.repositories.bet_repo import BetRepo
 from app.repositories.ledger_repo import LedgerRepo
@@ -520,6 +521,61 @@ class TestSettlementDialog:
         assert config is not None
         assert config.status == "settled"
 
+    def test_settle_opens_rest_days_dialog(self, temp_db: str, monkeypatch: Any) -> None:
+        """周期结算完成后自动弹"休息几天"弹窗(独立于赌约结算逻辑之外)。"""
+        import app.ui.screens.bet_screen as bet_screen_mod
+
+        svc = create_bet_service(temp_db)
+        svc.set_week_config("2026-06-01", 50, 30, 50)
+        t1 = svc.create_task("2026-06-01", "任务1")
+        assert t1.id is not None
+        svc.complete_task(t1.id)
+
+        opened: list[Any] = []
+
+        class _FakeDialog:
+            def __init__(self, on_confirm: Any = None, **kwargs: Any) -> None:
+                self.on_confirm = on_confirm
+                opened.append(self)
+
+            def open(self) -> None:
+                pass
+
+        monkeypatch.setattr(bet_screen_mod, "RestDaysDialog", _FakeDialog)
+
+        settings = MagicMock()
+        screen = BetScreen(bet_service=svc, settings_service=settings)
+        screen._on_settled()
+
+        assert len(opened) == 1
+        opened[0].on_confirm(3)  # 模拟用户选休息 3 天
+        settings.start_rest_period.assert_called_once()
+
+    def test_settle_rest_dialog_skip_does_not_start_rest(self, temp_db: str, monkeypatch: Any) -> None:
+        """点"不休息"跳过 —— 不应写入休息期。"""
+        import app.ui.screens.bet_screen as bet_screen_mod
+
+        svc = create_bet_service(temp_db)
+
+        opened: list[Any] = []
+
+        class _FakeDialog:
+            def __init__(self, on_confirm: Any = None, **kwargs: Any) -> None:
+                self.on_confirm = on_confirm
+                opened.append(self)
+
+            def open(self) -> None:
+                pass
+
+        monkeypatch.setattr(bet_screen_mod, "RestDaysDialog", _FakeDialog)
+
+        settings = MagicMock()
+        screen = BetScreen(bet_service=svc, settings_service=settings)
+        screen._on_settled()
+        opened[0].on_confirm(None)  # 模拟用户点"不休息"
+
+        settings.start_rest_period.assert_not_called()
+
 
 # ============================================================
 # 5.14 BetScreen 测试
@@ -554,6 +610,35 @@ class TestBetScreen:
         # 触发数据加载
         screen.refresh()
         assert len(screen._task_container.children) == 2
+
+    def test_other_income_row_shows_shooting_reward(self, temp_db: str, clock: Any) -> None:
+        """真机反馈: 拍摄日奖励要在对赌页体现 —— 独立"其他收入"条目, 不接入赌约结算。"""
+        from app.models.ledger import LedgerEntry
+        from app.repositories.ledger_repo import LedgerRepo
+        from app.utils.config import LEDGER_TYPE_SHOOTING_REWARD
+
+        clock.set_time(datetime(2026, 6, 1))  # Monday -> week_start = 2026-06-01
+        svc = create_bet_service(temp_db)
+        LedgerRepo(temp_db).insert(LedgerEntry(
+            entry_date="2026-06-02", type=LEDGER_TYPE_SHOOTING_REWARD, amount=30.0,
+        ))
+
+        screen = BetScreen(bet_service=svc)
+        screen.refresh()
+
+        assert screen._other_income_label.opacity == 1
+        assert "其他收入" in screen._other_income_label.text
+        assert "30" in screen._other_income_label.text
+
+    def test_other_income_row_hidden_when_zero(self, temp_db: str, clock: Any) -> None:
+        """本周没有拍摄奖励等其他收入时, 不显示这一行(避免空条目占地方)。"""
+        clock.set_time(datetime(2026, 6, 1))
+        svc = create_bet_service(temp_db)
+
+        screen = BetScreen(bet_service=svc)
+        screen.refresh()
+
+        assert screen._other_income_label.opacity == 0
 
     def test_create_task_through_screen(self, temp_db: str, clock: Any) -> None:
         """通过页面添加任务。"""

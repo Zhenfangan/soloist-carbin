@@ -44,3 +44,29 @@ def test_play_stop_toggles_running() -> None:
     assert sprite.is_playing is True
     sprite.stop()
     assert sprite.is_playing is False
+
+
+def test_default_rhythm_is_uniform_interval() -> None:
+    """不传 bubble_indices/loop_pause 时行为不变(其他动画的向后兼容)。"""
+    sprite = SequenceSprite("dog", autoplay=False, fps=4.0)
+    for idx in range(sprite.frame_count):
+        sprite._index = idx
+        assert sprite._next_delay() == 0.25
+
+
+def test_bubble_indices_hold_twice_as_long() -> None:
+    """真机反馈: 小猫动画比战报里的感觉快 —— 战报用 _start_frame_anim 让
+    气泡帧(bubble_indices)停留 2 倍时长, SequenceSprite 之前完全没有这个
+    节奏, 只会匀速循环, 即使 fps 数字相同, 观感也更"赶"。"""
+    sprite = SequenceSprite("cat", autoplay=False, fps=4.0, bubble_indices={1, 3, 4})
+    sprite._index = 1
+    assert sprite._next_delay() == 0.5
+    sprite._index = 2
+    assert sprite._next_delay() == 0.25
+
+
+def test_loop_pause_applies_after_last_frame() -> None:
+    """播完最后一帧后暂停 loop_pause 秒才重新开始, 与战报节奏一致。"""
+    sprite = SequenceSprite("cat", autoplay=False, fps=4.0, loop_pause=2.0)
+    sprite._index = sprite.frame_count - 1
+    assert sprite._next_delay() == 2.0

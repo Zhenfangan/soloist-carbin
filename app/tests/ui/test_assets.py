@@ -9,8 +9,10 @@ from PIL import Image as PILImage
 
 from app.ui.assets.loader import (
     ICON_FILES,
+    SEQUENCE_CONFIG,
     SPRITE_CONFIG,
     IconLoader,
+    SequenceLoader,
     SpriteLoader,
     preload_all,
 )
@@ -143,6 +145,10 @@ class TestSpriteLoader:
             frames = SpriteLoader.load_sprite(mascot_id)
             assert len(frames) == 4, f"{mascot_id}: expected 4 frames"
 
+    # 注意: SpriteLoader 帧(BytesIO 内存缓冲区加载)访问 .texture 时在本机
+    # 桌面环境下会段错误(access violation), 是与本次清晰度修复无关的独立
+    # 潜在 bug, 未在此处修复/测试, 已单独反馈给用户。
+
 
 class TestIconLoader:
     """2.11 IconLoader 测试"""
@@ -162,6 +168,22 @@ class TestIconLoader:
     def test_unknown_icon(self) -> None:
         with pytest.raises(ValueError):
             IconLoader.get_icon("nonexistent")
+
+    def test_icon_texture_uses_nearest_filter(self) -> None:
+        """同上: 图标放大显示时也不能被线性过滤抹糊。"""
+        img = IconLoader.get_icon("tab_checkin")
+        assert img.texture.mag_filter == "nearest"
+        assert img.texture.min_filter == "nearest"
+
+
+class TestSequenceLoader:
+    """帧序列动画(cat/dog/rabbit/bear/pig)纹理过滤测试"""
+
+    def test_sequence_frames_use_nearest_filter(self) -> None:
+        for anim_id in SEQUENCE_CONFIG:
+            frames = SequenceLoader.load_sequence(anim_id)
+            assert frames[0].texture.mag_filter == "nearest", f"{anim_id}: mag_filter"
+            assert frames[0].texture.min_filter == "nearest", f"{anim_id}: min_filter"
 
 
 class TestPreloadAll:

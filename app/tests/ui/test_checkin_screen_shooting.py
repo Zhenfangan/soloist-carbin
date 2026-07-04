@@ -40,6 +40,7 @@ def _make_screen(is_shooting: bool = False, reflection: object = None):
     shooting.get_reflection.return_value = reflection
     settings = MagicMock()
     settings.get.side_effect = lambda k: _SETTINGS.get(k, "")
+    settings.is_rest_day.return_value = False
     settings.get_user_nickname.return_value = ""
     motivation = MagicMock()
     motivation.get_current_streak.return_value = 0
@@ -105,6 +106,7 @@ class TestShootingScreenIntegration:
         shooting.get_reflection.return_value = None
         settings = MagicMock()
         settings.get.side_effect = lambda k: _SETTINGS.get(k, "")
+        settings.is_rest_day.return_value = False
         settings.get_user_nickname.return_value = ""
         motivation = MagicMock()
         motivation.get_current_streak.return_value = 0
@@ -147,6 +149,7 @@ class TestShootingScreenIntegration:
         )
         settings = MagicMock()
         settings.get.side_effect = lambda k: _SETTINGS.get(k, "")
+        settings.is_rest_day.return_value = False
         motivation = MagicMock()
         motivation.get_current_streak.return_value = 0
         screen = CheckinScreen(
@@ -194,6 +197,7 @@ def test_capture_scene_invokes_camera_with_shooting_period() -> None:
     shooting.get_reflection.return_value = None
     settings = MagicMock()
     settings.get.side_effect = lambda k: _SETTINGS.get(k, "")
+    settings.is_rest_day.return_value = False
     settings.get_user_nickname.return_value = ""
     motivation = MagicMock()
     motivation.get_current_streak.return_value = 0

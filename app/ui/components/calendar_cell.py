@@ -1,8 +1,7 @@
 """CalendarCell — 月视图日期格子。
 
-12×12 dp 色块，颜色映射功能语义色:
-  绿=全天正常, 黄=有迟到早退, 红=旷工, 蓝=请假, 橙=拍摄日
-  非工作日显示团团图标, 未来日期显示 ○
+正方形色块，按 CALENDAR_COLORS 映射 8 类当日状态语义色(见该常量注释)。
+未来/无数据日期显示 ○，其余状态一律显示日期数字(靠底色+图例区分状态)。
 """
 
 from __future__ import annotations
@@ -17,21 +16,39 @@ from kivy.uix.label import Label
 from app.ui.tokens import (
     BORDER_WIDTH,
     COLORS,
-    FONT_SIZE_SMALL,
+    FONT_SIZE_BODY,
     TEXT_BROWN,
     TEXT_GRAY,
 )
 
-# 日历颜色映射
+# 日历颜色映射 — 语义状态名 → 色值(8 类当日状态, 与图例一一对应)
 CALENDAR_COLORS: dict[str, str] = {
-    "normal": "#50E8B0",      # 绿 — mint light
-    "late": "#FFE030",        # 黄 — primary yellow
-    "absent": "#FF5070",      # 红 — watermelon light
-    "leave": "#60C8FF",       # 蓝 — sky light
-    "shooting": "#FF9040",    # 橙 — warm orange light
-    "rest": "#E0E0E0",        # 灰 — 非工作日
-    "future": "#F0F0F0",      # 浅灰 — 未来日期
+    "normal": "#46D6A0",       # 绿 — 全天正常
+    "late": "#FFD21F",         # 黄 — 迟到
+    "early_leave": "#FF9F40",  # 橙 — 早退
+    "absent": "#FF5A78",       # 红 — 旷工
+    "leave": "#5AB8FF",        # 蓝 — 请假
+    "shooting": "#B87BEA",     # 紫 — 拍摄日
+    "rest": "#C4CBD8",         # 灰蓝 — 休息日
+    "future": "#EEEEEE",       # 浅灰 — 未来/无数据
+    "empty": "#EEEEEE",        # 同 future(历史无数据)
 }
+
+# 每种状态的中文名(图例 + 无障碍用)
+CALENDAR_STATUS_LABELS: dict[str, str] = {
+    "normal": "正常",
+    "late": "迟到",
+    "early_leave": "早退",
+    "absent": "旷工",
+    "leave": "请假",
+    "shooting": "拍摄",
+    "rest": "休息",
+    "future": "未来",
+}
+
+# 格子边长 —— 按 LOGICAL_WIDTH=420、CARD_PADDING 两侧、7 列 2px 间距反推:
+# (420 - 2*8 - 6*2) / 7 = 56，让月历网格正好铺满整行宽度。
+CELL_SIZE: int = 56
 
 
 class CalendarCell(FloatLayout):  # type: ignore[misc]
@@ -58,18 +75,21 @@ class CalendarCell(FloatLayout):  # type: ignore[misc]
         self._is_work_day = is_work_day
         self._on_press = on_press
 
-        self.size = (36, 36)
+        self.size = (CELL_SIZE, CELL_SIZE)
 
         # 日期数字
         display_text = str(day)
         self._label = Label(
             text=display_text,
-            font_size=FONT_SIZE_SMALL,
+            font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, 1),
+            # 根因修复: FloatLayout 子控件必须带 pos_hint, 否则停在窗口原点(0,0)
+            pos_hint={"center_x": 0.5, "center_y": 0.5},
             halign="center",
             valign="middle",
         )
+        self._label.bind(size=lambda inst, _v: setattr(inst, "text_size", inst.size))
         self.add_widget(self._label)
 
         self.bind(pos=self._redraw, size=self._redraw)
@@ -102,13 +122,11 @@ class CalendarCell(FloatLayout):  # type: ignore[misc]
 
     def _update_label_text(self) -> None:
         """根据状态更新 label 文本和颜色。"""
-        if self._status == "future":
+        if self._status in ("future", "empty"):
             self._label.text = "○"
             self._label.color = self._to_rgba(TEXT_GRAY)
-        elif not self._is_work_day:
-            self._label.text = "R"
-            self._label.color = self._to_rgba(TEXT_BROWN)
         else:
+            # 彩色块上用深棕数字, 保证可读(rest 等状态靠底色区分, 不再用 "R")
             self._label.text = str(self._day)
             self._label.color = self._to_rgba(TEXT_BROWN)
 

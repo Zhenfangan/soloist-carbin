@@ -95,3 +95,27 @@ class TestSettingsService:
         svc.set_user_encouragements(["新语录"])
         assert len(events) == 1
         assert events[0]["key"] == "encouragements_user"
+
+    # ── 休息期(对赌周期结算后手动指定休息天数) ──────────────
+
+    def test_get_rest_period_none_by_default(self, svc: SettingsService) -> None:
+        assert svc.get_rest_period() is None
+
+    def test_start_rest_period_computes_end_date(self, svc: SettingsService) -> None:
+        svc.start_rest_period("2026-06-08", 3)
+        assert svc.get_rest_period() == ("2026-06-08", "2026-06-10")
+
+    def test_start_rest_period_single_day(self, svc: SettingsService) -> None:
+        svc.start_rest_period("2026-06-08", 1)
+        assert svc.get_rest_period() == ("2026-06-08", "2026-06-08")
+
+    def test_is_rest_day_within_range(self, svc: SettingsService) -> None:
+        svc.start_rest_period("2026-06-08", 3)
+        assert svc.is_rest_day("2026-06-08") is True
+        assert svc.is_rest_day("2026-06-09") is True
+        assert svc.is_rest_day("2026-06-10") is True
+        assert svc.is_rest_day("2026-06-11") is False
+        assert svc.is_rest_day("2026-06-07") is False
+
+    def test_is_rest_day_false_when_never_started(self, svc: SettingsService) -> None:
+        assert svc.is_rest_day("2026-06-08") is False

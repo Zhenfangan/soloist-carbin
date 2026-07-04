@@ -18,6 +18,18 @@ _ASSETS_DIR = Path(__file__).parent.resolve()
 _SPRITE_CACHE: dict[str, list[CoreImage]] = {}
 _SEQUENCE_CACHE: dict[str, list[CoreImage]] = {}
 
+
+def apply_pixel_filter(texture: Any) -> None:
+    """像素风素材统一用 nearest-neighbor 缩放，保持硬边不被线性过滤抹糊。
+
+    真机上这些素材原始分辨率较低（图标 32×32 等），显示时要放大数倍，
+    Kivy 默认的线性过滤会把硬边缘"抹"成模糊的马赛克。
+    """
+    if texture is None:
+        return
+    texture.mag_filter = "nearest"
+    texture.min_filter = "nearest"
+
 # sprite 帧配置: {mascot_id: (filename, frame_width, frame_count)}
 SPRITE_CONFIG: dict[str, tuple[str, int, int]] = {
     "dudu": ("sprites/dudu_32x32.png", 32, 4),
@@ -152,6 +164,7 @@ class IconLoader:
         """
         path = IconLoader.get_icon_path(icon_name)
         img = KivyImage(source=str(path))
+        apply_pixel_filter(img.texture)
         img.allow_stretch = True
         img.keep_ratio = True
         if color:
@@ -206,6 +219,8 @@ class SequenceLoader:
             raise FileNotFoundError(f"No frame files in: {anim_dir}")
 
         frames = [CoreImage(str(f)) for f in frame_files]
+        for frame in frames:
+            apply_pixel_filter(frame.texture)
         _SEQUENCE_CACHE[anim_id] = frames
         return list(frames)
 

@@ -32,6 +32,7 @@ from kivy.uix.scrollview import ScrollView
 
 from app.services.report_service import ENCOURAGEMENTS
 from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path
+from app.ui.assets.loader import apply_pixel_filter
 from app.ui.components.pixel_button import PixelButton
 from app.ui.scale_util import scale_wrap
 from app.ui.tokens import (
@@ -374,6 +375,10 @@ def _fmt_hhmm(t: str | None) -> str:
 class _PassthroughImage(Image):  # type: ignore[misc]
     """草地前景遮罩 Widget — 全尺寸渲染，collide_point 恒返回 False 以透传触控事件。"""
 
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        apply_pixel_filter(self.texture)  # 像素风背景放大时保持硬边, 不被线性过滤抹糊
+
     def collide_point(self, x: float, y: float) -> bool:  # type: ignore[override]
         return False
 
@@ -411,7 +416,8 @@ class ReportPreview(ModalView):  # type: ignore[misc]
             w.canvas.before.clear()
             with w.canvas.before:
                 Color(1, 1, 1, 1)
-                Rectangle(source=BG_LANDSCAPE, pos=w.pos, size=w.size)
+                bg_rect = Rectangle(source=BG_LANDSCAPE, pos=w.pos, size=w.size)
+            apply_pixel_filter(bg_rect.texture)
         panel.bind(pos=_redraw_panel_bg, size=_redraw_panel_bg)
         _redraw_panel_bg(panel)
 
@@ -823,8 +829,14 @@ class ReportPreview(ModalView):  # type: ignore[misc]
         return box
 
     def _reward_panel(self, data: ReportData) -> FloatLayout:
-        """达标/未达标双态看板，IP 贴纸叠加。"""
-        if data.promise is not None:
+        """达标/未达标双态看板，IP 贴纸叠加。
+
+        拍摄日没有"工时"概念(全天跳过打卡), 达标与否看拍摄奖励是否已入账,
+        而非 total_work_hours(拍摄日恒为 0, 会被误判成"未达标")。
+        """
+        if data.is_shooting_day:
+            achieved = data.reward_total > 0
+        elif data.promise is not None:
             achieved = data.promise.fulfilled
         else:
             achieved = data.total_work_hours >= data.threshold_hours
@@ -849,7 +861,10 @@ class ReportPreview(ModalView):  # type: ignore[misc]
                 outer="#50C8B8", inner="#A0E8D8",
                 shadow="#208878", content_bg=_COLOR_REWARD_BG,
             )
-            if data.promise:
+            if data.is_shooting_day:
+                main_text = f"拍摄奖励 {data.reward_total:.0f} 元已经到账啦！"
+                sub_text = "辛苦拍摄啦，好好休息一下吧~"
+            elif data.promise:
                 nickname = ""
                 if self._settings_service:
                     nickname = self._settings_service.get_user_nickname()
@@ -864,16 +879,20 @@ class ReportPreview(ModalView):  # type: ignore[misc]
                     f"{data.promise.reward_qty} 次{reward_desc}，"
                     f"{who}请客~"
                 )
+                sub_text = "小木屋替你记着，他可不能赖账哦！"
             else:
                 main_text = f"今天工时 {data.total_work_hours:.1f}h，达标啦！"
-            sub_text = "小木屋替你记着，他可不能赖账哦！"
+                sub_text = "小木屋替你记着，他可不能赖账哦！"
         else:
             _bind_panel_frame(
                 panel,
                 outer="#B0A090", inner="#D8D0C0",
                 shadow="#807060", content_bg=_COLOR_UNMET_BG,
             )
-            if data.promise:
+            if data.is_shooting_day:
+                main_text = "拍摄复盘还没提交，奖励还没到账哦"
+                sub_text = "记得点「完成拍摄」提交复盘~"
+            elif data.promise:
                 nickname = ""
                 if self._settings_service:
                     nickname = self._settings_service.get_user_nickname()
@@ -884,9 +903,10 @@ class ReportPreview(ModalView):  # type: ignore[misc]
                     f"未达 {data.threshold_hours:.0f}h 门槛，"
                     f"没拿到「{reward}」"
                 )
+                sub_text = random.choice(ENCOURAGEMENTS)
             else:
                 main_text = f"今天工时 {data.total_work_hours:.1f}h，未达标"
-            sub_text = random.choice(ENCOURAGEMENTS)
+                sub_text = random.choice(ENCOURAGEMENTS)
 
         ml = Label(
             text=main_text,

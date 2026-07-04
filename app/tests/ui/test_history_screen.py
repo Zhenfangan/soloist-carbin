@@ -6,7 +6,6 @@ from app.models.history import (
     CalendarCell as CalendarCellModel,
 )
 from app.models.history import (
-    CycleSummary,
     DayCard as DayCardModel,
 )
 from app.models.history import (
@@ -21,8 +20,18 @@ from app.ui.components.calendar_cell import CalendarCell
 from app.ui.components.day_card import DayCard
 from app.ui.components.history_tabs import HistoryTabs
 from app.ui.components.month_card import MonthCard
+from app.ui.components.status_stat_card import StatusStatCard
 from app.ui.screens.history_screen import HistoryScreen
 from app.utils.clock import SimulatedClock
+
+
+def _find_widgets(widget: object, cls: type) -> list:
+    out: list = []
+    if isinstance(widget, cls):
+        out.append(widget)
+    for child in getattr(widget, "children", []):
+        out.extend(_find_widgets(child, cls))
+    return out
 
 # ================================================================
 # Mock HistoryService
@@ -89,13 +98,14 @@ class MockHistoryService:
             cells=[
                 CalendarCellModel(date=f"{year}-{month:02d}-{d:02d}", color=c, has_data=True)
                 for d, c in [
-                    (1, "green"), (2, "green"), (3, "yellow"), (4, "green"),
-                    (5, "red"), (6, "blue"), (7, "orange"),
+                    (1, "normal"), (2, "normal"), (3, "late"), (4, "normal"),
+                    (5, "absent"), (6, "leave"), (7, "shooting"),
                 ]
             ],
             weekly_summaries=[
                 {"week_start": f"{year}-{month:02d}-01", "net": 150.0},
             ],
+            status_counts={"normal": 3, "late": 1, "absent": 1, "leave": 1, "shooting": 1},
         )
 
     def get_year_view(self, year: int) -> YearViewData:
@@ -262,11 +272,10 @@ class TestCalendarCell:
         assert cell._status == "shooting"
 
     def test_create_rest_cell(self) -> None:
-        """非工作日显示团团图标。"""
+        """休息日靠底色区分, 仍显示日期数字(与其余状态一致)。"""
         cell = CalendarCell(day=8, status="rest", is_work_day=False)
         assert not cell._is_work_day
-        # 非工作日的 label 应显示 🐼
-        assert cell._label.text == "R"
+        assert cell._label.text == "8"
 
     def test_create_future_cell(self) -> None:
         """未来日期显示 ○。"""
@@ -274,9 +283,9 @@ class TestCalendarCell:
         assert cell._label.text == "○"
 
     def test_cell_size(self) -> None:
-        """格子尺寸固定。"""
+        """格子尺寸铺满屏宽 —— 56px(见 calendar_cell.CELL_SIZE 注释推导)。"""
         cell = CalendarCell(day=1, status="normal", is_work_day=True)
-        assert cell.width == 36 and cell.height == 36
+        assert cell.width == 56 and cell.height == 56
 
 
 # ================================================================
@@ -432,12 +441,52 @@ class TestHistoryScreen:
         """月视图渲染日历格子。"""
         screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
         screen._switch_tab(1)
-        # 日历区域应有: 表头(1行) + 日历行(周数) + 汇总行(1)
+        # 日历区域应有: 表头(1行) + 日历行(周数) + 状态统计区
         children = screen._month_calendar.children
         assert len(children) >= 3, f"expected >= 3 children (header + weeks + summary), got {len(children)}"
         # 第一行应为星期表头
         header_row = children[-1]  # Kivy children 倒序，最后一个是最早添加的
         assert len(header_row.children) == 7, f"expected 7 day headers, got {len(header_row.children)}"
+
+    def test_month_view_week_rows_always_have_7_columns(self) -> None:
+        """月初/月末的空白日也要占位, 保持网格对齐(不再是参差不齐的裸 BoxLayout)。"""
+        screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
+        screen._switch_tab(1)
+        children = screen._month_calendar.children  # 倒序: 最后添加的排最前
+        # 结构固定为: [状态统计区, 周行...(倒序), 表头] —— 掐头去尾取周行
+        week_rows = children[1:-1]
+        assert len(week_rows) >= 1
+        for row in week_rows:
+            assert len(row.children) == 7, f"周行应有 7 列, 实际 {len(row.children)}"
+
+    def test_month_view_status_stat_cards_show_only_nonzero_statuses(self) -> None:
+        """真机反馈: 图例挪到对应卡片上了, 当月没发生的状态不应显示卡片。
+
+        mock 数据只出现 normal/late/absent/leave/shooting 5 种, 不应出现
+        early_leave/rest/future 的卡片。
+        """
+        screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
+        screen._switch_tab(1)
+        cards = _find_widgets(screen._month_calendar, StatusStatCard)
+        shown = {c._status for c in cards}
+        assert shown == {"normal", "late", "absent", "leave", "shooting"}
+
+    def test_month_view_status_stat_card_counts_correct(self) -> None:
+        """每张状态卡的计数要对应 status_counts 里的真实天数。"""
+        screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
+        screen._switch_tab(1)
+        cards = _find_widgets(screen._month_calendar, StatusStatCard)
+        counts = {c._status: c._count for c in cards}
+        assert counts["normal"] == 3
+        assert counts["late"] == 1
+
+    def test_month_view_bottom_block_is_status_stats(self) -> None:
+        """状态统计区固定收在日历下方(最后添加, 排在 children 最前)。"""
+        screen = HistoryScreen(history_service=MockHistoryService())  # type: ignore[arg-type]
+        screen._switch_tab(1)
+        children = screen._month_calendar.children  # 倒序: 最后添加的排最前
+        stats_block = children[0]
+        assert len(_find_widgets(stats_block, StatusStatCard)) == 5
 
 
 # ================================================================

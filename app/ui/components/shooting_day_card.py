@@ -91,7 +91,9 @@ class ShootingDayCard(BoxLayout):  # type: ignore[misc]
         )
         self._anim = SequenceSprite(
             "cat",
-            fps=4.0,  # 与战报 report_preview._start_frame_anim 的速度保持一致
+            fps=4.0,  # 与战报 report_preview._start_frame_anim 的节奏保持一致
+            bubble_indices={1, 3, 4},
+            loop_pause=2.0,
             autoplay=False,
             size_hint=(None, None),
             size=(_ANIM_H, _ANIM_H),
@@ -130,6 +132,7 @@ class ShootingDayCard(BoxLayout):  # type: ignore[misc]
             size_hint=(1, None),
         )
         self._cancel_btn.bind(on_press=lambda _w: self._on_cancel_pressed())
+        self._btn_row = btn_row
         btn_row.add_widget(self._primary_btn)
         btn_row.add_widget(self._capture_btn)
         btn_row.add_widget(self._cancel_btn)
@@ -170,6 +173,16 @@ class ShootingDayCard(BoxLayout):  # type: ignore[misc]
         self._set_btn_visible(self._capture_btn, is_active)
         # 取消：active 且仍在窗口内
         self._set_btn_visible(self._cancel_btn, self._can_cancel)
+
+        # 隐藏的按钮必须从 btn_row 移除, 而不是只置 width=0 —— 否则 BoxLayout
+        # 的 spacing 仍会在"隐藏位"上计入间距, 挤占 primary_btn 的宽度,
+        # 导致按钮右边缘对不齐同一屏幕上的其他卡片(如签到按钮)。
+        self._btn_row.clear_widgets()
+        self._btn_row.add_widget(self._primary_btn)
+        if is_active:
+            self._btn_row.add_widget(self._capture_btn)
+        if self._can_cancel:
+            self._btn_row.add_widget(self._cancel_btn)
 
         self.height = self.natural_height
 

@@ -167,6 +167,47 @@ class TestReportPreviewRender:
         assert len(_find_widgets(preview._content_box, _ShootingSceneBig)) == 1
         assert len(_find_widgets(preview._content_box, _ReportPhotoGrid)) == 0
 
+    def test_shooting_report_with_reward_shows_amount_not_zero_hours(self):
+        """真机反馈: 战报显示"小熊熬夜 今天工时0", 而不是拍摄奖励金额。
+
+        根因: _reward_panel 的 achieved 判断只看 total_work_hours(拍摄日
+        恒为 0, 不可能 >= threshold_hours), 完全没考虑拍摄日应该看
+        reward_total(拍摄奖励是否已入账)。应该复用工作日达标的小猫庆祝
+        模板, 文案换成拍摄奖励金额。
+        """
+        from app.models.report import PeriodDetail, ReportData
+
+        data = ReportData(
+            date="2026-06-15",
+            is_shooting_day=True,
+            periods=[PeriodDetail(period=p, status="shooting", status_label="拍摄")
+                     for p in ("morning", "afternoon", "evening")],
+            reward_total=30.0,
+            total_work_hours=0.0,
+        )
+        preview = ReportPreview(image_path="", report_data=data, date_str="2026-06-15")
+        joined = " ".join(_all_label_texts(preview._content_box))
+        assert "熬夜" not in joined
+        assert "工时 0" not in joined
+        assert "拍摄奖励" in joined and "30" in joined
+
+    def test_shooting_report_without_reward_shows_pending_message(self):
+        """拍摄日复盘还没提交(尚未入账)时, 显示"还没提交"而非"工时0未达标"。"""
+        from app.models.report import PeriodDetail, ReportData
+
+        data = ReportData(
+            date="2026-06-15",
+            is_shooting_day=True,
+            periods=[PeriodDetail(period=p, status="shooting", status_label="拍摄")
+                     for p in ("morning", "afternoon", "evening")],
+            reward_total=0.0,
+            total_work_hours=0.0,
+        )
+        preview = ReportPreview(image_path="", report_data=data, date_str="2026-06-15")
+        joined = " ".join(_all_label_texts(preview._content_box))
+        assert "工时 0" not in joined
+        assert "还没提交" in joined
+
     def test_office_report_still_uses_photo_grid(self):
         """办公日战报仍用六格网格(回归)。"""
         from app.models.report import PeriodDetail, ReportData

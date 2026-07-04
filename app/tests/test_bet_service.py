@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.models.ledger import LedgerEntry
 from app.repositories.bet_repo import BetRepo
 from app.repositories.ledger_repo import LedgerRepo
 from app.repositories.settings_repo import SettingsRepo
 from app.services.bet_service import BetService
+from app.utils.config import LEDGER_TYPE_SHOOTING_REWARD
 
 
 class TestBetService:
@@ -81,6 +83,29 @@ class TestBetService:
         summary = svc.get_week_summary("2026-06-01")
         assert summary["total_tasks"] == 2
         assert summary["completed"] == 0
+
+    def test_other_income_sums_shooting_rewards_in_week(self, temp_db: str) -> None:
+        """真机反馈: 拍摄奖励完成后要在对赌页体现 —— 独立的"其他收入"条目,
+        不接入现有赌约结算逻辑, 只汇总本周(week_start 起 7 天)的拍摄奖励。
+        """
+        svc = self.setup_svc(temp_db)
+        ledger_repo = LedgerRepo(temp_db)
+        ledger_repo.insert(LedgerEntry(
+            entry_date="2026-06-02", type=LEDGER_TYPE_SHOOTING_REWARD, amount=30.0,
+        ))
+        ledger_repo.insert(LedgerEntry(
+            entry_date="2026-06-05", type=LEDGER_TYPE_SHOOTING_REWARD, amount=30.0,
+        ))
+        # 上一周的拍摄奖励不应计入本周
+        ledger_repo.insert(LedgerEntry(
+            entry_date="2026-05-25", type=LEDGER_TYPE_SHOOTING_REWARD, amount=99.0,
+        ))
+
+        assert svc.get_other_income("2026-06-01") == 60.0
+
+    def test_other_income_is_zero_when_no_shooting_reward(self, temp_db: str) -> None:
+        svc = self.setup_svc(temp_db)
+        assert svc.get_other_income("2026-06-01") == 0.0
 
     # ── 滞纳期测试 ──
 

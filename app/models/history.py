@@ -50,6 +50,7 @@ class MonthViewData:
     month: int
     cells: list[CalendarCell] = field(default_factory=list)
     weekly_summaries: list[dict[str, object]] = field(default_factory=list)
+    status_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -87,3 +88,4 @@ class CycleSummary:
     late_days: int = 0
     net: float = 0.0
     actual_end_date: str | None = None  # 实际结算日期 (late 时为 late_start_date)
+    other_income: float = 0.0  # 周期内其他收入(如拍摄日奖励), 独立于对赌结算之外

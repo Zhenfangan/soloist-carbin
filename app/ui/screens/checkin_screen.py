@@ -26,6 +26,7 @@ from app.ui.components.checkin_success_panel import CheckinSuccessPanel
 from app.ui.components.period_card import PeriodCard
 from app.ui.components.pixel_button import PixelButton
 from app.ui.components.promise_input import PromiseInput
+from app.ui.components.rest_day_card import RestDayCard
 from app.ui.components.shooting_day_card import ShootingDayCard
 from app.ui.components.status_box import StatusBox
 from app.ui.components.task_inline_list import TaskInlineList
@@ -133,6 +134,17 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         )
         self._streak_label.bind(text=self._update_streak_height)
         self._container.add_widget(self._streak_label)
+
+        # 2.4 休息日卡片 — 对赌周期结算后手动指定的休息期内, 替代一切正常
+        #     UI(时段卡/拍摄入口/状态框), 只显示"今日休息" + 小兔动画。
+        #     优先级高于拍摄日: 休息期内不显示拍摄入口。初始隐藏，由
+        #     _apply_rest_ui() 按当天是否在休息期切换。
+        self._rest_card = RestDayCard(
+            size_hint=(1, None),
+            height=0,
+            opacity=0,
+        )
+        self._container.add_widget(self._rest_card)
 
         # 2.5 拍摄日卡片 — 非拍摄日上午上班前显示"设为拍摄日"入口；
         #     拍摄日则替代三时段卡显示"完成拍摄/查看战报"。初始隐藏，
@@ -384,8 +396,9 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 # 检查是否应该显示战报按钮
                 self._check_all_completed()
 
-                # 拍摄日 UI 切换 + 次日复盘提醒
-                self._apply_shooting_ui()
+                # 休息日优先: 休息期内不切换拍摄日 UI(不显示拍摄入口)
+                if not self._apply_rest_ui():
+                    self._apply_shooting_ui()
                 Clock.schedule_once(
                     lambda dt: self._check_yesterday_reflection_reminder(), 1.5
                 )
@@ -416,7 +429,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         拍摄日整套时段卡都被 _apply_shooting_ui() 隐藏，这里不应展开任何卡片
         （即便 checkin 记录的 status 因为某些原因还没跟上 shooting_service，
         也不能让本方法把已隐藏的卡片重新撑开挡住 ShootingDayCard 的按钮）。
+        休息日同理（优先级更高，见 _apply_rest_ui()）。
         """
+        if self._settings_service and self._settings_service.is_rest_day(self._date_str):
+            return
         if self._shooting_service and self._shooting_service.is_shooting_day(self._date_str):
             return
         period_order = ["morning", "afternoon", "evening"]
@@ -726,8 +742,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     )
             # 重新确定当前时段（终态不阻塞后续）
             self._determine_current_period()
-            # 拍摄日 UI 切换(拍摄日卡片 ⇄ 正常时段卡)
-            self._apply_shooting_ui()
+            # 休息日优先: 休息期内不切换拍摄日 UI(不显示拍摄入口)
+            if not self._apply_rest_ui():
+                # 拍摄日 UI 切换(拍摄日卡片 ⇄ 正常时段卡)
+                self._apply_shooting_ui()
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")
 
@@ -787,6 +805,25 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         if self._settings_service:
             start = self._settings_service.get("morning_start") or "09:00"
         return now < start
+
+    def _apply_rest_ui(self) -> bool:
+        """按当天是否处于休息期切换整套 UI。
+
+        返回 True 表示今天是休息日 —— 调用方(_load_data/_refresh_status)
+        应跳过后续的拍摄日/正常时段 UI 切换, 休息优先级最高。
+        """
+        is_resting = bool(
+            self._settings_service and self._settings_service.is_rest_day(self._date_str)
+        )
+        self._set_rest_card_visible(is_resting)
+        if is_resting:
+            self._set_normal_day_visible(False)
+            self._set_shooting_card_visible(False)
+        return is_resting
+
+    def _set_rest_card_visible(self, show: bool) -> None:
+        self._rest_card.opacity = 1.0 if show else 0.0
+        self._rest_card.height = self._rest_card.natural_height if show else 0
 
     def _apply_shooting_ui(self) -> None:
         """按当天拍摄日状态切换整套 UI(拍摄日卡片 ⇄ 正常时段卡)。"""
@@ -1155,6 +1192,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 from kivy.uix.image import Image as KivyImage
                 from kivy.graphics import Color, Rectangle
                 from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path
+                from app.ui.assets.loader import apply_pixel_filter
 
                 img_w = 390
 
@@ -1199,6 +1237,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     allow_stretch=True,
                     keep_ratio=False,
                 )
+                apply_pixel_filter(sky_bg.texture)
                 export_root.add_widget(sky_bg)
 
                 # 内容层(叠在草地上方)
@@ -1217,6 +1256,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     allow_stretch=True,
                     keep_ratio=False,
                 )
+                apply_pixel_filter(grass_fg.texture)
                 export_root.add_widget(grass_fg)
 
                 # 3. 导出

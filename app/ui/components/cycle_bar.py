@@ -16,9 +16,11 @@ from kivy.uix.label import Label
 
 from app.models.history import CycleSummary
 from app.ui.components.glass_bg import draw_glass_card_bg
+from app.ui.components.pixel_dot_bar import calc_dot_geom
 from app.ui.tokens import (
     DOPAMINE_COLORS,
-    FONT_SIZE_BODY,
+    FONT_SIZE_SMALL,
+    FONT_SIZE_TITLE,
     GRID_UNIT,
     TEXT_BROWN,
     TEXT_GRAY,
@@ -29,10 +31,8 @@ _CYCLE_GREEN = DOPAMINE_COLORS["mint"]["light"]   # 正常周期
 _CYCLE_GREEN_DARK = DOPAMINE_COLORS["mint"]["dark"]
 _CYCLE_RED = DOPAMINE_COLORS["coral"]["light"]     # 滞纳期
 _CYCLE_RED_DARK = DOPAMINE_COLORS["coral"]["dark"]
-_DOT_W = 10             # 像素点宽度
-_DOT_H = 14             # 像素点高度
-_DOT_GAP = 3            # 点间距
-_CARD_HEIGHT = 88       # 卡片总高
+_DOT_H = 14             # 像素点高度(几何计算见 pixel_dot_bar.calc_dot_geom)
+_CARD_HEIGHT = 108      # 卡片总高(含底部"其他收入合计"行)
 
 
 class CycleBar(FloatLayout):  # type: ignore[misc]
@@ -73,16 +73,16 @@ class CycleBar(FloatLayout):  # type: ignore[misc]
             valign="middle",
         )
 
-        # 金额标签 (右)
+        # 金额标签 (右) —— 字号加大, 一眼看清本周期净额
         net = cycle.net
         sign = "+" if net >= 0 else ""
         net_color = DOPAMINE_COLORS["mint"]["light"] if net >= 0 else DOPAMINE_COLORS["coral"]["light"]
         self._net_label = Label(
             text=f"{sign}{net:.0f}",
-            font_size=FONT_SIZE_BODY,
+            font_size=FONT_SIZE_TITLE + 6,
             color=self._to_rgba(net_color),
             size_hint=(None, None),
-            size=(90, 24),
+            size=(110, 30),
             halign="right",
             valign="middle",
             bold=True,
@@ -110,10 +110,27 @@ class CycleBar(FloatLayout):  # type: ignore[misc]
                 valign="middle",
             )
 
+        # 合计行(底部居中) —— 对赌净额 + 其他收入(如拍摄日奖励), 只在有其他
+        # 收入时显示, 避免和 net 数字重复。
+        total = cycle.net + cycle.other_income
+        total_sign = "+" if total >= 0 else ""
+        has_other_income = cycle.other_income != 0
+        self._total_label = Label(
+            text=f"含其他收入合计: {total_sign}{total:.0f}" if has_other_income else "",
+            font_size=FONT_SIZE_SMALL,
+            color=self._to_rgba(TEXT_GRAY),
+            size_hint=(None, None),
+            size=(220, 18),
+            halign="center",
+            valign="middle",
+            opacity=1 if has_other_income else 0,
+        )
+
         self.add_widget(self._date_label)
         self.add_widget(self._task_label)
         self.add_widget(self._net_label)
         self.add_widget(self._late_label)
+        self.add_widget(self._total_label)
 
         self.bind(pos=self._redraw, size=self._redraw)
 
@@ -142,7 +159,7 @@ class CycleBar(FloatLayout):  # type: ignore[misc]
         with self.canvas.before:
             # ── 像素点进度条 ──
             bar_x = x + pad + 144
-            bar_area_w = w - pad * 2 - 144 - 100  # 左侧留日期区，右侧留金额区
+            bar_area_w = w - pad * 2 - 144 - 120  # 左侧留日期区，右侧留金额区(字号加大后需更宽)
             bar_y = y + (h - _DOT_H) / 2
 
             # 计算像素方块布局
@@ -150,7 +167,7 @@ class CycleBar(FloatLayout):  # type: ignore[misc]
             total_dots = 7 + late_days  # 总天数
 
             if total_dots > 0 and bar_area_w > 10:
-                dot_w, dot_h, gap = self._calc_dot_geom(bar_area_w, total_dots)
+                dot_w, dot_h, gap = calc_dot_geom(bar_area_w, total_dots)
                 dot_y = bar_y + (_DOT_H - dot_h) / 2
 
                 # 不再画整条实心背景条 — 方块间按设计留有间隙(像素点风格),
@@ -158,12 +175,13 @@ class CycleBar(FloatLayout):  # type: ignore[misc]
                 # (如滞纳期 12 点)间隙越密集越明显, 看起来像没画完/出错。
                 # 去掉背景矩形后间隙直接透出卡片自身的玻璃背景, 更干净。
 
-                # 绘制绿色方块（正常周期）
+                # 绘制本周期方块 — 有罚款则用红色, 否则绿色(不能不看 penalty 硬编码绿)
+                dot_color, dot_color_dark = self._dot_color(), self._dot_color_dark()
                 for i in range(7):
                     dx = bar_x + i * (dot_w + gap)
-                    Color(*self._to_rgba(_CYCLE_GREEN_DARK))
+                    Color(*self._to_rgba(dot_color_dark))
                     Rectangle(pos=(dx + 1, dot_y - 1), size=(dot_w, dot_h))
-                    Color(*self._to_rgba(_CYCLE_GREEN))
+                    Color(*self._to_rgba(dot_color))
                     Rectangle(pos=(dx, dot_y), size=(dot_w, dot_h))
 
                 # 绘制红色方块（滞纳期）
@@ -174,34 +192,19 @@ class CycleBar(FloatLayout):  # type: ignore[misc]
                     Color(*self._to_rgba(_CYCLE_RED))
                     Rectangle(pos=(dx, dot_y), size=(dot_w, dot_h))
 
-        # 定位子组件
+        # 定位子组件(卡片加高后分 3 行: 顶行日期/金额, 中部任务/滞纳, 底部合计)
         self._date_label.pos = (x + pad, y + h - 28)
-        self._task_label.pos = (x + pad, y + 8)
-        self._net_label.pos = (x + w - 100, y + h - 28)
-        self._late_label.pos = (x + w - 100, y + 8)
+        self._net_label.pos = (x + w - 118, y + h - 32)
+        self._task_label.pos = (x + pad, y + 26)
+        self._late_label.pos = (x + w - 100, y + 26)
+        self._total_label.pos = (x + (w - 220) / 2, y + 4)
 
-    def _calc_dot_geom(self, bar_w: float, total: int) -> tuple[float, float, float]:
-        """根据可用宽度和点数计算点宽、点高、间距。"""
-        ideal_w = _DOT_W
-        ideal_h = _DOT_H
-        ideal_gap = _DOT_GAP
-        needed = total * ideal_w + (total - 1) * ideal_gap
+    def _dot_color(self) -> str:
+        """本周期方块颜色 — 有罚款(penalty>0)显示红, 否则绿。"""
+        return _CYCLE_RED if self._cycle.penalty > 0 else _CYCLE_GREEN
 
-        if needed <= bar_w:
-            return ideal_w, ideal_h, ideal_gap
-
-        # 空间不够：优先缩间隙，再缩方块
-        if total > 1:
-            gap = max(2, (bar_w - total * ideal_w) / (total - 1))
-            if gap >= 3:
-                return ideal_w, ideal_h, gap
-        else:
-            gap = 2
-
-        # 间隙缩到最小仍不够 → 缩方块宽度
-        gap = max(2, (bar_w - total * 6) / (total - 1)) if total > 1 else 2
-        dot_w = max(6, (bar_w - (total - 1) * gap) / total)
-        return dot_w, ideal_h, gap
+    def _dot_color_dark(self) -> str:
+        return _CYCLE_RED_DARK if self._cycle.penalty > 0 else _CYCLE_GREEN_DARK
 
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:

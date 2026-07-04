@@ -7,7 +7,9 @@ from app.models.checkin import Checkin
 from app.repositories.checkin_repo import CheckinRepo
 from app.repositories.settings_repo import SettingsRepo
 from app.repositories.streak_repo import StreakRepo
+from app.services.checkin_service import CheckinService
 from app.services.motivation_service import MotivationService
+from app.utils.clock import SimulatedClock, get_clock, set_clock
 
 
 class MockNotifier(Notifier):
@@ -79,3 +81,35 @@ class TestMotivationService:
         notifier = svc._notifier
         assert isinstance(notifier, MockNotifier)
         assert "拍摄中" in notifier.last_content
+
+    def test_streak_increments_via_real_checkin_flow_and_day_finished_event(
+        self, temp_db: str
+    ) -> None:
+        """真机反馈: 连续打卡天数一直显示 0。
+
+        之前的测试都是直接调用 update_streak(), 没有验证过真实生产链路:
+        CheckinService 走签到/签退 → 发布 DAY_FINISHED 事件 → MotivationService
+        订阅并调用 update_streak()。这里用真实事件总线连通两个 service,
+        走一天完整、正常时长的签到/签退(而非几分钟内签退, 那样会判定为
+        "早退" bad_status, streak 按设计应该清零 —— 这才是用户测试时
+        streak 一直是 0 的真实原因: 测试时都是几分钟内快速签退)。
+
+        结论: streak 递增机制本身工作正常, 不是代码 bug。
+        """
+        set_clock(SimulatedClock())
+        get_clock().set_date_and_time("2026-06-01", "08:55")  # Monday, workday
+
+        motivation_svc = self.setup_svc(temp_db)
+        checkin_svc = CheckinService(CheckinRepo(temp_db), SettingsRepo(temp_db))
+
+        assert motivation_svc.get_current_streak() == 0
+
+        checkin_svc.check_in("2026-06-01", "morning")
+        get_clock().set_date_and_time("2026-06-01", "12:00")  # 时段正常结束时间签退
+        checkin_svc.check_out("2026-06-01", "morning")
+        get_clock().set_date_and_time("2026-06-01", "14:00")
+        checkin_svc.check_in("2026-06-01", "afternoon")
+        get_clock().set_date_and_time("2026-06-01", "18:00")  # 时段正常结束时间签退
+        checkin_svc.check_out("2026-06-01", "afternoon")
+
+        assert motivation_svc.get_current_streak() == 1
