@@ -65,6 +65,16 @@ def test_active_shows_cat_animation_and_capture_button() -> None:
     assert card.height > base_h                  # 面板加高容纳动画
 
 
+def test_cat_animation_speed_matches_report_preview() -> None:
+    """真机反馈: active 态小猫动画比战报里的动画明显快。
+    战报(report_preview.py `_start_frame_anim`)统一用 fps=4.0, 而
+    ShootingDayCard 的 SequenceSprite 之前没传 fps, 落到默认的 6.0,
+    播放间隔从 0.25s 变成约 0.167s, 视觉上就是"更快"。这里让两者一致。
+    """
+    card = ShootingDayCard()
+    assert card._anim._interval == 0.25  # fps=4.0 <=> interval=1/4
+
+
 def test_idle_hides_animation_and_capture() -> None:
     card = ShootingDayCard()
     card.set_state("active")

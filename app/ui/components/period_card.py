@@ -185,6 +185,18 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         # 像素边框绘制
         self.bind(pos=self._redraw, size=self._redraw)
 
+    def on_touch_down(self, touch: Any) -> bool:
+        """disabled 时放行触摸, 不吞掉(与 PixelButton 的约定一致)。
+
+        隐藏卡片(checkin_screen 拍摄日切换时)只改外层 opacity/height/
+        disabled, 内部子控件的固定尺寸不一定同步收起。BoxLayout 默认
+        on_touch_down 在 disabled 且 collide 时会直接吞掉触摸、不检查
+        子节点, 可能挡住其他控件, 因此这里显式放行。
+        """
+        if self.disabled:
+            return False
+        return super().on_touch_down(touch)  # type: ignore[no-any-return]
+
     @staticmethod
     def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
         h = hex_color.lstrip("#")

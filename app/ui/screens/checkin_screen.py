@@ -412,7 +412,13 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         终态（请假/旷工/拍摄）不阻塞后续时段：找到第一个需要用户操作的时段
         （pending 待签到 或 in_progress 待签退），展开它作为当前卡片。
         如果第一个是 in_progress（已签未退）且后续还有 pending，同时展开后续。
+
+        拍摄日整套时段卡都被 _apply_shooting_ui() 隐藏，这里不应展开任何卡片
+        （即便 checkin 记录的 status 因为某些原因还没跟上 shooting_service，
+        也不能让本方法把已隐藏的卡片重新撑开挡住 ShootingDayCard 的按钮）。
         """
+        if self._shooting_service and self._shooting_service.is_shooting_day(self._date_str):
+            return
         period_order = ["morning", "afternoon", "evening"]
         absent_statuses = {"absent", "absent_morning", "absent_afternoon"}
         terminal = {"absent", "absent_morning", "absent_afternoon", "leave", "shooting"}
@@ -820,6 +826,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             card.opacity = op
             card.disabled = not visible
             if not visible:
+                card.card_state = "collapsed"
                 card.height = 0
         self._status_box.opacity = op
         if visible:

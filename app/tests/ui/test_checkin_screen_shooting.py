@@ -84,6 +84,40 @@ class TestShootingScreenIntegration:
         screen._apply_shooting_ui()
         assert screen._shooting_card._state == "done"
 
+    def test_shooting_day_fully_collapses_period_card_content_area(self) -> None:
+        """真机 bug 复现: 若 checkin 记录的时段 status 滞后于 shooting_service
+        (例如 set_shooting_day() 写入过程中部分失败, 或未来任何导致两套拍摄日
+        表示短暂不一致的路径), 仍报 "pending" 时, _determine_current_period()
+        会展开 morning 卡的 _content_area(内层签到/请假按钮容器); 随后
+        _apply_shooting_ui() 只收起外层 card.height, 没有同步收起
+        _content_area, 导致这个已 disabled 但仍占用真实屏幕坐标的 BoxLayout
+        挡住下方 ShootingDayCard 按钮的触摸(Kivy 默认 on_touch_down: disabled
+        且 collide 就直接吞掉, 根本不检查子节点)。
+        必须走 _refresh_status()(而非直接调 _apply_shooting_ui())才能复现,
+        因为顺序依赖: _determine_current_period() 先展开, _apply_shooting_ui() 后收起。
+        """
+        get_clock().set_date_and_time("2026-06-07", "08:00")
+        checkin = MagicMock()
+        checkin.get_today_status.return_value = _day_status(is_shooting=False)  # 滞后: 仍是 pending
+        checkin.mark_absent.return_value = None
+        shooting = MagicMock()
+        shooting.is_shooting_day.return_value = True  # shooting_service 已经认为是拍摄日
+        shooting.get_reflection.return_value = None
+        settings = MagicMock()
+        settings.get.side_effect = lambda k: _SETTINGS.get(k, "")
+        settings.get_user_nickname.return_value = ""
+        motivation = MagicMock()
+        motivation.get_current_streak.return_value = 0
+        screen = CheckinScreen(
+            checkin_service=checkin, shooting_service=shooting,
+            settings_service=settings, motivation_service=motivation,
+        )
+        Clock.tick()
+        screen._refresh_status()
+        morning = screen._period_cards["morning"]
+        assert morning.height == 0
+        assert morning._content_area.height == 0
+
     def test_on_set_shooting_day_calls_service(self) -> None:
         get_clock().set_date_and_time("2026-06-07", "08:00")
         screen, checkin, _ = _make_screen(is_shooting=False)

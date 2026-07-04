@@ -91,6 +91,7 @@ class ShootingDayCard(BoxLayout):  # type: ignore[misc]
         )
         self._anim = SequenceSprite(
             "cat",
+            fps=4.0,  # 与战报 report_preview._start_frame_anim 的速度保持一致
             autoplay=False,
             size_hint=(None, None),
             size=(_ANIM_H, _ANIM_H),
