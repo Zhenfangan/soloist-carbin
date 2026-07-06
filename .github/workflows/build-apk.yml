@@ -51,6 +51,10 @@ jobs:
           rm -rf .buildozer/android/platform/python-for-android/ 2>/dev/null || true
           rm -rf .buildozer/android/app/ 2>/dev/null || true
 
+      - name: Use fixed debug keystore (for stable overwrite-install)
+        run: |
+          cp soloist-debug.keystore ~/.android/debug.keystore
+
       - name: Build APK
         run: |
           buildozer android debug

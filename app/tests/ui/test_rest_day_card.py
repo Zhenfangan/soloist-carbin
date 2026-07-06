@@ -29,3 +29,29 @@ def test_no_action_buttons() -> None:
 
     card = RestDayCard()
     assert _find(card, PixelButton) == []
+
+
+def test_set_animation_inactive_stops_sprite() -> None:
+    """休息卡隐藏时(非休息日)必须暂停精灵, 否则空转 Clock 帧循环耗电+可能
+    与其它动画叠加卡顿(真机已复现: 切 tab 回来循环播放小兔)。"""
+    card = RestDayCard()
+    card.set_animation_active(False)
+    assert not card._anim.is_playing
+
+
+def test_set_animation_active_resumes_sprite() -> None:
+    card = RestDayCard()
+    card.set_animation_active(False)
+    card.set_animation_active(True)
+    assert card._anim.is_playing
+
+
+def test_toggle_is_idempotent() -> None:
+    """重复设同一状态不报错、不叠加事件。"""
+    card = RestDayCard()
+    card.set_animation_active(True)
+    card.set_animation_active(True)
+    assert card._anim.is_playing
+    card.set_animation_active(False)
+    card.set_animation_active(False)
+    assert not card._anim.is_playing

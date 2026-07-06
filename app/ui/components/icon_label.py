@@ -13,6 +13,7 @@ from typing import Any
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.image import Image
 from kivy.uix.label import Label
+from kivy.uix.widget import Widget
 
 from app.ui.assets.loader import IconLoader, apply_pixel_filter
 from app.ui.tokens import FONT_SIZE_BODY, TEXT_BROWN
@@ -41,6 +42,7 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
         spacing: int = 4,
         outline_color: tuple[float, float, float, float] | None = None,
         outline_width: int = 0,
+        centered: bool = False,
         **kwargs: Any,
     ) -> None:
         kwargs.setdefault("orientation", "horizontal")
@@ -57,6 +59,9 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
         self._icon_size = icon_size
         self._outline_color = outline_color
         self._outline_width = outline_width
+        # centered: 两端加弹性 spacer 把图文挤到整行中间(日期头/连续出勤/
+        # 卡片标题需要)。注意参数名不能叫 center —— Widget.center 是保留属性。
+        self._centered = centered
         if self.size_hint_x is None and not has_explicit_width:
             self.bind(minimum_width=self.setter("width"))
         if self.size_hint_y is None and not has_explicit_height:
@@ -95,6 +100,11 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
     def set_segments(self, segments: list[tuple[str | None, str]]) -> None:
         """N 段动态更新(清空重建子 widget), 覆盖 0/1/2+ 段的所有场景。"""
         self.clear_widgets()
+        # centered 时首尾各加一个弹性 spacer, 两者等分行内剩余宽度 → 内容居中。
+        # spacer 是纯 Widget, .text getter / .color setter 的 isinstance(Label)
+        # 判断会自动跳过它, 不影响文字拼接与改色。
+        if self._centered:
+            self.add_widget(Widget(size_hint_x=1))
         for icon_name, text in segments:
             if icon_name is not None:
                 img = Image(
@@ -103,6 +113,9 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
                     size=(self._icon_size, self._icon_size),
                     allow_stretch=True,
                     keep_ratio=True,
+                    # 盒子高于内容时 BoxLayout 默认底部对齐, 会让文字沉到卡片
+                    # 底部像溢出 —— 垂直居中锚定修正。
+                    pos_hint={"center_y": 0.5},
                 )
                 apply_pixel_filter(img.texture)
                 self.add_widget(img)
@@ -114,7 +127,10 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
                 valign="middle",
                 outline_color=self._outline_color or (0, 0, 0, 0),
                 outline_width=self._outline_width,
+                pos_hint={"center_y": 0.5},
             )
             label.bind(texture_size=lambda lb, ts: setattr(lb, "size", ts))
             label.text_size = (None, None)
             self.add_widget(label)
+        if self._centered:
+            self.add_widget(Widget(size_hint_x=1))

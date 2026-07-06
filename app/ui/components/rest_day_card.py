@@ -84,6 +84,13 @@ class RestDayCard(BoxLayout):  # type: ignore[misc]
         """卡片应有的高度(供外部显隐时设置，避免硬编码覆盖)。"""
         return _CARD_HEIGHT
 
+    def set_animation_active(self, active: bool) -> None:
+        """控制精灵动画播放/暂停。卡片隐藏时(非休息日)应暂停避免空转 Clock。"""
+        if active and not self._anim.is_playing:
+            self._anim.play()
+        elif not active and self._anim.is_playing:
+            self._anim.stop()
+
     def _redraw_bg(self, *_args: Any) -> None:
         draw_glass_card_bg(self, border_light="#FFFFFF", border_dark="#C8D8E0")
 

@@ -93,6 +93,9 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         self._current_period_index = 0
         self._morning_checked_in = False
         self._promise_shown = False
+        # 追踪当前活动的 CheckinSuccessPanel, refresh() 时强制清理
+        # (真机相机后台返回后面板偶发不自动 dismiss, 卡住盖住按钮; 见 root_scatter 跨 tab 存活)
+        self._active_success_panel: Any = None
 
         # 主容器
         self._container = BoxLayout(
@@ -104,17 +107,18 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         self._container.bind(minimum_height=self._container.setter("height"))
         self.add_widget(self._container)
 
-        # 1. 日期头部
+        # 1. 日期头部 — 整行居中
         self._date_header = IconLabel(
             icon=None, text="",
             font_size=int(FONT_SIZE_TITLE * 1.4),
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=40,
+            centered=True,
         )
         self._container.add_widget(self._date_header)
 
-        # 2. 连续出勤天数 — 亮粉色 + 白色描边
+        # 2. 连续出勤天数 — 亮粉色 + 白色描边, 整行居中
         self._streak_label = IconLabel(
             icon=None, text="",
             font_size=int(FONT_SIZE_TITLE * 1.2),
@@ -123,6 +127,7 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             outline_width=2,
             size_hint=(1, None),
             height=0,  # 修复: 空数据时不占高度, 数据到位时手动设 height=32
+            centered=True,
         )
         self._container.add_widget(self._streak_label)
 
@@ -283,6 +288,16 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
 
     def refresh(self) -> None:
         """外部调用 — 切换 Tab 回打卡页时刷新数据。"""
+        # 先清理可能卡住的成功动画面板(真机相机后台→前台后偶发 _auto_dismiss
+        # 不触发, 面板残留盖住卡片按钮 → 看着像"签到没翻成签退"或"卡在小兔"。
+        # 面板挂在 root_scatter 上跨 tab 存活, 必须在此强制解挂)。
+        if self._active_success_panel is not None:
+            try:
+                self._active_success_panel._dismissed = False
+                self._active_success_panel._auto_dismiss(0)
+            except Exception:
+                pass
+            self._active_success_panel = None
         self._refresh_status()
         self._check_all_completed()
 
@@ -545,19 +560,25 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         # set_status_from_period 本身是幂等的, 重复调用无副作用。
         if card:
             guard = self._fire_once(lambda p=period: self._after_checkin_animation(p))
+            # guard 触发后清除面板追踪(正常 dismiss / 超时兜底 / 异常
+            # 兜底 三条路都会走到 guard, 在此统一解挂)。
+            def _wrap_guard() -> None:
+                guard()
+                self._active_success_panel = None
             try:
                 panel = CheckinSuccessPanel(
                     target_card=card,
                     is_checkin=True,
                     is_night=period in ("evening", "night"),
                     settings_service=self._settings_service,
-                    on_dismiss_callback=guard,
+                    on_dismiss_callback=_wrap_guard,
                 )
                 panel.open()
-                Clock.schedule_once(lambda dt: guard(), 6.0)
+                self._active_success_panel = panel
+                Clock.schedule_once(lambda dt: _wrap_guard(), 6.0)
             except Exception as e:
                 Logger.error(f"CheckinScreen: 打卡成功动画显示失败 {e!r}")
-                guard()
+                _wrap_guard()
 
     def _on_checkout(self, period: str) -> None:
         """签退回调 — 若在时段结束时间前签退，先弹确认框。"""
@@ -647,19 +668,23 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         # 6 秒超时兜底强制推进 (见 _finish_checkin 同款注释)。
         if card:
             guard = self._fire_once(_after_checkout_anim)
+            def _wrap_guard() -> None:
+                guard()
+                self._active_success_panel = None
             try:
                 panel = CheckinSuccessPanel(
                     target_card=card,
                     is_checkin=False,
                     is_night=period in ("evening", "night"),
                     settings_service=self._settings_service,
-                    on_dismiss_callback=guard,
+                    on_dismiss_callback=_wrap_guard,
                 )
                 panel.open()
-                Clock.schedule_once(lambda dt: guard(), 6.0)
+                self._active_success_panel = panel
+                Clock.schedule_once(lambda dt: _wrap_guard(), 6.0)
             except Exception as e:
                 Logger.error(f"CheckinScreen: 签退成功动画显示失败 {e!r}")
-                guard()
+                _wrap_guard()
         else:
             _after_checkout_anim()
 
@@ -813,6 +838,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
     def _set_rest_card_visible(self, show: bool) -> None:
         self._rest_card.opacity = 1.0 if show else 0.0
         self._rest_card.height = self._rest_card.natural_height if show else 0
+        # 非休息日隐藏卡片时同步关停精灵动画, 避免小兔空转 Clock 帧循环
+        # (SequenceSprite autoplay 永不自动停止, 隐藏后仍在后台逐帧推进,
+        # 真机上与其它动画叠加导致切 tab 回来卡顿)。
+        self._rest_card.set_animation_active(show)
 
     def _apply_shooting_ui(self) -> None:
         """按当天拍摄日状态切换整套 UI(拍摄日卡片 ⇄ 正常时段卡)。"""

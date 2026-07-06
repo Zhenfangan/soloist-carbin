@@ -51,13 +51,14 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         kwargs.setdefault("spacing", 2)
         super().__init__(**kwargs)
 
-        # 标题 — 大字号显示，单字号高于正文
+        # 标题 — 大字号显示，单字号高于正文, 整行居中
         self._title_label = IconLabel(
             icon="icon_chart", text="今日状态",
             font_size=FONT_SIZE_TITLE,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=28,
+            centered=True,
         )
         self.add_widget(self._title_label)
 

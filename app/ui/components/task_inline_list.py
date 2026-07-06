@@ -63,13 +63,14 @@ class TaskInlineList(BoxLayout):  # type: ignore[misc]
         self._on_delete_cb = on_delete
         self._checkboxes: list[PixelCheckbox] = []
 
-        # 标题 — 大字号显示
+        # 标题 — 大字号显示, 整行居中
         self._title_label = IconLabel(
             icon="icon_memo", text="今日任务",
             font_size=FONT_SIZE_TITLE,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=28,
+            centered=True,
         )
         self.add_widget(self._title_label)
 

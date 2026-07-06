@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from kivy.uix.image import Image
 from kivy.uix.label import Label
+from kivy.uix.widget import Widget
 
 from app.ui.components.icon_label import IconLabel
 
@@ -223,3 +224,62 @@ class TestTextAccessor:
         w = IconLabel()
         w.set_segments([])
         assert w.text == ""
+
+
+class TestVerticalCentering:
+    """回归: IconLabel 是水平 BoxLayout, 当盒子高度大于内容(如 status_box 行/
+    period_card 头部 48px)时, 固定尺寸的图标+文字会被 BoxLayout 底部对齐,
+    导致"旷工"等文案沉到卡片底部像溢出。子控件须 pos_hint center_y=0.5 垂直居中。
+    """
+
+    def test_label_child_vertically_centered(self) -> None:
+        w = IconLabel(icon=None, text="X")
+        labels = [c for c in w.children if isinstance(c, Label)]
+        assert labels[0].pos_hint.get("center_y") == 0.5
+
+    def test_icon_child_vertically_centered(self) -> None:
+        w = IconLabel(icon="icon_pen", text="X")
+        images = [c for c in w.children if isinstance(c, Image)]
+        assert images[0].pos_hint.get("center_y") == 0.5
+
+    def test_vertical_centering_survives_rebuild(self) -> None:
+        w = IconLabel(icon="icon_pen", text="X")
+        w.set_segments([("icon_clock", "迟到"), (None, "备注")])
+        for c in w.children:
+            if isinstance(c, (Image, Label)):
+                assert c.pos_hint.get("center_y") == 0.5
+
+
+class TestHorizontalCentering:
+    """opt-in 水平居中 — 日期头/连续出勤/状态框标题/今日任务标题需要内容居中,
+    而 IconLabel 默认把图文靠左打包。centered=True 时两端加弹性 spacer 把内容挤到中间。"""
+
+    def test_center_true_adds_two_flex_spacers(self) -> None:
+        w = IconLabel(icon="icon_pen", text="X", centered=True, size_hint=(1, None), height=40)
+        spacers = [c for c in w.children if type(c) is Widget]
+        assert len(spacers) == 2
+        assert all(s.size_hint_x == 1 for s in spacers)
+
+    def test_center_false_has_no_spacers(self) -> None:
+        w = IconLabel(icon="icon_pen", text="X")
+        spacers = [c for c in w.children if type(c) is Widget]
+        assert len(spacers) == 0
+
+    def test_center_survives_rebuild(self) -> None:
+        w = IconLabel(icon="icon_pen", text="X", centered=True, size_hint=(1, None), height=40)
+        w.set_status(None, "Y")
+        spacers = [c for c in w.children if type(c) is Widget]
+        assert len(spacers) == 2
+
+    def test_center_text_getter_ignores_spacers(self) -> None:
+        w = IconLabel(centered=True, size_hint=(1, None), height=40)
+        w.set_segments([("icon_clock", "迟到"), ("icon_run", "早退")])
+        assert w.text == "迟到早退"
+
+    def test_center_preserves_segment_order(self) -> None:
+        w = IconLabel(centered=True, size_hint=(1, None), height=40)
+        w.set_segments([("icon_flame", ""), (None, "中"), ("icon_flame", "")])
+        # 去掉两端 spacer 后, 图文顺序不变(首尾火苗各带一个空 label + 中段 label)
+        inner = [c for c in reversed(w.children) if isinstance(c, (Image, Label))]
+        kinds = ["img" if isinstance(c, Image) else "lbl" for c in inner]
+        assert kinds == ["img", "lbl", "lbl", "img", "lbl"]
