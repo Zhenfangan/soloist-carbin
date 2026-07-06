@@ -559,6 +559,36 @@ class TestCheckinScreen:
         Clock.tick()
         assert mock_checkin_service.check_in.called
 
+    def test_checkin_advances_flow_synchronously(self, mock_checkin_service: MagicMock,
+                                                  mock_promise_service: MagicMock,
+                                                  mock_motivation_service: MagicMock,
+                                                  mock_report_service: MagicMock,
+                                                  mock_shooting_service: MagicMock) -> None:
+        """回归(真机): 相机 Intent 返回前台后事件循环靠输入驱动, Clock 长延迟
+        回调(6s 兜底 / 面板 4.5s dismiss / 弹窗 0.3s)在下次触摸前不触发。故签到
+        后的"刷新卡片 + 弹男友奖励框"必须在 _finish_checkin 里同步完成, 不能
+        挂在 Clock 回调上 —— 否则卡片不翻面、承诺框不弹, 必须切 tab 才恢复。
+
+        断言: 不推进 Clock, _finish_checkin 返回时承诺弹窗已触发、状态已重刷。"""
+        screen = CheckinScreen(
+            checkin_service=mock_checkin_service,
+            promise_service=mock_promise_service,
+            motivation_service=mock_motivation_service,
+            report_service=mock_report_service,
+            shooting_service=mock_shooting_service,
+        )
+        Clock.tick()
+        assert screen._promise_shown is False, "尚未签到, 承诺弹窗不应已触发"
+        calls_before = mock_checkin_service.get_today_status.call_count
+
+        # 模拟相机 on_done 回调直接落到 _finish_checkin; 关键: 全程不推进 Clock
+        screen._finish_checkin("morning", None)
+
+        assert screen._promise_shown is True, "签到后男友奖励弹窗未同步弹出(仍依赖 Clock)"
+        assert mock_checkin_service.get_today_status.call_count > calls_before, (
+            "签到后未同步重刷状态(卡片不会翻面, 仍依赖 Clock)"
+        )
+
     def test_checkout_flow(self, mock_checkin_service: MagicMock,
                             mock_promise_service: MagicMock,
                             mock_motivation_service: MagicMock,

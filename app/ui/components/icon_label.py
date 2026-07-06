@@ -132,6 +132,12 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
                 )
                 apply_pixel_filter(img.texture)
                 self.add_widget(img)
+            # 空文字段(仅图标, 如连续出勤两侧的火苗、清空徽章)绝不建 Label:
+            # 空文字 texture_size 恒为 [0,0]、绑定回调永不触发, Label 会一直
+            # 停在默认 100×100 撑出大片死宽度 → 把图文挤得左偏、看着"不居中",
+            # 且让 minimum_width 无法归零。故直接跳过。
+            if not text:
+                continue
             label = Label(
                 text=text,
                 font_size=self._font_size,

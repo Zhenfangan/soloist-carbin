@@ -12,7 +12,6 @@ ScrollView 垂直布局:
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 from typing import Any
 
 from kivy.clock import Clock
@@ -149,8 +148,8 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             on_set=self._on_set_shooting_day,
             on_complete=self._on_complete_shooting,
             on_cancel=self._on_cancel_shooting_day,
-            on_view_report=self._on_report,
             on_capture=self._on_capture_scene,
+            settings_service=settings_service,
             size_hint=(1, None),
             height=0,
             opacity=0,
@@ -513,23 +512,6 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         else:
             self._finish_checkin(period, None)
 
-    @staticmethod
-    def _fire_once(fn: Callable[[], Any]) -> Callable[[], None]:
-        """包一层防重复调用: 首次调用执行 fn, 之后的调用全部忽略。
-
-        用于同一个收尾动作可能被多条路径触发的场景(成功动画正常 dismiss /
-        超时兜底 / 异常兜底), 保证 fn 只真正执行一次。
-        """
-        fired = {"done": False}
-
-        def _guarded() -> None:
-            if fired["done"]:
-                return
-            fired["done"] = True
-            fn()
-
-        return _guarded
-
     def _finish_checkin(self, period: str, photo_path: Any) -> None:
         """拍照完成后执行实际签到写库。photo_path=None 且有相机服务 → 用户取消，不写记录。"""
         if self._camera_service and photo_path is None:
@@ -550,44 +532,20 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             card.checkin_time = result.checkin_time
         self._morning_checked_in = True
 
-        # 动画面板显示失败不应阻塞卡片刷新/折叠 — 单独兜底, 出错则直接
-        # 走 dismiss 回调, 保证签到本身的后续状态更新一定发生。
-        # 拍照签到会先把 APP 切到后台调系统相机, 真机上 Kivy Clock 从后台
-        # 恢复前台后偶发不再正常推进面板内部的帧动画/自动关闭定时器
-        # (面板卡在 opacity=0 隐藏按钮的中间态, 不报错也不崩溃, 只是卡住)。
-        # 用 _fire_once 包一层防重复调用的兜底: 面板正常关闭时用掉这次机会;
-        # 若 6 秒后仍未关闭(超过面板自身 4.5 秒展示时长 + 缓冲), 强制推进,
-        # set_status_from_period 本身是幂等的, 重复调用无副作用。
-        if card:
-            guard = self._fire_once(lambda p=period: self._after_checkin_animation(p))
-            # guard 触发后清除面板追踪并强制解挂面板 widget
-            # (正常 dismiss / 超时兜底 / 异常兜底 三条路都会走到这里)。
-            # 真机相机后台→前台后 Kivy Clock 偶发不触发 _auto_dismiss,
-            # 面板残留在 root_scatter 上盖住按钮 → 看着像"卡住不动"。
-            def _wrap_guard() -> None:
-                guard()
-                panel_ref = self._active_success_panel
-                if panel_ref is not None:
-                    try:
-                        panel_ref._dismissed = False
-                        panel_ref._auto_dismiss(0)
-                    except Exception:
-                        pass
-                self._active_success_panel = None
-            try:
-                panel = CheckinSuccessPanel(
-                    target_card=card,
-                    is_checkin=True,
-                    is_night=period in ("evening", "night"),
-                    settings_service=self._settings_service,
-                    on_dismiss_callback=_wrap_guard,
-                )
-                panel.open()
-                self._active_success_panel = panel
-                Clock.schedule_once(lambda dt: _wrap_guard(), 6.0)
-            except Exception as e:
-                Logger.error(f"CheckinScreen: 打卡成功动画显示失败 {e!r}")
-                _wrap_guard()
+        # ── 功能性推进: 同步执行, 绝不依赖 Clock ──
+        # 真机相机 Intent 返回前台后, 事件循环只在"恢复瞬间画的那几帧"里
+        # 推进 Clock, 此后靠触摸输入驱动。旧代码把"刷新卡片 + 弹男友奖励框"
+        # 全挂在面板 dismiss 回调(4.5s)和 6s 兜底定时器上 —— 都是远超那几帧
+        # 的长延迟 Clock 回调, 等不到就不执行 → 卡片不翻面、承诺框不弹, 必须
+        # 切 tab 触发 on_enter→refresh 才恢复。改为在相机 on_done 回调链里
+        # 同步执行: 刷新是同步属性变更(恢复帧即渲染), 弹窗是同步 open(0.1s
+        # 淡入能在恢复那几帧内完成)。成功动画退化为可有可无的装饰叠加。
+        self._refresh_status()
+        self._check_all_completed()
+        # 装饰性成功动画(真机 Clock 空转时退化为静态帧, 切 tab 由 refresh 清理)
+        self._show_success_panel(card, is_checkin=True, is_night=period in ("evening", "night"))
+        # 男友承诺输入(功能性, 首次签到后引导设置今日奖励)
+        self._show_promise_dialog()
 
     def _on_checkout(self, period: str) -> None:
         """签退回调 — 若在时段结束时间前签退，先弹确认框。"""
@@ -648,67 +606,36 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             card.has_checked_out = True
             card.checkout_time = result.checkout_time
 
-        def _after_checkout_anim() -> None:
-            self._refresh_status()
-            self._check_all_completed()
-            # 推进到下一个非终态时段（跳过请假/旷工/拍摄）
-            period_order = ["morning", "afternoon", "evening"]
-            terminal = {"absent", "absent_morning", "absent_afternoon", "leave", "shooting"}
-            current_idx = period_order.index(period) if period in period_order else -1
-            for next_idx in range(current_idx + 1, len(period_order)):
-                next_period = period_order[next_idx]
-                next_card = self._period_cards.get(next_period)
-                if next_card is None:
-                    continue
-                # 从当前 _periods_data 读取该时段状态判断是否终态
-                next_ps = next(
-                    (p for p in self._periods_data if p.period == next_period), None
-                )
-                next_status = next_ps.status if next_ps else "pending"
-                if next_status not in terminal:
-                    next_card.height = next_card._EXPANDED_HEIGHT
-                    next_card.card_state = "expanded"
-                    next_card.is_current = True
-                    break
-
-        # 动画面板显示失败不应阻塞卡片刷新/折叠 — 单独兜底, 出错则直接
-        # 走 dismiss 回调, 保证签退本身的后续状态更新一定发生。
-        # 真机相机后台→前台后 Clock 偶发不触发 _auto_dismiss,_wrap_guard
-        # 必须主动解挂面板 widget(同 _finish_checkin 注释)。
-        if card:
-            guard = self._fire_once(_after_checkout_anim)
-            def _wrap_guard() -> None:
-                guard()
-                panel_ref = self._active_success_panel
-                if panel_ref is not None:
-                    try:
-                        panel_ref._dismissed = False
-                        panel_ref._auto_dismiss(0)
-                    except Exception:
-                        pass
-                self._active_success_panel = None
-            try:
-                panel = CheckinSuccessPanel(
-                    target_card=card,
-                    is_checkin=False,
-                    is_night=period in ("evening", "night"),
-                    settings_service=self._settings_service,
-                    on_dismiss_callback=_wrap_guard,
-                )
-                panel.open()
-                self._active_success_panel = panel
-                Clock.schedule_once(lambda dt: _wrap_guard(), 6.0)
-            except Exception as e:
-                Logger.error(f"CheckinScreen: 签退成功动画显示失败 {e!r}")
-                _wrap_guard()
-        else:
-            _after_checkout_anim()
-
-    def _after_checkin_animation(self, period: str) -> None:
-        """打卡动画完成后的处理。"""
+        # 同步推进(同 _finish_checkin 的相机 Clock 空转规避)。_refresh_status
+        # 里的 _determine_current_period 会自动展开下一个非终态时段, 无需
+        # 再手动找下一张卡。
         self._refresh_status()
-        # 任意时段首次签到后弹出承诺弹窗（上午旷工时下午签到也会触发）
-        self._show_promise_dialog()
+        self._check_all_completed()
+        # 装饰性签退动画(签退后卡片折叠成完成态, 面板多半不可见, 纯兜底)
+        self._show_success_panel(card, is_checkin=False, is_night=period in ("evening", "night"))
+
+    def _show_success_panel(self, card: Any, *, is_checkin: bool, is_night: bool) -> None:
+        """展示打卡/签退成功动画(纯装饰)。
+
+        真机相机 Intent 返回后 Clock 可能空转 → 面板退化为静态帧且不自动
+        关闭; 因此所有功能性推进(刷新/承诺弹窗)都不放这里, 面板 dismiss
+        仅清理自身引用, refresh()/切 tab 会兜底解挂残留面板。
+        """
+        if card is None:
+            return
+        try:
+            panel = CheckinSuccessPanel(
+                target_card=card,
+                is_checkin=is_checkin,
+                is_night=is_night,
+                settings_service=self._settings_service,
+                on_dismiss_callback=lambda: setattr(self, "_active_success_panel", None),
+            )
+            panel.open()
+            self._active_success_panel = panel
+        except Exception as e:
+            Logger.error(f"CheckinScreen: 成功动画显示失败 {e!r}")
+            self._active_success_panel = None
 
     def _refresh_status(self) -> None:
         """刷新状态显示 — 拉取最新 day_status 并同步更新 StatusBox 与所有 PeriodCard。"""
@@ -779,6 +706,20 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         except Exception as e:
             Logger.error(f"CheckinScreen: {e}")
 
+    def _is_rest_or_shooting_day(self) -> bool:
+        """今天是否休息日或拍摄日 —— 这两种日子的战报按钮可见性由
+        _apply_rest_ui / _apply_shooting_ui 独占决定, _check_all_completed
+        不能插手(否则拍摄日 shooting 状态会被判为"已完成"→在拍摄卡下方
+        重复冒出底部大战报按钮, 与卡片形成重复)。"""
+        try:
+            if self._settings_service and self._settings_service.is_rest_day(self._date_str):
+                return True
+            if self._shooting_service and self._shooting_service.is_shooting_day(self._date_str):
+                return True
+        except Exception:
+            pass
+        return False
+
     def _check_all_completed(self) -> None:
         """决定战报按钮可见性。
 
@@ -787,6 +728,9 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         2) 已过用户设置的下午下班时间（默认 18:00），无论时段状态如何
         """
         if not self._checkin_service:
+            return
+        # 休息日/拍摄日的战报按钮由各自 UI 切换独占, 这里直接跳过避免重复。
+        if self._is_rest_or_shooting_day():
             return
         try:
             day_status = self._checkin_service.get_today_status(self._date_str)
@@ -869,12 +813,17 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             before_morning = self._is_before_morning_start()
             if is_shooting:
                 reflection = self._shooting_service.get_reflection(self._date_str)
+                is_done = reflection is not None
                 self._shooting_card.set_state(
-                    "done" if reflection else "active",
+                    "done" if is_done else "active",
                     can_cancel=before_morning,
                 )
                 self._set_shooting_card_visible(True)
                 self._set_normal_day_visible(False)
+                # 复盘完成后, 战报统一走页面底部大按钮(卡片内不再重复放"查看
+                # 战报"); 复盘完成前无战报可看, 保持隐藏。
+                self._report_btn.opacity = 1.0 if is_done else 0.0
+                self._report_btn.disabled = not is_done
             else:
                 self._set_normal_day_visible(True)
                 if before_morning:
@@ -1070,7 +1019,10 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             hours_threshold=hours,
             on_done=lambda result: self._on_promise_done(result),
         )
-        Clock.schedule_once(lambda dt: dialog.open(), 0.3)
+        # 直接 open, 不用 Clock 延迟: 相机返回后 Clock 空转会吞掉延迟回调,
+        # 导致男友奖励框不弹(真机复现的回归)。ModalView 0.1s 淡入能在
+        # 恢复那几帧内自行完成。
+        dialog.open()
 
     def _on_promise_done(self, result: dict[str, Any] | None) -> None:
         """承诺弹窗回调。"""

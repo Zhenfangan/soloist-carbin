@@ -66,10 +66,35 @@ def test_active_state_outside_window_hides_cancel() -> None:
     assert card._cancel_btn.opacity == 0
 
 
-def test_done_state_shows_view_report() -> None:
+def test_done_state_shows_encouragement_no_button() -> None:
+    """done 态不再有"查看战报"按钮(与底部大按钮重复), 改显一句鼓励语。"""
     card = ShootingDayCard()
     card.set_state("done")
-    assert "战报" in card._primary_btn.text
+    assert card._encourage_label.opacity == 1.0
+    assert card._encourage_label.text != ""
+    # 整排按钮在 done 态移出 btn_row
+    assert card._primary_btn not in card._btn_row.children
+
+
+def test_done_encouragement_prefers_user_custom() -> None:
+    """"自己设置的"鼓励语: 用户在设置里自定义的优先于内置池。"""
+    class FakeSettings:
+        def get_user_encouragements(self) -> list[str]:
+            return ["宝你今天超棒"]
+
+    card = ShootingDayCard(settings_service=FakeSettings())
+    card.set_state("done")
+    assert card._encourage_label.text == "宝你今天超棒"
+
+
+def test_done_encouragement_stable_across_refresh() -> None:
+    """重复 set_state("done")(切 tab 刷新)不应每次换一句, 避免抖动。"""
+    card = ShootingDayCard()
+    card.set_state("done")
+    first = card._encourage_label.text
+    for _ in range(5):
+        card.set_state("done")
+    assert card._encourage_label.text == first
 
 
 def test_primary_button_dispatches_by_state() -> None:
@@ -77,15 +102,14 @@ def test_primary_button_dispatches_by_state() -> None:
     card = ShootingDayCard(
         on_set=lambda: calls.append("set"),
         on_complete=lambda: calls.append("complete"),
-        on_view_report=lambda: calls.append("report"),
     )
     card.set_state("idle")
     card._on_primary()
     card.set_state("active")
     card._on_primary()
     card.set_state("done")
-    card._on_primary()
-    assert calls == ["set", "complete", "report"]
+    card._on_primary()  # done 态无主按钮, 不派发
+    assert calls == ["set", "complete"]
 
 
 def test_cancel_button_invokes_callback() -> None:

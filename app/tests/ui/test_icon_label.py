@@ -40,11 +40,14 @@ class TestIconLabelConstruction:
         assert texture.min_filter == "nearest"
 
     def test_default_no_args_is_empty_text_no_icon(self) -> None:
+        # 空文字段不建 Label(空 Label 会停在默认 100×100 撑出死宽度、
+        # 破坏居中); 默认无参 IconLabel 是一整行空白, .text 为空。
         w = IconLabel()
         images = [c for c in w.children if isinstance(c, Image)]
         labels = [c for c in w.children if isinstance(c, Label)]
         assert len(images) == 0
-        assert labels[0].text == ""
+        assert len(labels) == 0
+        assert w.text == ""
 
 
 class TestSetStatus:
@@ -112,14 +115,18 @@ class TestSetSegments:
         assert "icon_run.png" in images[1].source
 
     def test_two_segments_same_icon_first_and_last(self) -> None:
-        """_streak_label: 🔥 已连续出勤N天 🔥 — 首尾同图标, 中段无图标。"""
+        """_streak_label: 🔥 已连续出勤N天 🔥 — 首尾同图标(空文字), 中段纯文字。
+
+        首尾火苗段文字为空 → 不建 Label(否则空 Label 停在 100×100 撑出死
+        宽度, 把中段文字挤得左偏、看着不居中)。故只有中段这一个 Label。
+        """
         w = IconLabel()
         w.set_segments([("icon_flame", ""), (None, "已连续出勤 5 天"), ("icon_flame", "")])
         images = [c for c in w.children if isinstance(c, Image)]
         labels = [c for c in w.children if isinstance(c, Label)]
         assert len(images) == 2
-        assert len(labels) == 3
-        assert labels[1].text == "已连续出勤 5 天"
+        assert len(labels) == 1
+        assert labels[0].text == "已连续出勤 5 天"
 
     def test_segments_preserve_order(self) -> None:
         """子 widget 顺序必须与 segments 列表顺序一致, 否则图文错位。
@@ -279,7 +286,8 @@ class TestHorizontalCentering:
     def test_center_preserves_segment_order(self) -> None:
         w = IconLabel(centered=True, size_hint=(1, None), height=40)
         w.set_segments([("icon_flame", ""), (None, "中"), ("icon_flame", "")])
-        # 去掉两端 spacer 后, 图文顺序不变(首尾火苗各带一个空 label + 中段 label)
+        # 去掉两端 spacer 后, 图文顺序不变; 首尾火苗为空文字段不建 Label,
+        # 故内部只有 火苗 + 中段文字 + 火苗。
         inner = [c for c in reversed(w.children) if isinstance(c, (Image, Label))]
         kinds = ["img" if isinstance(c, Image) else "lbl" for c in inner]
-        assert kinds == ["img", "lbl", "lbl", "img", "lbl"]
+        assert kinds == ["img", "lbl", "img"]

@@ -104,7 +104,14 @@ class SoloistApp(App):  # type: ignore[misc]
         # 默认使用系统真实时钟（虚拟时钟在开发面板中手动开启）
         set_clock(SystemClock())
 
-        # 初始化数据库
+        # 初始化数据库 —— 先尝试从外部备份恢复: 安卓私有目录卸载即清空,
+        # 重装后活库缺失时从外部存储的备份拷回, 保证打卡记录跨重装不丢。
+        self._live_db_path = os.path.abspath(self.DB_PATH)
+        try:
+            from app.utils.db_backup import restore_if_missing
+            restore_if_missing(self._live_db_path)
+        except Exception:
+            pass
         init_db(self.DB_PATH)
 
         # 加载字体 (全局生效) + 预加载资源
@@ -329,8 +336,22 @@ class SoloistApp(App):  # type: ignore[misc]
         except Exception:
             pass
 
+    def _backup_db(self) -> None:
+        """把打卡数据快照备份到外部存储(卸载重装不丢)。桌面/失败均静默空操作。"""
+        try:
+            from app.utils.db_backup import backup
+            backup(getattr(self, "_live_db_path", os.path.abspath(self.DB_PATH)))
+        except Exception:
+            pass
+
+    def on_pause(self) -> bool:
+        """后台化(切系统相机 / 按 Home)时备份数据并保活, 返回 True 避免被杀。"""
+        self._backup_db()
+        return True
+
     def on_stop(self) -> None:
-        """应用退出时清理资源。"""
+        """应用退出时备份数据 + 清理资源。"""
+        self._backup_db()
         if hasattr(self, "_ntfy_svc"):
             self._ntfy_svc.stop()
 

@@ -384,20 +384,18 @@ class TestSettingsScreen:
     # ---- 休息天数 ----
 
     def test_rest_days_default_display(self) -> None:
-        """默认未设置休息时显示'未设置'。"""
+        """默认未设置休息时显示'0 天'(格式统一为 N 天)。"""
         svc = MockSettingsService()
         screen = SettingsScreen(settings_service=svc)
-        assert screen._rest_days_display.text == "未设置"
+        assert screen._rest_days_display.text == "0 天"
 
     def test_rest_days_display_with_period(self) -> None:
-        """休息期内显示天数+日期范围。"""
+        """休息期内只显示天数(N 天), 不再带日期范围。"""
         svc = MockSettingsService()
         svc.data["rest_start"] = "2026-07-07"
         svc.data["rest_end"] = "2026-07-08"
         screen = SettingsScreen(settings_service=svc)
-        assert "2 天" in screen._rest_days_display.text
-        assert "07-07" in screen._rest_days_display.text
-        assert "07-08" in screen._rest_days_display.text
+        assert screen._rest_days_display.text == "2 天"
 
     def test_rest_days_adjust_creates_from_tomorrow(self) -> None:
         """未设置时 + 按钮从明天起设 1 天。"""

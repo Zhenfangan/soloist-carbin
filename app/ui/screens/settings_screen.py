@@ -237,13 +237,15 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         )
 
         day_label = Label(
-            text="休息天数",
+            text="休息日设置（周结算后）：",
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
-            size_hint=(None, 1),
-            width=70,
+            size_hint=(1, 1),
             halign="left",
             valign="middle",
+        )
+        day_label.bind(
+            size=lambda inst, _: setattr(inst, "text_size", (inst.width, None))
         )
         container.add_widget(day_label)
 
@@ -251,7 +253,8 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             text=self._rest_days_display_text(),
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
-            size_hint=(1, 1),
+            size_hint=(None, 1),
+            width=54,
             halign="center",
             valign="middle",
         )
@@ -283,23 +286,23 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
         return container
 
     def _rest_days_display_text(self) -> str:
-        """根据 rest_start/rest_end 计算当前休息天数。"""
+        """当前休息天数, 格式统一为「N 天」(周结算后从明天起算的休息期长度)。"""
         if not self._settings_service:
-            return "未设置"
+            return "0 天"
         period = self._settings_service.get_rest_period()
         if period is None:
-            return "未设置"
+            return "0 天"
         start, end = period
         if not start or not end:
-            return "未设置"
+            return "0 天"
         try:
             from datetime import datetime
             s = datetime.strptime(start, "%Y-%m-%d")
             e = datetime.strptime(end, "%Y-%m-%d")
             days = (e - s).days + 1
-            return f"{days} 天 ({start[5:]} – {end[5:]})"
+            return f"{days} 天"
         except Exception:
-            return "未设置"
+            return "0 天"
 
     def _adjust_rest_days(self, delta: int) -> None:
         """调整休息天数 — 从明天起算, 与结算弹窗语义一致。"""
