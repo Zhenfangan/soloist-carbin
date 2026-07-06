@@ -1,0 +1,120 @@
+"""IconLabel — 图标 + 文字组合行, emoji 的像素图标替代品。
+
+Kivy markup Label 不支持行内图片标签, 故用 Image+Label 横向拼接替代
+`f"{emj('✍️')} 签到"` 这类写法。支持一组 (icon_name|None, text) 片段,
+覆盖单图标/双同图标/双异图标/变长拼接等实际场景(见
+docs/superpowers/specs/2026-07-06-emoji-to-pixel-icons-design.md)。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.image import Image
+from kivy.uix.label import Label
+
+from app.ui.assets.loader import IconLoader, apply_pixel_filter
+from app.ui.tokens import FONT_SIZE_BODY, TEXT_BROWN
+
+
+def _to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
+    h = hex_color.lstrip("#")
+    return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0, alpha)
+
+
+class IconLabel(BoxLayout):  # type: ignore[misc]
+    """图标 + 文字的组合行。
+
+    属性:
+        icon/text: 单段构造糖(等价于一个片段的 set_segments)
+        icon_size: 图标显示边长(px), 默认 18 — 明显小于 32×32 源图, 随文字大小
+    """
+
+    def __init__(
+        self,
+        icon: str | None = None,
+        text: str = "",
+        font_size: int = FONT_SIZE_BODY,
+        color: tuple[float, float, float, float] | None = None,
+        icon_size: int = 18,
+        spacing: int = 4,
+        outline_color: tuple[float, float, float, float] | None = None,
+        outline_width: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("size_hint", (None, None))
+        # size_hint 轴为 None 有两种调用方意图: "自适应内容大小"(默认场景)或
+        # "固定尺寸, 与内容无关"(调用方显式传了 width/height, 如 status_box
+        # ._title_label 的 height=28)。用 kwargs 是否显式带 width/height 区分,
+        # 避免后者被 Kivy 布局引擎稍后算出的 minimum_height/width 静默覆盖。
+        has_explicit_width = "width" in kwargs
+        has_explicit_height = "height" in kwargs
+        super().__init__(spacing=spacing, **kwargs)
+        self._font_size = font_size
+        self._color = color if color is not None else _to_rgba(TEXT_BROWN)
+        self._icon_size = icon_size
+        self._outline_color = outline_color
+        self._outline_width = outline_width
+        if self.size_hint_x is None and not has_explicit_width:
+            self.bind(minimum_width=self.setter("width"))
+        if self.size_hint_y is None and not has_explicit_height:
+            self.bind(minimum_height=self.setter("height"))
+        self.set_segments([(icon, text)])
+
+    @property
+    def color(self) -> tuple[float, float, float, float]:
+        return self._color
+
+    @color.setter
+    def color(self, value: tuple[float, float, float, float]) -> None:
+        """动态改色, 不重建 widget(原调用点常见模式: 设 text 后单独设 color)。"""
+        self._color = value
+        for child in self.children:
+            if isinstance(child, Label):
+                child.color = value
+
+    @property
+    def text(self) -> str:
+        """组合行的纯文字内容(只读) — 按视觉顺序拼接各段 Label 文本, 跳过图标。
+
+        大量既有断言写作 `assert "签到" in widget.text`, 迁移到 IconLabel 后需
+        真实反映"这一行显示了什么文字"。Kivy add_widget 默认 index=0, children
+        为逆序, 用 reversed() 还原视觉顺序。设置文字请用 set_status/set_segments。
+        """
+        return "".join(
+            child.text for child in reversed(self.children)
+            if isinstance(child, Label)
+        )
+
+    def set_status(self, icon: str | None, text: str) -> None:
+        """单段动态更新 — 43/45 调用点的常见情况, 等价于 set_segments([(icon, text)])。"""
+        self.set_segments([(icon, text)])
+
+    def set_segments(self, segments: list[tuple[str | None, str]]) -> None:
+        """N 段动态更新(清空重建子 widget), 覆盖 0/1/2+ 段的所有场景。"""
+        self.clear_widgets()
+        for icon_name, text in segments:
+            if icon_name is not None:
+                img = Image(
+                    source=str(IconLoader.get_icon_path(icon_name)),
+                    size_hint=(None, None),
+                    size=(self._icon_size, self._icon_size),
+                    allow_stretch=True,
+                    keep_ratio=True,
+                )
+                apply_pixel_filter(img.texture)
+                self.add_widget(img)
+            label = Label(
+                text=text,
+                font_size=self._font_size,
+                color=self._color,
+                size_hint=(None, None),
+                valign="middle",
+                outline_color=self._outline_color or (0, 0, 0, 0),
+                outline_width=self._outline_width,
+            )
+            label.bind(texture_size=lambda lb, ts: setattr(lb, "size", ts))
+            label.text_size = (None, None)
+            self.add_widget(label)

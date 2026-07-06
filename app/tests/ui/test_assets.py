@@ -84,9 +84,9 @@ class TestSpriteFiles:
 class TestIconFiles:
     """2.8〜2.9 功能图标文件验证"""
 
-    def test_all_24_icons_exist(self) -> None:
+    def test_all_36_icons_exist(self) -> None:
         assets = _get_assets_dir()
-        assert len(ICON_FILES) == 24, f"Expected 24 icons, got {len(ICON_FILES)}"
+        assert len(ICON_FILES) == 36, f"Expected 36 icons, got {len(ICON_FILES)}"
         for _icon_name, rel_path in ICON_FILES.items():
             path = assets / rel_path
             assert path.exists(), f"Icon missing: {rel_path}"
@@ -236,7 +236,7 @@ class TestPreloadAll:
     def test_preload_all_returns_counts(self) -> None:
         result = preload_all()
         assert result["sprites"] == 5
-        assert result["icons"] == 24
+        assert result["icons"] == 36
 
     def test_preload_all_is_idempotent(self) -> None:
         result1 = preload_all()

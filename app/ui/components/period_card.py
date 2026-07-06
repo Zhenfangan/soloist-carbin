@@ -18,8 +18,8 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.label import Label
 
 from app.ui.components.glass_bg import draw_glass_card_bg
+from app.ui.components.icon_label import IconLabel
 from app.ui.components.pixel_button import PixelButton
-from app.ui.fonts import emj
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -116,26 +116,20 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             size_hint=(None, 1), width=50,
             halign="left", valign="middle",
         )
-        self._summary_label = Label(
-            text=self._get_time_range_text(),
+        self._summary_label = IconLabel(
+            icon=None, text=self._get_time_range_text(),
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, 1),
-            halign="left", valign="middle",
-            markup=True,
-            shorten=True, shorten_from="right",
         )
-        self._summary_label.bind(size=lambda i, _: setattr(i, "text_size", i.size))
         # 完成徽章 — 放在 header 内，默认不可见。
-        # 宽度按文案自适应(随 texture_size)，不抢占摘要空间，保证"迟到早退"双状态完整显示不截断。
-        self._check_label = Label(
-            text="", font_size=FONT_SIZE_BODY,
+        # 宽度按内容自适应(IconLabel 内部 minimum_width 绑定)，不抢占摘要空间，
+        # 保证"迟到早退"双状态完整显示不截断。
+        self._check_label = IconLabel(
+            icon=None, text="", font_size=FONT_SIZE_BODY,
             color=self._to_rgba(DOPAMINE_COLORS["mint"]["dark"]),
-            size_hint=(None, 1), width=0,
-            halign="right", valign="middle", opacity=0,
-            markup=True,
+            size_hint=(None, 1), opacity=0,
         )
-        self._check_label.bind(texture_size=lambda i, ts: setattr(i, "width", ts[0]))
 
         self._header.add_widget(self._icon_label)
         self._header.add_widget(self._name_label)
@@ -152,9 +146,8 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         )
 
         self._action_btn = PixelButton(
-            text=f"{emj('✍️')} 签到", color=COLORS["PRIMARY_YELLOW"],
+            text="签到", color=COLORS["PRIMARY_YELLOW"],
             size_mode="large", size_hint=(1, None),
-            markup=True,
         )
         self._action_btn.bind(on_press=lambda _: self._on_action())
         self._content_area.add_widget(self._action_btn)
@@ -162,12 +155,11 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         # 请假按钮 — 紧挨签到按钮下方，仅 morning/afternoon 时段显示
         self._can_leave = period_name in ("morning", "afternoon")
         self._leave_btn = PixelButton(
-            text=f"{emj('🛌')} 请假",
+            text="请假",
             color=COLORS["CARD_SHADOW"],
             size_mode="small",
             size_hint=(1, None),
             disabled=True,
-            markup=True,
         )
         self._leave_btn.bind(on_press=lambda _b: self._on_leave_press())
         self._content_area.add_widget(self._leave_btn)
@@ -273,7 +265,7 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         """动态更新时段起止时间（响应用户设置变更）。"""
         self._start_time = start
         self._end_time = end
-        self._summary_label.text = self._get_time_range_text()
+        self._summary_label.set_status(None, self._get_time_range_text())
         self._update_display()
 
     # ── 展开 / 折叠 / 完成 ──
@@ -348,24 +340,24 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
     def _update_display(self) -> None:
         # 摘要文字
         if self._card_state == "absent":
-            self._summary_label.text = f"{emj('🚨')} 旷工"
+            self._summary_label.set_status("warning", "旷工")
             self._summary_label.color = self._to_rgba(SEMANTIC_COLORS["absent"]["icon"])
         elif self._card_state == "completed":
             # 完成态: 摘要只显示签到/签退时间(裁到 HH:MM 紧凑显示),
             # 迟到/早退由右侧徽章统一表达, 避免双重来源不一致
-            parts = []
+            segments: list[tuple[str | None, str]] = []
             if self._checkin_time:
-                parts.append(f"{emj('✍️')} {self._checkin_time[:5]}")
+                segments.append(("icon_pen", self._checkin_time[:5]))
             if self._checkout_time:
-                parts.append(f"{emj('🌙')} {self._checkout_time[:5]}")
-            self._summary_label.text = "  ".join(parts) if parts else "已完成"
+                segments.append(("icon_moon", self._checkout_time[:5]))
+            self._summary_label.set_segments(segments if segments else [(None, "已完成")])
             color = COLORS["PRIMARY_DARK"] if self._is_violation() else DOPAMINE_COLORS["mint"]["dark"]
             self._summary_label.color = self._to_rgba(color)
         elif self._card_state == "expanded":
-            self._summary_label.text = self._get_time_range_text()
+            self._summary_label.set_status(None, self._get_time_range_text())
             self._summary_label.color = self._to_rgba(TEXT_BROWN)
         else:
-            self._summary_label.text = self._get_time_range_text()
+            self._summary_label.set_status(None, self._get_time_range_text())
             self._summary_label.color = self._to_rgba(TEXT_BROWN)
 
         # 内容区可见性 — 吉祥物动画期间不重置高度
@@ -392,14 +384,14 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._action_btn.size_hint_y = None
             self._action_btn.height = 0
         elif is_leave:
-            self._action_btn.text = f"{emj('🛌')} 已请假"
+            self._action_btn.text = "已请假"
             self._action_btn.disabled = True
             self._action_btn.set_color(COLORS["CARD_SHADOW"])
             self._action_btn.opacity = 0.5
             self._action_btn.size_hint_y = None
             self._action_btn.height = 64
         elif self._has_checked_in and not self._has_checked_out:
-            self._action_btn.text = f"{emj('✍️')} 签退"
+            self._action_btn.text = "签退"
             self._action_btn.set_color(DOPAMINE_COLORS["mint"]["light"])
             self._action_btn.disabled = False
             self._action_btn.opacity = 1
@@ -412,7 +404,7 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             self._action_btn.size_hint_y = None
             self._action_btn.height = 0
         else:
-            self._action_btn.text = f"{emj('✍️')} 签到"
+            self._action_btn.text = "签到"
             self._action_btn.set_color(COLORS["PRIMARY_YELLOW"])
             self._action_btn.disabled = not self._is_current
             self._action_btn.opacity = 1
@@ -424,21 +416,21 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
             is_late = self._status == "late"
             is_early = self._is_early_checkout()
             if is_late and is_early:
-                self._check_label.text = f"{emj('⏰')}迟到{emj('🏃')}早退"
+                self._check_label.set_segments([("icon_clock", "迟到"), ("icon_run", "早退")])
                 self._check_label.color = self._to_rgba(COLORS["PRIMARY_DARK"])
             elif is_late:
-                self._check_label.text = f"{emj('⏰')} 迟到"
+                self._check_label.set_status("icon_clock", "迟到")
                 self._check_label.color = self._to_rgba(COLORS["PRIMARY_DARK"])
             elif is_early:
-                self._check_label.text = f"{emj('🏃')} 早退"
+                self._check_label.set_status("icon_run", "早退")
                 self._check_label.color = self._to_rgba(COLORS["PRIMARY_DARK"])
             else:
-                self._check_label.text = f"{emj('✅')} 完成"
+                self._check_label.set_status("check_mark", "完成")
                 self._check_label.color = self._to_rgba(DOPAMINE_COLORS["mint"]["dark"])
             self._check_label.opacity = 1.0
         else:
             self._check_label.opacity = 0
-            self._check_label.text = ""  # 清空使 texture_size→0、不占据 header 宽度
+            self._check_label.set_status(None, "")  # 清空使 minimum_width→0、不占据 header 宽度
 
         # 请假按钮 — 仅 expanded + morning/afternoon 时段显示
         if self._card_state == "expanded" and self._can_leave:
@@ -452,18 +444,6 @@ class PeriodCard(BoxLayout):  # type: ignore[misc]
         else:
             self._leave_btn.opacity = 0
             self._leave_btn.disabled = True
-
-    def _get_status_text(self) -> str:
-        status_map = {
-            "normal": f"{emj('✅')} 正常",
-            "late": f"{emj('⏰')} 迟到",
-            "early_leave": f"{emj('🏃')} 早退",
-            "absent": f"{emj('🚨')} 旷工",
-            "leave": f"{emj('🛌')} 请假",
-            "shooting": f"{emj('📸')} 拍摄中",
-            "pending": f"{emj('✍️')} 签到",
-        }
-        return status_map.get(self._status, f"{emj('✍️')} 签到")
 
     # ── 交互 ──
 

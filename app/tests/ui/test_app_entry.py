@@ -72,7 +72,7 @@ class TestAppEntry:
 
         result = preload_all()
         assert result["sprites"] == 5
-        assert result["icons"] == 24  # 16 原有 + 8 active/inactive tab icons
+        assert result["icons"] == 36  # 24 原有 + 12 emoji 替代像素图标
         assert result["sequences"] == 5  # rabbit / bear / dog / pig / cat
 
     def test_clock_integration(self) -> None:

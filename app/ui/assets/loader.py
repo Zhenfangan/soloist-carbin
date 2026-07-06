@@ -95,6 +95,18 @@ ICON_FILES: dict[str, str] = {
     "check_mark": "icons/check_mark.png",
     "cross": "icons/cross.png",
     "warning": "icons/warning.png",
+    "icon_pen": "icons/icon_pen.png",
+    "icon_bed": "icons/icon_bed.png",
+    "icon_moon": "icons/icon_moon.png",
+    "icon_clock": "icons/icon_clock.png",
+    "icon_run": "icons/icon_run.png",
+    "icon_camera": "icons/icon_camera.png",
+    "icon_target": "icons/icon_target.png",
+    "icon_calendar": "icons/icon_calendar.png",
+    "icon_flame": "icons/icon_flame.png",
+    "icon_chart": "icons/icon_chart.png",
+    "icon_hourglass": "icons/icon_hourglass.png",
+    "icon_memo": "icons/icon_memo.png",
 }
 
 

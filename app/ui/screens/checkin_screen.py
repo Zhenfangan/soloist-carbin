@@ -23,6 +23,7 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 
 from app.ui.components.checkin_success_panel import CheckinSuccessPanel
+from app.ui.components.icon_label import IconLabel
 from app.ui.components.period_card import PeriodCard
 from app.ui.components.pixel_button import PixelButton
 from app.ui.components.promise_input import PromiseInput
@@ -30,7 +31,6 @@ from app.ui.components.rest_day_card import RestDayCard
 from app.ui.components.shooting_day_card import ShootingDayCard
 from app.ui.components.status_box import StatusBox
 from app.ui.components.task_inline_list import TaskInlineList
-from app.ui.fonts import emj
 from app.ui.tokens import (
     CARD_PADDING,
     DOPAMINE_COLORS,
@@ -105,34 +105,25 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         self.add_widget(self._container)
 
         # 1. 日期头部
-        self._date_header = Label(
-            text="",
+        self._date_header = IconLabel(
+            icon=None, text="",
             font_size=int(FONT_SIZE_TITLE * 1.4),
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=40,
-            halign="center",
-            valign="middle",
-            bold=True,
-            markup=True,
         )
         self._container.add_widget(self._date_header)
 
         # 2. 连续出勤天数 — 亮粉色 + 白色描边
-        self._streak_label = Label(
-            text="",
+        self._streak_label = IconLabel(
+            icon=None, text="",
             font_size=int(FONT_SIZE_TITLE * 1.2),
             color=self._to_rgba(DOPAMINE_COLORS["coral"]["light"]),
             outline_color=self._to_rgba("#FFFFFF"),
             outline_width=2,
             size_hint=(1, None),
-            height=0,  # 修复: 空数据时不占高度, text 变化时同步更新
-            halign="center",
-            valign="middle",
-            bold=True,
-            markup=True,
+            height=0,  # 修复: 空数据时不占高度, 数据到位时手动设 height=32
         )
-        self._streak_label.bind(text=self._update_streak_height)
         self._container.add_widget(self._streak_label)
 
         # 2.4 休息日卡片 — 对赌周期结算后手动指定的休息期内, 替代一切正常
@@ -238,16 +229,12 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             opacity=0,
             spacing=GRID_UNIT // 2,
         )
-        self._promise_title = Label(
-            text=f"{emj('🎯')} 今日目标",
+        self._promise_title = IconLabel(
+            icon="icon_target", text="今日目标",
             font_size=FONT_SIZE_TITLE,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=36,
-            halign="left",
-            valign="middle",
-            bold=True,
-            markup=True,
         )
         self._promise_desc = Label(
             text="",
@@ -294,10 +281,6 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         except (IndexError, ValueError):
             return date_str
 
-    def _update_streak_height(self, *args: Any) -> None:
-        """text 变化时同步 height — 空 text height=0, 非空 height=32。"""
-        self._streak_label.height = 32 if self._streak_label.text else 0
-
     def refresh(self) -> None:
         """外部调用 — 切换 Tab 回打卡页时刷新数据。"""
         self._refresh_status()
@@ -321,18 +304,24 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             weekday = dt.isoweekday() - 1  # isoweekday: 1=Mon, 7=Sun → 0-6
             weekday_name = WEEKDAY_NAMES[weekday]
             chinese_date = self._format_chinese_date(self._date_str)
-            self._date_header.text = f"{emj('📅')} {chinese_date} {weekday_name}"
+            self._date_header.set_status("icon_calendar", f"{chinese_date} {weekday_name}")
         except ValueError:
-            self._date_header.text = f"{emj('📅')} {self._date_str}"
+            self._date_header.set_status("icon_calendar", self._date_str)
 
         # 连续出勤天数
         if self._motivation_service:
             try:
                 streak = self._motivation_service.get_current_streak()
-                self._streak_label.text = f"{emj('🔥')} 已连续正常出勤 {streak} 天 {emj('🔥')}"
+                self._streak_label.set_segments([
+                    ("icon_flame", ""),
+                    (None, f"已连续正常出勤 {streak} 天"),
+                    ("icon_flame", ""),
+                ])
+                self._streak_label.height = 32
             except Exception as e:
                 Logger.error(f"CheckinScreen: 获取连续出勤失败: {e}")
-                self._streak_label.text = ""
+                self._streak_label.set_segments([])
+                self._streak_label.height = 0
 
         # 今日状态
         if self._checkin_service:
@@ -694,9 +683,9 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                 weekday = dt.isoweekday() - 1
                 weekday_name = WEEKDAY_NAMES[weekday]
                 chinese_date = self._format_chinese_date(self._date_str)
-                self._date_header.text = f"{emj('📅')} {chinese_date} {weekday_name}"
+                self._date_header.set_status("icon_calendar", f"{chinese_date} {weekday_name}")
             except ValueError:
-                self._date_header.text = f"{emj('📅')} {self._date_str}"
+                self._date_header.set_status("icon_calendar", self._date_str)
             self._checkin_service.mark_absent(self._date_str)
             day_status = self._checkin_service.get_today_status(self._date_str)
             self._day_status = day_status

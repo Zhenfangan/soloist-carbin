@@ -164,6 +164,9 @@ class TestShootingScreenIntegration:
         import app.ui.components.toast as toast_mod
         monkeypatch.setattr(toast_mod, "show_toast", lambda *a, **k: calls.append(a))
         screen = self._make_reminder_screen(yesterday_shooting=True, yesterday_reflection=None)
+        # 丢弃构造期跨测试遗留的 Kivy Clock 回调污染（Clock 是全局单例, 前序测试
+        # 排入的 1.5s reminder 可能在本测试 tick 时触发）, 只计本次显式调用。
+        calls.clear()
         screen._check_yesterday_reflection_reminder()
         assert len(calls) == 1
 
@@ -174,6 +177,7 @@ class TestShootingScreenIntegration:
         screen = self._make_reminder_screen(
             yesterday_shooting=True, yesterday_reflection=SimpleNamespace(summary="x")
         )
+        calls.clear()  # 见 test_yesterday_reminder_fires: 隔离跨测试 Clock 污染
         screen._check_yesterday_reflection_reminder()
         assert calls == []
 
@@ -182,6 +186,7 @@ class TestShootingScreenIntegration:
         import app.ui.components.toast as toast_mod
         monkeypatch.setattr(toast_mod, "show_toast", lambda *a, **k: calls.append(a))
         screen = self._make_reminder_screen(yesterday_shooting=False, yesterday_reflection=None)
+        calls.clear()  # 见 test_yesterday_reminder_fires: 隔离跨测试 Clock 污染
         screen._check_yesterday_reflection_reminder()
         assert calls == []
 

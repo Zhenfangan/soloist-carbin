@@ -13,7 +13,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 
 from app.ui.components.glass_bg import draw_glass_card_bg
-from app.ui.fonts import emj
+from app.ui.components.icon_label import IconLabel
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -52,21 +52,17 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         super().__init__(**kwargs)
 
         # 标题 — 大字号显示，单字号高于正文
-        self._title_label = Label(
-            text=f"{emj('📊')} 今日状态",
+        self._title_label = IconLabel(
+            icon="icon_chart", text="今日状态",
             font_size=FONT_SIZE_TITLE,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=28,
-            halign="left",
-            valign="middle",
-            bold=True,
-            markup=True,
         )
         self.add_widget(self._title_label)
 
         # 三条状态行
-        self._status_widgets: dict[str, Label] = {}
+        self._status_widgets: dict[str, IconLabel] = {}
         self._label_widgets: dict[str, Label] = {}
         self._rows: list[dict[str, Any]] = []
 
@@ -90,24 +86,13 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 valign="middle",
             )
 
-            status_w = Label(
-                text=f"{emj('⏳')} 等待签到...",
+            status_w = IconLabel(
+                icon="icon_hourglass", text="等待签到...",
                 font_size=FONT_SIZE_BODY,
                 color=self._to_rgba(TEXT_BROWN),
                 size_hint=(1, None),
                 height=28,
-                halign="left",
-                valign="middle",
-                shorten=True,
-                shorten_from="right",
-                text_size=(None, 28),  # 初始即设
-                markup=True,
             )
-
-            def _bind_text_size(w: Any, _: Any) -> None:
-                w.text_size = (max(w.width - 4, 1), 28)
-
-            status_w.bind(width=_bind_text_size)
 
             row.add_widget(label_w)
             row.add_widget(status_w)
@@ -140,7 +125,7 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         is_shooting_day = getattr(day_status, "is_shooting_day", False)
 
         if date:
-            self._title_label.text = f"{emj('📅')} {date}"
+            self._title_label.set_status("icon_calendar", date)
 
         period_map: dict[str, Any] = {}
         for ps in periods:
@@ -153,16 +138,18 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
                 continue
 
             if ps is None:
-                status_w.text = f"{emj('⏳')} 等待签到..."
+                status_w.set_status("icon_hourglass", "等待签到...")
                 status_w.color = self._to_rgba(TEXT_BROWN)
             else:
-                text = self._build_status_text(ps, is_shooting_day)
+                segments = self._build_status_segments(ps, is_shooting_day)
                 color_hex = self._get_status_color(ps.status)
-                status_w.text = text
+                status_w.set_segments(segments)
                 status_w.color = self._to_rgba(color_hex)
 
-    def _build_status_text(self, ps: Any, is_shooting_day: bool) -> str:
-        """根据 PeriodStatus 构建状态文案（前缀彩色 emoji）。
+    def _build_status_segments(
+        self, ps: Any, is_shooting_day: bool
+    ) -> list[tuple[str | None, str]]:
+        """根据 PeriodStatus 构建状态图标+文案片段。
 
         迟到/早退为可并存的独立事实，由 service 在 is_late/is_early_leave
         标志位中给出，这里按"签到段 / 签退段"分别拼接，二者都违规则都展示。
@@ -177,37 +164,37 @@ class StatusBox(BoxLayout):  # type: ignore[misc]
         # 终态 / 非出勤态 — 直接返回
         if status == "pending":
             if is_shooting_day:
-                return f"{emj('📸')} 拍摄中"
-            return f"{emj('⏳')} 等待签到..."
+                return [("icon_camera", "拍摄中")]
+            return [("icon_hourglass", "等待签到...")]
         if status in ("absent", "absent_morning", "absent_afternoon"):
             penalty = getattr(ps, "penalty_amount", None)
             amount_str = f" {int(penalty)}" if penalty is not None else ""
             if status == "absent_morning":
-                return f"{emj('🚨')} 未签到(上午){amount_str}"
+                return [("warning", f"未签到(上午){amount_str}")]
             if status == "absent_afternoon":
-                return f"{emj('🚨')} 未签到(下午){amount_str}"
-            return f"{emj('🚨')} 未签到{amount_str}"
+                return [("warning", f"未签到(下午){amount_str}")]
+            return [("warning", f"未签到{amount_str}")]
         if status == "leave":
-            return f"{emj('🛌')} 已请假"
+            return [("icon_bed", "已请假")]
         if status == "shooting":
-            return f"{emj('📸')} 拍摄中"
+            return [("icon_camera", "拍摄中")]
 
         # 出勤态 — 签到段 + 签退段独立拼接（迟到与早退可并存）
-        parts: list[str] = []
+        segments: list[tuple[str | None, str]] = []
         if checkin_time:
             if is_late:
-                parts.append(f"{emj('⏰')} 迟到 {checkin_time}")
+                segments.append(("icon_clock", f"迟到 {checkin_time}"))
             else:
-                parts.append(f"{emj('✅')} 正常签到 {checkin_time}")
+                segments.append(("check_mark", f"正常签到 {checkin_time}"))
         if checkout_time:
             if is_early_leave:
-                parts.append(f"{emj('🏃')} 早退 {checkout_time}")
+                segments.append(("icon_run", f"早退 {checkout_time}"))
             else:
-                parts.append(f"{emj('🌙')} 签退 {checkout_time}")
-        if parts:
-            return " / ".join(parts)
+                segments.append(("icon_moon", f"签退 {checkout_time}"))
+        if segments:
+            return segments
 
-        return f"{emj('⏳')} 等待签到..."
+        return [("icon_hourglass", "等待签到...")]
 
     def _get_status_color(self, status: str) -> str:
         """根据状态获取对应颜色。"""

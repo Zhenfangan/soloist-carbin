@@ -11,11 +11,10 @@ from typing import Any
 
 from kivy.graphics import Color, Rectangle
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.label import Label
 
 from app.ui.components.glass_bg import draw_glass_card_bg
+from app.ui.components.icon_label import IconLabel
 from app.ui.components.pixel_checkbox import PixelCheckbox
-from app.ui.fonts import emj
 from app.ui.tokens import (
     BORDER_WIDTH,
     CARD_PADDING,
@@ -65,16 +64,12 @@ class TaskInlineList(BoxLayout):  # type: ignore[misc]
         self._checkboxes: list[PixelCheckbox] = []
 
         # 标题 — 大字号显示
-        self._title_label = Label(
-            text=f"{emj('📝')} 今日任务",
+        self._title_label = IconLabel(
+            icon="icon_memo", text="今日任务",
             font_size=FONT_SIZE_TITLE,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=28,
-            halign="left",
-            valign="middle",
-            bold=True,
-            markup=True,
         )
         self.add_widget(self._title_label)
 
@@ -88,15 +83,12 @@ class TaskInlineList(BoxLayout):  # type: ignore[misc]
         self.add_widget(self._list_layout)
 
         # 添加任务入口
-        self._add_label = Label(
-            text=f"{emj('➕')} 添加任务",
+        self._add_label = IconLabel(
+            icon="btn_add", text="添加任务",
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, None),
             height=28,
-            halign="left",
-            valign="middle",
-            markup=True,
         )
         self._add_label.bind(on_touch_down=self._on_add_touch)
         self.add_widget(self._add_label)
