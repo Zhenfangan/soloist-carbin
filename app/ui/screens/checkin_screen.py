@@ -560,10 +560,19 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         # set_status_from_period 本身是幂等的, 重复调用无副作用。
         if card:
             guard = self._fire_once(lambda p=period: self._after_checkin_animation(p))
-            # guard 触发后清除面板追踪(正常 dismiss / 超时兜底 / 异常
-            # 兜底 三条路都会走到 guard, 在此统一解挂)。
+            # guard 触发后清除面板追踪并强制解挂面板 widget
+            # (正常 dismiss / 超时兜底 / 异常兜底 三条路都会走到这里)。
+            # 真机相机后台→前台后 Kivy Clock 偶发不触发 _auto_dismiss,
+            # 面板残留在 root_scatter 上盖住按钮 → 看着像"卡住不动"。
             def _wrap_guard() -> None:
                 guard()
+                panel_ref = self._active_success_panel
+                if panel_ref is not None:
+                    try:
+                        panel_ref._dismissed = False
+                        panel_ref._auto_dismiss(0)
+                    except Exception:
+                        pass
                 self._active_success_panel = None
             try:
                 panel = CheckinSuccessPanel(
@@ -663,13 +672,20 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
                     break
 
         # 动画面板显示失败不应阻塞卡片刷新/折叠 — 单独兜底, 出错则直接
-        # 走 dismiss 回调, 保证签退本身的后续状态更新一定发生。拍照签退同样
-        # 先切到后台调系统相机, 真机偶发导致面板内部定时器卡住不触发, 用
-        # 6 秒超时兜底强制推进 (见 _finish_checkin 同款注释)。
+        # 走 dismiss 回调, 保证签退本身的后续状态更新一定发生。
+        # 真机相机后台→前台后 Clock 偶发不触发 _auto_dismiss,_wrap_guard
+        # 必须主动解挂面板 widget(同 _finish_checkin 注释)。
         if card:
             guard = self._fire_once(_after_checkout_anim)
             def _wrap_guard() -> None:
                 guard()
+                panel_ref = self._active_success_panel
+                if panel_ref is not None:
+                    try:
+                        panel_ref._dismissed = False
+                        panel_ref._auto_dismiss(0)
+                    except Exception:
+                        pass
                 self._active_success_panel = None
             try:
                 panel = CheckinSuccessPanel(

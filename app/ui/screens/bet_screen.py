@@ -374,12 +374,18 @@ class BetScreen(ScrollView):  # type: ignore[misc]
         dialog.open()
 
     def _on_rest_days_chosen(self, days: int | None) -> None:
-        """休息天数确认回调 —— days=None 表示用户选择不休息。"""
+        """休息天数确认回调 —— days=None 表示用户选择不休息。
+        休息期从明天起算: 填 2 天 → 明天+后天休息, 今天不算在内。
+        """
         if days is None or not self._settings_service:
             return
         try:
+            from datetime import datetime, timedelta
             today = get_clock().today_str()
-            self._settings_service.start_rest_period(today, days)
+            tomorrow = (
+                datetime.strptime(today, "%Y-%m-%d") + timedelta(days=1)
+            ).strftime("%Y-%m-%d")
+            self._settings_service.start_rest_period(tomorrow, days)
         except Exception as e:
             Logger.error(f"BetScreen: 开始休息期失败 {e}")
 

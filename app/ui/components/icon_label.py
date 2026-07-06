@@ -93,6 +93,18 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
             if isinstance(child, Label)
         )
 
+    def do_layout(self, *largs: Any) -> None:
+        """BoxLayout 只在 child pos_hint/size_hint 变化时重算位置,
+        Label 的 texture_size 异步计算 → child.size 变化 → Kivy 不
+        触发父级 do_layout → pos_hint center_y 用的是旧(默认 100×100)
+        尺寸 → y 坐标算错。在此兜底: 对所有 Image/Label 子控件强制
+        重算垂直居中, Spacer(纯 Widget)跳过(它填满整行高度)。
+        """
+        super().do_layout(*largs)
+        for child in self.children:
+            if isinstance(child, (Image, Label)):
+                child.y = self.y + (self.height - child.height) / 2
+
     def set_status(self, icon: str | None, text: str) -> None:
         """单段动态更新 — 43/45 调用点的常见情况, 等价于 set_segments([(icon, text)])。"""
         self.set_segments([(icon, text)])
@@ -105,6 +117,7 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
         # 判断会自动跳过它, 不影响文字拼接与改色。
         if self._centered:
             self.add_widget(Widget(size_hint_x=1))
+        _parent = self  # 闭包捕获, 避免循环变量延迟绑定问题
         for icon_name, text in segments:
             if icon_name is not None:
                 img = Image(
@@ -129,7 +142,15 @@ class IconLabel(BoxLayout):  # type: ignore[misc]
                 outline_width=self._outline_width,
                 pos_hint={"center_y": 0.5},
             )
-            label.bind(texture_size=lambda lb, ts: setattr(lb, "size", ts))
+            # texture_size 异步计算 → Label 尺寸变化 → Kivy 不会自动
+            # 触发父级 do_layout → pos_hint center_y 用旧尺寸算错 y。
+            # 绑定里同时更新尺寸 + 触发父级重布局, 配合 do_layout 覆写
+            # 在下一帧用真实尺寸重算垂直居中。
+            def _on_ts(lb: Label, ts: tuple[int, int], p: IconLabel = _parent) -> None:
+                setattr(lb, "size", ts)
+                p._trigger_layout()
+
+            label.bind(texture_size=_on_ts)
             label.text_size = (None, None)
             self.add_widget(label)
         if self._centered:

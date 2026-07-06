@@ -216,14 +216,18 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             row = TimePickerRow(label, key, self._settings_service)
             box.add_widget(row)
 
-        # 工作日多选行
-        work_days_row = self._build_work_days_row()
-        box.add_widget(work_days_row)
+        # 休息天数控件 — 与对赌结算后休息弹窗读写同一参数(rest_start/rest_end)
+        rest_days_row = self._build_rest_days_row()
+        box.add_widget(rest_days_row)
 
         return box
 
-    def _build_work_days_row(self) -> Widget:
-        """构建工作日多选行 — 标签左侧与上面对齐，按钮右侧与上面对齐。"""
+    def _build_rest_days_row(self) -> Widget:
+        """构建休息天数行 — 显示当前休息期, 可 +/- 调整。
+
+        与结算后 RestDaysDialog 读写同一对参数(rest_start/rest_end),
+        弹窗里填完这里自动显示, 这里改完弹窗也能读到。
+        """
         container = BoxLayout(
             orientation="horizontal",
             spacing=CARD_PADDING,
@@ -232,64 +236,104 @@ class SettingsScreen(BoxLayout):  # type: ignore[misc]
             height=44,
         )
 
-        # 标签固定宽度，左边缘 padding 与 TimePickerRow 标签对齐
         day_label = Label(
-            text="工作日",
+            text="休息天数",
             font_size=FONT_SIZE_BODY,
             color=self._to_rgba(TEXT_BROWN),
             size_hint=(None, 1),
-            width=56,
+            width=70,
             halign="left",
             valign="middle",
         )
         container.add_widget(day_label)
 
-        # 按钮区填满剩余空间，右边缘与 TimePickerRow 时间按钮对齐
-        btn_row = BoxLayout(
-            orientation="horizontal",
-            spacing=2,
+        self._rest_days_display = Label(
+            text=self._rest_days_display_text(),
+            font_size=FONT_SIZE_BODY,
+            color=self._to_rgba(TEXT_BROWN),
             size_hint=(1, 1),
+            halign="center",
+            valign="middle",
         )
-        container.add_widget(btn_row)
+        self._rest_days_display.bind(
+            size=lambda inst, _: setattr(inst, "text_size", (inst.width, None))
+        )
+        container.add_widget(self._rest_days_display)
 
-        # 读取当前工作日设置
-        current_days: list[int] = []
-        if self._settings_service:
-            current_days = self._settings_service.get_work_days()
+        minus_btn = PixelButton(
+            text="−",
+            size_mode="small",
+            size_hint=(None, 1),
+            width=44,
+            color=COLORS["CARD_SHADOW"],
+        )
+        minus_btn.bind(on_press=lambda _: self._adjust_rest_days(-1))
+        container.add_widget(minus_btn)
 
-        self._day_buttons: list[PixelButton] = []
-        self._day_values: list[int] = []
-
-        for weekday, label_char in DAY_LABELS:
-            is_selected = weekday in current_days
-            btn = PixelButton(
-                text=label_char,
-                size_mode="small",
-                size_hint=(1, 1),
-                color=COLORS["PRIMARY_YELLOW"] if is_selected else COLORS["CARD_SHADOW"],
-            )
-            btn._is_day_selected = is_selected
-            btn._weekday = weekday
-            btn.bind(on_press=lambda _b=btn: self._toggle_work_day(_b))
-            btn_row.add_widget(btn)
-            self._day_buttons.append(btn)
-            self._day_values.append(weekday)
+        plus_btn = PixelButton(
+            text="+",
+            size_mode="small",
+            size_hint=(None, 1),
+            width=44,
+            color=MINT_GREEN,
+        )
+        plus_btn.bind(on_press=lambda _: self._adjust_rest_days(1))
+        container.add_widget(plus_btn)
 
         return container
 
-    def _toggle_work_day(self, btn: PixelButton) -> None:
-        """切换工作日勾选状态。"""
-        btn._is_day_selected = not btn._is_day_selected
-        btn.set_color(
-            COLORS["PRIMARY_YELLOW"] if btn._is_day_selected else COLORS["CARD_SHADOW"]
-        )
+    def _rest_days_display_text(self) -> str:
+        """根据 rest_start/rest_end 计算当前休息天数。"""
+        if not self._settings_service:
+            return "未设置"
+        period = self._settings_service.get_rest_period()
+        if period is None:
+            return "未设置"
+        start, end = period
+        if not start or not end:
+            return "未设置"
+        try:
+            from datetime import datetime
+            s = datetime.strptime(start, "%Y-%m-%d")
+            e = datetime.strptime(end, "%Y-%m-%d")
+            days = (e - s).days + 1
+            return f"{days} 天 ({start[5:]} – {end[5:]})"
+        except Exception:
+            return "未设置"
 
-        # 构建新的 work_days 字符串
-        selected = sorted([
-            btn._weekday for btn in self._day_buttons
-            if btn._is_day_selected
-        ])
-        self._write("work_days", ",".join(str(d) for d in selected))
+    def _adjust_rest_days(self, delta: int) -> None:
+        """调整休息天数 — 从明天起算, 与结算弹窗语义一致。"""
+        if not self._settings_service:
+            return
+        from datetime import datetime, timedelta
+        from app.utils.clock import get_clock
+
+        today = get_clock().today_str()
+        tomorrow = (
+            datetime.strptime(today, "%Y-%m-%d") + timedelta(days=1)
+        ).strftime("%Y-%m-%d")
+
+        period = self._settings_service.get_rest_period()
+        if period is None or not period[0] or not period[1]:
+            # 未设置 → 从明天起, 至少 1 天
+            days = max(1, delta)
+        else:
+            start, end = period
+            try:
+                s = datetime.strptime(start, "%Y-%m-%d")
+                e = datetime.strptime(end, "%Y-%m-%d")
+                current_days = (e - s).days + 1
+                days = max(0, current_days + delta)
+            except Exception:
+                days = max(1, delta)
+
+        if days <= 0:
+            self._settings_service.set("rest_start", "")
+            self._settings_service.set("rest_end", "")
+        else:
+            self._settings_service.start_rest_period(tomorrow, days)
+
+        self._rest_days_display.text = self._rest_days_display_text()
 
     # ------------------------------------------------------------------
     # 奖惩金额组

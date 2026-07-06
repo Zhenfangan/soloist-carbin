@@ -82,6 +82,21 @@ class MockSettingsService:
         import json
         self.set("encouragements_user", json.dumps(items, ensure_ascii=False))
 
+    def get_rest_period(self) -> tuple[str, str] | None:
+        start = self.data.get("rest_start", "")
+        end = self.data.get("rest_end", "")
+        if not start or not end:
+            return None
+        return (start, end)
+
+    def start_rest_period(self, start_date: str, days: int) -> None:
+        from datetime import datetime, timedelta
+        end_date = (
+            datetime.strptime(start_date, "%Y-%m-%d") + timedelta(days=days - 1)
+        ).strftime("%Y-%m-%d")
+        self.data["rest_start"] = start_date
+        self.data["rest_end"] = end_date
+
 
 class MockSyncService:
     """模拟 SyncService，仅供测试。"""
@@ -366,40 +381,41 @@ class TestSettingsScreen:
         assert "个性化激励语句" in titles
         assert "其他" in titles
 
-    # ---- 工作日切换 ----
+    # ---- 休息天数 ----
 
-    def test_work_days_toggle(self) -> None:
-        """点击工作日按钮切换勾选状态。"""
+    def test_rest_days_default_display(self) -> None:
+        """默认未设置休息时显示'未设置'。"""
         svc = MockSettingsService()
         screen = SettingsScreen(settings_service=svc)
+        assert screen._rest_days_display.text == "未设置"
 
-        # 初始: Mon-Fri 选中 (5个 yellow, 2个 shadow)
-        day_btns = _find_work_day_buttons(screen)
-        assert len(day_btns) == 7
+    def test_rest_days_display_with_period(self) -> None:
+        """休息期内显示天数+日期范围。"""
+        svc = MockSettingsService()
+        svc.data["rest_start"] = "2026-07-07"
+        svc.data["rest_end"] = "2026-07-08"
+        screen = SettingsScreen(settings_service=svc)
+        assert "2 天" in screen._rest_days_display.text
+        assert "07-07" in screen._rest_days_display.text
+        assert "07-08" in screen._rest_days_display.text
 
-        initial_yellow = sum(1 for b in day_btns if b._is_day_selected)
-        assert initial_yellow == 5  # Mon-Fri
-
-        # 点击周六按钮 (index 5)
-        day_btns[5].dispatch("on_press")
-        assert day_btns[5]._is_day_selected
-        assert svc.get("work_days") == "1,2,3,4,5,6"
-
-        # 再点取消
-        day_btns[5].dispatch("on_press")
-        assert not day_btns[5]._is_day_selected
-        assert svc.get("work_days") == "1,2,3,4,5"
-
-    def test_work_days_remove_monday(self) -> None:
-        """取消周一选中。"""
+    def test_rest_days_adjust_creates_from_tomorrow(self) -> None:
+        """未设置时 + 按钮从明天起设 1 天。"""
         svc = MockSettingsService()
         screen = SettingsScreen(settings_service=svc)
+        screen._adjust_rest_days(1)
+        assert svc.data.get("rest_start", "") != ""
+        assert svc.data.get("rest_end", "") != ""
 
-        day_btns = _find_work_day_buttons(screen)
-        # 点击周一 (index 0)
-        day_btns[0].dispatch("on_press")
-        assert not day_btns[0]._is_day_selected
-        assert svc.get("work_days") == "2,3,4,5"
+    def test_rest_days_adjust_to_zero_clears(self) -> None:
+        """调到 ≤0 清空休息期。"""
+        svc = MockSettingsService()
+        svc.data["rest_start"] = "2026-07-07"
+        svc.data["rest_end"] = "2026-07-08"
+        screen = SettingsScreen(settings_service=svc)
+        screen._adjust_rest_days(-10)  # 2 - 10 ≤ 0 → 清除
+        assert svc.data.get("rest_start", "") == ""
+        assert svc.data.get("rest_end", "") == ""
 
     # ---- 分组折叠 ----
 
@@ -556,11 +572,6 @@ def _find_widgets(parent: Any, target_type: type) -> list[Any]:
         for child in parent.children:
             results.extend(_find_widgets(child, target_type))
     return results
-
-
-def _find_work_day_buttons(screen: SettingsScreen) -> list[PixelButton]:
-    """查找 SettingsScreen 中的工作日按钮。"""
-    return getattr(screen, "_day_buttons", [])
 
 
 def _find_version_label(screen: SettingsScreen) -> Label | None:
