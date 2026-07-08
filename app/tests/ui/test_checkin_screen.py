@@ -559,6 +559,62 @@ class TestCheckinScreen:
         Clock.tick()
         assert mock_checkin_service.check_in.called
 
+    def test_refresh_leaves_fresh_success_panel_alone(self, mock_checkin_service: MagicMock,
+                                                       mock_promise_service: MagicMock,
+                                                       mock_motivation_service: MagicMock,
+                                                       mock_report_service: MagicMock,
+                                                       mock_shooting_service: MagicMock) -> None:
+        """回归(真机): SoloistApp.on_resume() 在相机 Intent 返回后几乎与
+        CheckinSuccessPanel 刚创建同一瞬间触发, 调的正是 refresh()。refresh()
+        如果无条件 force-dismiss 任何 _active_success_panel, 就会把自己刚
+        打开的庆祝面板秒杀 —— 签到按钮状态是对了, 但用户再也看不到动画。
+
+        refresh() 必须只解挂"确实过期"(is_overdue()为真)的面板, 刚打开的
+        面板应该被放过。"""
+        screen = CheckinScreen(
+            checkin_service=mock_checkin_service,
+            promise_service=mock_promise_service,
+            motivation_service=mock_motivation_service,
+            report_service=mock_report_service,
+            shooting_service=mock_shooting_service,
+        )
+        Clock.tick()
+
+        fresh_panel = MagicMock()
+        fresh_panel.is_overdue.return_value = False
+        screen._active_success_panel = fresh_panel
+
+        screen.refresh()
+
+        fresh_panel._auto_dismiss.assert_not_called()
+        assert screen._active_success_panel is fresh_panel
+
+    def test_refresh_dismisses_overdue_success_panel(self, mock_checkin_service: MagicMock,
+                                                      mock_promise_service: MagicMock,
+                                                      mock_motivation_service: MagicMock,
+                                                      mock_report_service: MagicMock,
+                                                      mock_shooting_service: MagicMock) -> None:
+        """回归防复发: 面板真卡住(过期未消失)时, refresh() 仍必须强制解挂 ——
+        这是原始"签到后按钮卡住需切 Tab"bug 的兜底修复, 不能被上面那条
+        新增的"放过刚打开面板"逻辑连带削弱。"""
+        screen = CheckinScreen(
+            checkin_service=mock_checkin_service,
+            promise_service=mock_promise_service,
+            motivation_service=mock_motivation_service,
+            report_service=mock_report_service,
+            shooting_service=mock_shooting_service,
+        )
+        Clock.tick()
+
+        stale_panel = MagicMock()
+        stale_panel.is_overdue.return_value = True
+        screen._active_success_panel = stale_panel
+
+        screen.refresh()
+
+        stale_panel._auto_dismiss.assert_called_once()
+        assert screen._active_success_panel is None
+
     def test_checkin_advances_flow_synchronously(self, mock_checkin_service: MagicMock,
                                                   mock_promise_service: MagicMock,
                                                   mock_motivation_service: MagicMock,

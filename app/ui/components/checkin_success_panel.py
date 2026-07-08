@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import random
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -73,6 +74,7 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         self._dismissed = False
         self._hidden_widgets: list[tuple[Any, float]] = []
         self._bound_scrollview: Any = None
+        self._shown_at: float | None = None  # open() 时打真实墙钟时间戳
 
         # 初次同步位置/大小
         self._sync_to_card()
@@ -178,6 +180,7 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
     # --------------------------------------------------------------
 
     def open(self) -> None:
+        self._shown_at = time.monotonic()
         self._container = self._overlay_container()
         self._container.add_widget(self)
         self._sync_to_card()
@@ -199,6 +202,20 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         Clock.schedule_once(self._auto_dismiss, DISPLAY_DURATION)
         if self._frames and len(self._frames) > 1:
             self._start_frame_sequence()
+
+    def is_overdue(self) -> bool:
+        """面板是否已经展示超过 DISPLAY_DURATION 仍未消失(真墙钟时间判定,
+        不依赖 Kivy Clock 是否正常跳动)。
+
+        真机复现: 相机 Intent 返回后 Kivy Clock 有时不会立即恢复正常,
+        本面板自身的 4.5s 自动关闭定时器可能永远不触发, 需要外部(见
+        CheckinScreen.refresh())兜底强制解挂 —— 但只应对"确实卡住太久"
+        的面板下手, 不能对刚打开、还在正常展示中的面板也一并秒杀(那样
+        用户永远看不到庆祝动画, 见 on_resume 秒杀 bug)。
+        """
+        if self._shown_at is None:
+            return False
+        return (time.monotonic() - self._shown_at) >= DISPLAY_DURATION
 
     def _on_scroll_changed(self, *_args: Any) -> None:
         if not self._dismissed:

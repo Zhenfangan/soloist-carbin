@@ -286,14 +286,19 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
             return date_str
 
     def refresh(self) -> None:
-        """外部调用 — 切换 Tab 回打卡页时刷新数据。"""
-        # 先清理可能卡住的成功动画面板(真机相机后台→前台后偶发 _auto_dismiss
-        # 不触发, 面板残留盖住卡片按钮 → 看着像"签到没翻成签退"或"卡在小兔"。
-        # 面板挂在 root_scatter 上跨 tab 存活, 必须在此强制解挂)。
-        if self._active_success_panel is not None:
+        """外部调用 — 切换 Tab / App 从后台恢复(on_resume)时刷新数据。"""
+        # 只清理"确实过期"的成功动画面板(真机相机后台→前台后偶发
+        # _auto_dismiss 不触发, 面板残留盖住卡片按钮 → 看着像"签到没翻成
+        # 签退"或"卡在小兔")。面板挂在 root_scatter 上跨 tab 存活, 必须在
+        # 此强制解挂 —— 但只对 is_overdue() 为真的面板下手: refresh() 现在
+        # 也被 App.on_resume() 调用, 而 on_resume 在相机 Intent 返回后几乎
+        # 与面板刚创建同一瞬间触发, 无条件解挂会把刚打开、还在正常展示中
+        # 的庆祝面板一并秒杀, 导致签到按钮状态对了但用户再也看不到动画。
+        panel = self._active_success_panel
+        if panel is not None and panel.is_overdue():
             try:
-                self._active_success_panel._dismissed = False
-                self._active_success_panel._auto_dismiss(0)
+                panel._dismissed = False
+                panel._auto_dismiss(0)
             except Exception:
                 pass
             self._active_success_panel = None
