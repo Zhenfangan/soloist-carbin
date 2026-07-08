@@ -17,6 +17,10 @@ android.logcat_filters = *:S python:D
 android.accept_sdk_license = True
 android.presplash_color = #FFF8E8
 android.splash_color = #FFF8E8
+icon.filename = %(source.dir)s/data/icon.png
+icon.adaptive_foreground.filename = %(source.dir)s/data/icon_fg.png
+icon.adaptive_background.filename = %(source.dir)s/data/icon_bg.png
+presplash.filename = %(source.dir)s/data/presplash.png
 p4a.branch = develop
 
 [buildozer]
