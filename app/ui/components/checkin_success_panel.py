@@ -43,6 +43,11 @@ DISPLAY_DURATION = 4.5  # 总时长匹配帧序列加速后: (0.3+0.7×3+1.3×3)
 BOUNCE_HEIGHT = 8
 BOUNCE_HALF_DURATION = 0.2
 HEADER_HEIGHT = 48  # 与 PeriodCard._COLLAPSED_HEIGHT 一致
+CONTENT_HEIGHT = 132  # 与 PeriodCard._EXPANDED_HEIGHT(180) - HEADER_HEIGHT 一致。
+# 面板高度固定取这个值, 不再用 card.height - HEADER_HEIGHT 现算 —— 签退/
+# 拍照等操作可能在 open() 前就已把卡片折叠到 _COLLAPSED_HEIGHT(恰好等于
+# HEADER_HEIGHT), 若仍现算会得到 0, 导致整个庆祝动画从未可见(真机复现:
+# 签退瞬间卡片折叠, 面板高度归零)。
 
 
 def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> tuple[float, float, float, float]:
@@ -149,12 +154,14 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         # 再用 container.to_widget 转回 container 的本地坐标系, 使 pos 在缩放后的
         # 设计画布坐标系下才是正确的(否则挂到裸 Window 上时 to_window 的位置虽准,
         # 但 size 仍是未缩放的逻辑尺寸, 真机上会显得极小)。
-        wx, wy = card.to_window(card.x, card.y)
+        # 用 card.top(而非 card.y)做基准: 高度固定为 CONTENT_HEIGHT, 只让
+        # "顶部再减 HEADER_HEIGHT"这一锚点跟随卡片当前顶部—— 卡片本身高度
+        # 无论展开(180)/折叠(48)都不影响面板自身尺寸, 只影响它贴在哪。
+        wx, wy_top = card.to_window(card.x, card.top)
         if container is not Window:
-            wx, wy = container.to_widget(wx, wy)
-        new_h = max(0, card.height - HEADER_HEIGHT)
-        self.size = (card.width, new_h)
-        self.pos = (wx, wy)
+            wx, wy_top = container.to_widget(wx, wy_top)
+        self.size = (card.width, CONTENT_HEIGHT)
+        self.pos = (wx, wy_top - HEADER_HEIGHT - CONTENT_HEIGHT)
 
     def _on_card_changed(self, *_args: Any) -> None:
         if self._dismissed:

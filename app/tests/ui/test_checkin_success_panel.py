@@ -39,3 +39,35 @@ class TestIsOverdue:
         """open() 还没调用(理论上不应发生, 但防御性检查不应崩溃/误判)。"""
         panel = CheckinSuccessPanel(target_card=_make_card())
         assert panel.is_overdue() is False
+
+
+class TestPanelSizing:
+    """签退成功时卡片可能在 open() 前已折叠到 _COLLAPSED_HEIGHT(=HEADER_HEIGHT),
+    面板高度不能再用 card.height-HEADER_HEIGHT 反算 —— 否则算出 0, 整个庆祝
+    动画完全不可见(真机复现: 签退后卡片瞬间折叠, 用户从未看到过动画)。
+    """
+
+    def test_panel_visible_even_if_card_already_collapsed_before_open(self) -> None:
+        card = Widget(size=(300, 48), pos=(0, 0))  # 模拟 PeriodCard._COLLAPSED_HEIGHT
+        panel = CheckinSuccessPanel(target_card=card)
+        panel.open()
+        assert panel.height > 0
+
+    def test_panel_height_matches_expanded_card_content_area(self) -> None:
+        """卡片仍是展开态(_EXPANDED_HEIGHT=180)时, 面板高度应为
+        180-HEADER_HEIGHT(48)=132 —— 与此前正确行为保持一致, 不能因
+        改为固定高度而回归。"""
+        card = Widget(size=(300, 180), pos=(0, 0))
+        panel = CheckinSuccessPanel(target_card=card)
+        panel.open()
+        assert panel.height == 132
+
+    def test_panel_height_unaffected_by_card_shrinking_after_open(self) -> None:
+        """面板打开后, 若卡片(比如紧接着的签退动作)把高度收缩到
+        COLLAPSED, 面板自己的高度不应跟着塌缩到 0 —— 展示期间应保持
+        稳定可见。"""
+        card = Widget(size=(300, 180), pos=(0, 0))
+        panel = CheckinSuccessPanel(target_card=card)
+        panel.open()
+        card.height = 48  # 触发 _on_card_changed
+        assert panel.height > 0

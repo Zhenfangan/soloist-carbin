@@ -380,12 +380,21 @@ class SoloistApp(App):  # type: ignore[misc]
         on_pause 备份钩子同一套生命周期机制, 不依赖 Kivy Clock 是否正常
         跳动), 这里复用同一个 refresh(), 让"切 Tab 才能恢复"的效果自动
         发生, 不必等用户手动切换。
+
+        另一个独立回归: 相机 Intent 返回瞬间, IconLabel 里新建的像素图标
+        纹理偶发渲染成黑块(GL 上下文刚恢复的时机不稳定), 已知能自愈的
+        办法同样是"再刷新一次"(如手动切 Tab, 会重新创建一份图标纹理)。
+        故这里立即 refresh 一次之外, 再补一次延迟 refresh 兜底 —— 让黑块
+        图标也不必等用户手动切 Tab 才能修复。
         """
         sm = getattr(self, "_sm", None)
-        if sm is not None:
-            widget = sm._screen_widgets.get(sm.current)
-            if widget is not None and hasattr(widget, "refresh"):
-                widget.refresh()
+        if sm is None:
+            return True
+        widget = sm._screen_widgets.get(sm.current)
+        if widget is None or not hasattr(widget, "refresh"):
+            return True
+        widget.refresh()
+        Clock.schedule_once(lambda dt: widget.refresh(), 0.5)
         return True
 
     def on_stop(self) -> None:

@@ -110,6 +110,32 @@ class TestAppEntry:
             mock_widget.refresh.assert_called_once()
             assert result is True
 
+    def test_on_resume_schedules_delayed_second_refresh(self) -> None:
+        """真机复现: 相机 Intent 返回瞬间, IconLabel 的像素图标纹理偶发渲染成
+        黑块(GL 上下文刚恢复的时机不稳定); 已知能自愈的办法是再触发一次
+        refresh()(如手动切 Tab)。on_resume 应自动补一次延迟 refresh, 不必
+        等用户手动切 Tab 才能修复黑块图标。
+        """
+        with patch.dict(os.environ, {"KIVY_NO_ARGS": "1"}), \
+             patch("kivy.app.App.run", return_value=None):
+            from kivy.clock import Clock
+
+            from app.main import SoloistApp
+            app = SoloistApp()
+
+            mock_widget = MagicMock()
+            stub_sm = MagicMock()
+            stub_sm.current = "checkin"
+            stub_sm._screen_widgets = {"checkin": mock_widget}
+            app._sm = stub_sm
+
+            app.on_resume()
+            assert mock_widget.refresh.call_count == 1  # 立即那次
+
+            for _ in range(60):
+                Clock.tick()
+            assert mock_widget.refresh.call_count == 2  # 延迟兜底那次
+
     def test_on_resume_before_build_does_not_crash(self) -> None:
         """App 尚未 build()(_sm 不存在, 如启动极早期恢复)时 on_resume 不应崩溃。"""
         with patch.dict(os.environ, {"KIVY_NO_ARGS": "1"}), \
