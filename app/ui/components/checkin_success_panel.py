@@ -157,11 +157,16 @@ class CheckinSuccessPanel(FloatLayout):  # type: ignore[misc]
         # 用 card.top(而非 card.y)做基准: 高度固定为 CONTENT_HEIGHT, 只让
         # "顶部再减 HEADER_HEIGHT"这一锚点跟随卡片当前顶部—— 卡片本身高度
         # 无论展开(180)/折叠(48)都不影响面板自身尺寸, 只影响它贴在哪。
-        wx, wy_top = card.to_window(card.x, card.top)
+        # 基于卡片左下角(card.y)定位, 面板底部对齐卡片底部、往上盖住 header 以下的
+        # 内容区 —— 这是签到成功面板"嵌在卡片内"的正确锚点。高度用固定 CONTENT_HEIGHT
+        # (而非 card.height-HEADER)防止签退后卡片折叠到 48 时面板高度归零、动画不可见。
+        # (曾误改为按 card.top 反推, 真机 Scatter 缩放下 to_window(top) 会偏 height×
+        # (scale-1), 导致签到动画飘出卡片, 已回退。)
+        wx, wy = card.to_window(card.x, card.y)
         if container is not Window:
-            wx, wy_top = container.to_widget(wx, wy_top)
+            wx, wy = container.to_widget(wx, wy)
         self.size = (card.width, CONTENT_HEIGHT)
-        self.pos = (wx, wy_top - HEADER_HEIGHT - CONTENT_HEIGHT)
+        self.pos = (wx, wy)
 
     def _on_card_changed(self, *_args: Any) -> None:
         if self._dismissed:

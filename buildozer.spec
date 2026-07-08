@@ -8,7 +8,7 @@ version = 1.0.0
 requirements = hostpython3==3.11.9,python3==3.11.9,kivy,pillow,cython==3.0.11,plyer,pyjnius,certifi
 orientation = portrait
 fullscreen = 0
-android.permissions = INTERNET,CAMERA,READ_MEDIA_IMAGES,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+android.permissions = INTERNET,CAMERA,READ_MEDIA_IMAGES,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 android.archs = arm64-v8a
 android.api = 34
 android.minapi = 24

@@ -133,6 +133,18 @@ class TestAppEntry:
         assert "android.permission.CAMERA" in perms
         assert "android.permission.READ_EXTERNAL_STORAGE" in perms
 
+    def test_main_guides_manage_all_files_access(self) -> None:
+        """照片抢救要按路径直接读系统相机写的公共文件, scoped storage 下
+        READ_MEDIA_IMAGES 只对 MediaStore API 生效, shutil/File 直接读会 PermissionError
+        (2026-07-08 OPPO 真机坐实)。故 app 需引导用户开启'所有文件访问'
+        (MANAGE_EXTERNAL_STORAGE + isExternalStorageManager 检查 + 跳设置页)。"""
+        import inspect
+        from app.main import SoloistApp
+        src = inspect.getsource(SoloistApp)
+        assert "_request_manage_storage" in src
+        assert "isExternalStorageManager" in src
+        assert "ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION" in src
+
     def test_first_launch_detection(self) -> None:
         """验证首次启动检测逻辑。"""
         # 使用内存数据库模拟

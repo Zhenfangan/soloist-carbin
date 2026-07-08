@@ -100,8 +100,9 @@ class SoloistApp(App):  # type: ignore[misc]
         # 诊断脚手架 (Wave 2 Phase 1) — 必须在任何 widget 实例化之前
         _setup_debug_hooks()
 
-        # 安卓: 启动即请求相机/存储运行时权限
+        # 安卓: 启动即请求相机/存储运行时权限 + 引导"所有文件访问"
         self._request_android_permissions()
+        self._request_manage_storage()
 
         # 根布局: FloatLayout，子 widget 按添加顺序从底到顶堆叠
         self._root = FloatLayout()
@@ -349,6 +350,34 @@ class SoloistApp(App):  # type: ignore[misc]
             # 直接传权限字符串, 不走 Permission 枚举 —— 老版 p4a 的 Permission
             # 类可能没有 READ_MEDIA_IMAGES 常量, 用字符串最兼容。
             request_permissions(_required_android_permissions())
+        except Exception:
+            pass
+
+    def _request_manage_storage(self) -> None:
+        """引导用户开启"所有文件访问"(MANAGE_EXTERNAL_STORAGE)。
+
+        打卡照片由系统相机写入公共相册, owner 是系统相机、对本 app 属"他人文件"。
+        scoped storage 下 READ_MEDIA_IMAGES 只对 MediaStore API 生效, 用 shutil/File
+        直接按路径读会被拒(PermissionError 13, 2026-07-08 真机坐实), 照片就无法抢救
+        复制到私有目录 → 战报显示"未拍照"。开启"所有文件访问"后 app 才能直接读到
+        系统相机写的照片。已授予/非安卓/失败均静默跳过, 不重复打扰。
+        """
+        try:
+            from kivy.utils import platform  # type: ignore[import]
+            if str(platform) != "android":
+                return
+            from jnius import autoclass  # type: ignore[import]
+            Environment = autoclass("android.os.Environment")
+            if Environment.isExternalStorageManager():
+                return  # 已授予, 不再跳设置页
+            Intent = autoclass("android.content.Intent")
+            Settings = autoclass("android.provider.Settings")
+            Uri = autoclass("android.net.Uri")
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            activity = PythonActivity.mActivity
+            intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+            intent.setData(Uri.parse("package:org.soloist.soloistcarbin"))
+            activity.startActivity(intent)
         except Exception:
             pass
 
