@@ -16,6 +16,7 @@ Config.set("graphics", "width", os.environ.get("SOLOIST_WIN_W", "420"))
 Config.set("graphics", "height", os.environ.get("SOLOIST_WIN_H", "750"))
 
 from kivy.app import App  # noqa: E402
+from kivy.clock import Clock  # noqa: E402
 from kivy.graphics import Color, Rectangle  # noqa: E402
 from kivy.uix.boxlayout import BoxLayout  # noqa: E402
 from kivy.uix.floatlayout import FloatLayout  # noqa: E402
@@ -48,6 +49,7 @@ from app.ui.assets.landscape import BG_LANDSCAPE, get_grass_overlay_path  # noqa
 from app.ui.assets.loader import apply_pixel_filter, preload_all  # noqa: E402
 from app.ui.fonts import apply_global_font  # noqa: E402
 from app.ui.navigation import AppScreenManager, BottomTabBar  # noqa: E402
+from app.ui.components.loading_screen import LoadingScreen  # noqa: E402
 from app.ui.components.time_control_panel import TimeControlPanel  # noqa: E402
 from app.ui.screens.bet_screen import BetScreen  # noqa: E402
 from app.ui.screens.checkin_screen import CheckinScreen  # noqa: E402
@@ -101,6 +103,23 @@ class SoloistApp(App):  # type: ignore[misc]
         # 安卓: 启动即请求相机/存储运行时权限
         self._request_android_permissions()
 
+        # 根布局: FloatLayout，子 widget 按添加顺序从底到顶堆叠
+        self._root = FloatLayout()
+
+        # 先展示加载页(真 Kivy 渲染, 读条是 Clock 驱动的循环跑马灯动画,
+        # 不是原生 presplash 那种启动即静态定格的图片)。下面的重初始化
+        # (DB/字体/资源预加载/Service 构造)推到下一帧执行, 让这一帧先
+        # 画出来 —— 否则同步阻塞会导致加载页和最终界面之间只有一次
+        # 静态跳变, 读条一帧都不会动。
+        self._loading = LoadingScreen(icon_path="data/icon.png")
+        self._root.add_widget(self._loading)
+
+        Clock.schedule_once(lambda dt: self._init_and_show(), 0)
+
+        return self._root
+
+    def _init_and_show(self) -> None:
+        """真正的初始化与建界面 —— 延后一帧执行, 让加载页先有机会渲染。"""
         # 默认使用系统真实时钟（虚拟时钟在开发面板中手动开启）
         set_clock(SystemClock())
 
@@ -144,19 +163,18 @@ class SoloistApp(App):  # type: ignore[misc]
         self._ntfy_svc = NtfyPushService(settings_svc)
         self._ntfy_svc.start()
 
-        # 根布局: FloatLayout，子 widget 按添加顺序从底到顶堆叠
-        self._root = FloatLayout()
-
         # 判断首次启动
         settings_svc.is_first_launch()
         is_first = settings_svc.get("app_version") == ""
+
+        # 加载页任务完成, 停止跑马灯动画 —— _show_onboarding/_show_main
+        # 各自会 clear_widgets() 把它从 self._root 里移除。
+        self._loading.stop()
 
         if is_first:
             self._show_onboarding(settings_svc, checkin_svc, bet_svc, history_svc)
         else:
             self._show_main(settings_svc, checkin_svc, bet_svc, history_svc)
-
-        return self._root
 
     def _show_onboarding(
         self,
@@ -347,6 +365,27 @@ class SoloistApp(App):  # type: ignore[misc]
     def on_pause(self) -> bool:
         """后台化(切系统相机 / 按 Home)时备份数据并保活, 返回 True 避免被杀。"""
         self._backup_db()
+        return True
+
+    def on_resume(self) -> bool:
+        """从后台恢复(如相机 Intent 拍照返回)时强制刷新当前页。
+
+        真机复现: 相机 Intent 返回前台后 Kivy 的 Clock/渲染有时不会立即
+        恢复正常, CheckinSuccessPanel 的 4.5s 自动关闭定时器卡死, 面板
+        永久盖住签到/签退按钮; 唯一能恢复的办法是切到其他 Tab 再切回来
+        —— 因为切 Tab 触发的 on_enter→refresh() 里有强制解挂残留面板的
+        兜底逻辑(见 CheckinScreen.refresh())。
+
+        Android 恢复前台会可靠触发 on_resume(与本 App 已验证生效的
+        on_pause 备份钩子同一套生命周期机制, 不依赖 Kivy Clock 是否正常
+        跳动), 这里复用同一个 refresh(), 让"切 Tab 才能恢复"的效果自动
+        发生, 不必等用户手动切换。
+        """
+        sm = getattr(self, "_sm", None)
+        if sm is not None:
+            widget = sm._screen_widgets.get(sm.current)
+            if widget is not None and hasattr(widget, "refresh"):
+                widget.refresh()
         return True
 
     def on_stop(self) -> None:
