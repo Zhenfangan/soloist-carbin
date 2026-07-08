@@ -8,7 +8,7 @@ from pathlib import Path
 from kivy.clock import Clock
 from kivy.logger import Logger
 
-from app.utils.storage import scan_media
+from app.utils.storage import get_private_photos_dir, scan_media
 
 from .camera_service import CameraService
 
@@ -30,22 +30,47 @@ def _dispatch_to_main_thread(callback: Callable[[], None]) -> None:
     Clock.schedule_once(lambda _dt: callback(), 0)
 
 
+def _rescue_to_private(src: Path, private_dir_provider: Callable[[], Path]) -> Path:
+    """把系统相机刚写入公共相册的照片, 抢救性复制到 app 私有目录并返回私有路径。
+
+    真机坐实(2026-07-08 OPPO): 公共相册的照片在 scoped storage 下不持久, 回调后
+    几分钟就被系统当孤儿文件清理(DB 里 photo_path 有值但文件已消失)。但回调这一刻
+    文件还在(Path.exists() 为真), 立即复制到 app 完全掌控的私有外部目录, 战报即可
+    稳定读取。复制失败则退回原公共路径(至少当次能显示), 绝不丢回调。
+    """
+    try:
+        import shutil
+
+        from app.utils.clock import get_clock
+        date = get_clock().today_str()
+        dest_dir = private_dir_provider() / date
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / src.name
+        shutil.copy2(src, dest)
+        return dest
+    except Exception as e:  # noqa: BLE001
+        Logger.error(f"AndroidCamera: 抢救照片到私有目录失败 {e!r}")
+        return src
+
+
 def _make_result_handler(
     on_done: Callable[[Path | None], None],
+    private_dir_provider: Callable[[], Path] | None = None,
 ) -> Callable[[str | None], None]:
     """构造 plyer take_picture 的 on_complete 回调。
 
     on_complete 在非主线程被调用(见 _dispatch_to_main_thread)。文件存在性检查、
-    媒体库扫描(仅发 Android 广播, 不碰 graphics)留在回调线程即可; 唯独最终的
-    on_done(会触发大量 graphics 操作)必须切回主线程。
+    抢救复制(纯 IO, 不碰 graphics)留在回调线程即可; 唯独最终的 on_done(会触发大量
+    graphics 操作)必须切回主线程。private_dir_provider 可注入以便单测。
     """
+    provider = private_dir_provider or get_private_photos_dir
 
     def _on_complete(filename: str | None) -> None:
         Logger.info(f"AndroidCamera: 拍照回调 filename={filename}")
         if filename and Path(filename).exists():
-            path = Path(filename)
-            scan_media(path)
-            _dispatch_to_main_thread(lambda: on_done(path))
+            src = Path(filename)
+            final = _rescue_to_private(src, provider)
+            _dispatch_to_main_thread(lambda: on_done(final))
         else:
             _dispatch_to_main_thread(lambda: on_done(None))
 

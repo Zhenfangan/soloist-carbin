@@ -43,6 +43,35 @@ def _android_pictures_dir() -> Path:
         return Path("/sdcard/Pictures/Soloist")
 
 
+def get_private_photos_dir() -> Path:
+    """app 私有外部目录下的照片根目录(自动创建)。
+
+    打卡照片存这里而非公共相册: 真机坐实(2026-07-08 OPPO), 系统相机写入公共
+    Pictures 的照片在 scoped storage 下不持久 —— 尤其卸载重装后 app 换了 uid,
+    旧相册目录不再归属它, 照片会被系统当孤儿文件清理(DB 里 photo_path 有值但
+    文件已消失)。app 私有外部目录(getExternalFilesDir)由 app 完全掌控、读写零
+    权限、不受 uid 变化影响, 是打卡凭证最稳的落脚点。桌面→Desktop/soloist_photos。
+    """
+    if _platform() == "android":
+        try:
+            from jnius import autoclass  # type: ignore[import]
+            PythonActivity = autoclass("org.kivy.android.PythonActivity")
+            ctx = PythonActivity.mActivity
+            base = ctx.getExternalFilesDir("Pictures").getAbsolutePath()
+            path = Path(base) / "Soloist"
+        except Exception:
+            path = Path(
+                "/sdcard/Android/data/org.soloist.soloistcarbin/files/Pictures/Soloist"
+            )
+    else:
+        path = Path.home() / "Desktop" / "soloist_photos"
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return path
+
+
 def scan_media(path: Path) -> None:
     """通知安卓媒体库扫描新文件, 让相册立即可见(桌面端空操作)。"""
     if _platform() != "android":

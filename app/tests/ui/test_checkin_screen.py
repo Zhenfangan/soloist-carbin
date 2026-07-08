@@ -640,10 +640,42 @@ class TestCheckinScreen:
         # 模拟相机 on_done 回调直接落到 _finish_checkin; 关键: 全程不推进 Clock
         screen._finish_checkin("morning", None)
 
-        assert screen._promise_shown is True, "签到后男友奖励弹窗未同步弹出(仍依赖 Clock)"
+        # 状态同步重刷(卡片翻面不依赖 Clock; 承诺框延后到动画消失后弹, 见
+        # test_promise_deferred_until_success_animation_dismissed)
         assert mock_checkin_service.get_today_status.call_count > calls_before, (
             "签到后未同步重刷状态(卡片不会翻面, 仍依赖 Clock)"
         )
+
+    def test_promise_deferred_until_success_animation_dismissed(
+        self, mock_checkin_service: MagicMock, mock_promise_service: MagicMock,
+        mock_motivation_service: MagicMock, mock_report_service: MagicMock,
+        mock_shooting_service: MagicMock,
+    ) -> None:
+        """有庆祝动画时, 男友奖励框(全屏模态)必须等动画自然消失后再弹, 否则会
+        立即盖住签到动画 —— 用户就看不到签到动画了。真机 2026-07-08 坐实: 签退
+        动画看得到、签到看不到, 差异正是签到后紧跟这个模态框。"""
+        from kivy.uix.widget import Widget
+        screen = CheckinScreen(
+            checkin_service=mock_checkin_service, promise_service=mock_promise_service,
+            motivation_service=mock_motivation_service, report_service=mock_report_service,
+            shooting_service=mock_shooting_service,
+        )
+        Clock.tick()
+        # 塞真实卡片, 让签到成功动画得以创建
+        card = Widget(size=(300, 180), pos=(0, 0))
+        screen._period_cards["morning"] = card
+
+        screen._finish_checkin("morning", "/tmp/x.jpg")
+
+        # 动画播放中, 承诺框未弹(否则立即遮挡动画)
+        assert screen._promise_shown is False, "承诺框不应在动画播放时弹出(会遮挡签到动画)"
+        assert screen._active_success_panel is not None, "签到成功动画应已创建"
+
+        # 动画自然结束
+        screen._active_success_panel._auto_dismiss(0)
+
+        # 动画消失后承诺框才弹
+        assert screen._promise_shown is True, "动画结束后应弹出承诺框"
 
     def test_checkout_flow(self, mock_checkin_service: MagicMock,
                             mock_promise_service: MagicMock,

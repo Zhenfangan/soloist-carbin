@@ -101,14 +101,14 @@ _RABBIT_FRAMES = [
     for i in range(1, 8)
 ]
 def _photo_base() -> Path:
-    """图片根目录 — 与 AndroidCameraService/DesktopCameraMock 实际存盘位置保持一致。
+    """图片根目录 — 与 AndroidCameraService 抢救复制后的存盘位置保持一致。
 
-    真机拍照存到公共 Pictures/Soloist (get_pictures_dir()), 而非旧的
-    user_data/photos (仅桌面 mock 用); 硬编码旧路径会导致战报永远找不到
-    真机拍摄的照片, 格子一直显示占位图。
+    真机拍照经 _rescue_to_private 复制到 app 私有外部目录(get_private_photos_dir),
+    而非易失的公共 Pictures/Soloist —— 后者在 scoped storage 下会被系统清理, 战报
+    读不到就一直显示占位图(2026-07-08 真机坐实)。私有目录 app 完全掌控、稳定持久。
     """
-    from app.utils.storage import get_pictures_dir
-    return get_pictures_dir()
+    from app.utils.storage import get_private_photos_dir
+    return get_private_photos_dir()
 
 # 格标签：纯文本，无 emoji（SmileySans 不含 emoji 字形）
 _SLOT_LABELS: dict[tuple[str, str], str] = {

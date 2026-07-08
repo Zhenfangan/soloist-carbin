@@ -547,10 +547,15 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         # 淡入能在恢复那几帧内完成)。成功动画退化为可有可无的装饰叠加。
         self._refresh_status()
         self._check_all_completed()
-        # 装饰性成功动画(真机 Clock 空转时退化为静态帧, 切 tab 由 refresh 清理)
-        self._show_success_panel(card, is_checkin=True, is_night=period in ("evening", "night"))
-        # 男友承诺输入(功能性, 首次签到后引导设置今日奖励)
-        self._show_promise_dialog()
+        # 庆祝动画 + 男友承诺框: 承诺框(全屏模态)挂到动画 dismiss 后再弹, 避免立即
+        # 盖住签到动画; 若动画未创建(无卡片/异常, _active_success_panel 为 None)则兜底
+        # 同步弹, 不然承诺框永不出现。
+        self._show_success_panel(
+            card, is_checkin=True, is_night=period in ("evening", "night"),
+            after_dismiss=self._show_promise_dialog,
+        )
+        if self._active_success_panel is None:
+            self._show_promise_dialog()
 
     def _on_checkout(self, period: str) -> None:
         """签退回调 — 若在时段结束时间前签退，先弹确认框。"""
@@ -619,22 +624,32 @@ class CheckinScreen(ScrollView):  # type: ignore[misc]
         # 装饰性签退动画(签退后卡片折叠成完成态, 面板多半不可见, 纯兜底)
         self._show_success_panel(card, is_checkin=False, is_night=period in ("evening", "night"))
 
-    def _show_success_panel(self, card: Any, *, is_checkin: bool, is_night: bool) -> None:
-        """展示打卡/签退成功动画(纯装饰)。
+    def _show_success_panel(
+        self, card: Any, *, is_checkin: bool, is_night: bool,
+        after_dismiss: Callable[[], None] | None = None,
+    ) -> None:
+        """展示打卡/签退成功动画。
 
-        真机相机 Intent 返回后 Clock 可能空转 → 面板退化为静态帧且不自动
-        关闭; 因此所有功能性推进(刷新/承诺弹窗)都不放这里, 面板 dismiss
-        仅清理自身引用, refresh()/切 tab 会兜底解挂残留面板。
+        after_dismiss: 动画自然消失后才执行的回调(如签到的男友奖励框)。签到成功
+        动画播放期间绝不能弹全屏模态框, 否则会立即盖住动画, 用户就看不到签到动画了
+        (真机 2026-07-08 坐实: 签退动画看得到、签到看不到, 差异正是签到后紧跟奖励框)。
+        故把奖励框挂到动画 dismiss 回调, 等庆祝播完再弹。card 为空/创建失败时本方法把
+        _active_success_panel 置 None, 由调用方兜底同步执行 after_dismiss(不然永不弹)。
         """
         if card is None:
+            self._active_success_panel = None
             return
         try:
+            def _on_dismiss() -> None:
+                self._active_success_panel = None
+                if after_dismiss is not None:
+                    after_dismiss()
             panel = CheckinSuccessPanel(
                 target_card=card,
                 is_checkin=is_checkin,
                 is_night=is_night,
                 settings_service=self._settings_service,
-                on_dismiss_callback=lambda: setattr(self, "_active_success_panel", None),
+                on_dismiss_callback=_on_dismiss,
             )
             panel.open()
             self._active_success_panel = panel

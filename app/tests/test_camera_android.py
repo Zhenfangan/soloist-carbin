@@ -38,16 +38,43 @@ class TestDispatchToMainThread:
 
 
 class TestResultHandler:
-    def test_existing_file_dispatches_path_on_main_thread(self, tmp_path: Path) -> None:
-        photo = tmp_path / "morning_in.jpg"
-        photo.write_bytes(b"\x89PNG\r\n")
+    def test_existing_file_rescued_into_private_dir(self, tmp_path: Path) -> None:
+        """系统相机写入公共相册的照片, 回调这一刻立即抢救复制到 app 私有目录;
+        on_done 收到的是【私有目录】里的路径(而非易失的公共路径), 且内容一致。"""
+        public = tmp_path / "public"
+        public.mkdir()
+        photo = public / "morning_in.jpg"
+        photo.write_bytes(b"\x89PNG\r\nDATA")
+        private_root = tmp_path / "private"
         got: list[Path | None] = []
-        handler = _make_result_handler(lambda p: got.append(p))
+        handler = _make_result_handler(
+            lambda p: got.append(p), private_dir_provider=lambda: private_root
+        )
 
         handler(str(photo))
         assert got == []            # 未同步执行(否则真机在非主线程炸)
         Clock.tick()
-        assert got == [photo]       # 主线程收到 Path
+        assert len(got) == 1
+        result = got[0]
+        assert result is not None
+        assert private_root in result.parents      # 落在私有目录下
+        assert result.exists()
+        assert result.read_bytes() == b"\x89PNG\r\nDATA"
+        assert result.name == "morning_in.jpg"
+
+    def test_rescue_failure_falls_back_to_original_path(self, tmp_path: Path) -> None:
+        """复制到私有目录失败时, 退回原始路径(至少当次战报能显示), 不丢回调。"""
+        photo = tmp_path / "evening_in.jpg"
+        photo.write_bytes(b"x")
+        got: list[Path | None] = []
+
+        def _boom() -> Path:
+            raise OSError("private dir unavailable")
+
+        handler = _make_result_handler(lambda p: got.append(p), private_dir_provider=_boom)
+        handler(str(photo))
+        Clock.tick()
+        assert got == [photo]       # 退回原路径
 
     def test_missing_file_dispatches_none(self, tmp_path: Path) -> None:
         got: list[Path | None] = []
