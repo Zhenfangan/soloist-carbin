@@ -340,17 +340,15 @@ class SoloistApp(App):  # type: ignore[misc]
         return DesktopCameraMock()
 
     def _request_android_permissions(self) -> None:
-        """安卓运行时权限请求(相机/存储); 非安卓或失败均静默跳过。"""
+        """安卓运行时权限请求(相机/读写媒体); 非安卓或失败均静默跳过。"""
         try:
             from kivy.utils import platform  # type: ignore[import]
             if str(platform) != "android":
                 return
-            from android.permissions import Permission, request_permissions  # type: ignore[import]
-            request_permissions([
-                Permission.CAMERA,
-                Permission.WRITE_EXTERNAL_STORAGE,
-                Permission.READ_EXTERNAL_STORAGE,
-            ])
+            from android.permissions import request_permissions  # type: ignore[import]
+            # 直接传权限字符串, 不走 Permission 枚举 —— 老版 p4a 的 Permission
+            # 类可能没有 READ_MEDIA_IMAGES 常量, 用字符串最兼容。
+            request_permissions(_required_android_permissions())
         except Exception:
             pass
 
@@ -381,11 +379,12 @@ class SoloistApp(App):  # type: ignore[misc]
         跳动), 这里复用同一个 refresh(), 让"切 Tab 才能恢复"的效果自动
         发生, 不必等用户手动切换。
 
-        另一个独立回归: 相机 Intent 返回瞬间, IconLabel 里新建的像素图标
-        纹理偶发渲染成黑块(GL 上下文刚恢复的时机不稳定), 已知能自愈的
-        办法同样是"再刷新一次"(如手动切 Tab, 会重新创建一份图标纹理)。
-        故这里立即 refresh 一次之外, 再补一次延迟 refresh 兜底 —— 让黑块
-        图标也不必等用户手动切 Tab 才能修复。
+        关键(2026-07-08 真机坐实): Android 的生命周期回调(onResume/
+        onActivityResult)运行在 Android UI 线程, 与 Kivy 渲染线程不是同一个。
+        若在这里直接调 refresh()(含创建/移除 widget 的 graphics 操作)会抛
+        'Cannot change graphics instruction outside the main Kivy thread', 反而
+        打断刷新。故必须经 Clock.schedule_once 交给主线程下一帧执行(与相机回调
+        edge 走同一套跨线程约定, 见 camera_android._dispatch_to_main_thread)。
         """
         sm = getattr(self, "_sm", None)
         if sm is None:
@@ -393,8 +392,7 @@ class SoloistApp(App):  # type: ignore[misc]
         widget = sm._screen_widgets.get(sm.current)
         if widget is None or not hasattr(widget, "refresh"):
             return True
-        widget.refresh()
-        Clock.schedule_once(lambda dt: widget.refresh(), 0.5)
+        Clock.schedule_once(lambda dt: widget.refresh(), 0)
         return True
 
     def on_stop(self) -> None:
@@ -402,6 +400,23 @@ class SoloistApp(App):  # type: ignore[misc]
         self._backup_db()
         if hasattr(self, "_ntfy_svc"):
             self._ntfy_svc.stop()
+
+
+def _required_android_permissions() -> list[str]:
+    """运行时申请的安卓权限清单(权限字符串, 与平台版本无关地全部声明, 系统按
+    版本选择性授予/弹框)。
+
+    READ_MEDIA_IMAGES 是关键: targetSdk 34 下, 打卡照片由系统相机进程写入公共
+    相册(对本 app 属"他人文件"), 本 app 读取必须持有它; 仅 READ_EXTERNAL_STORAGE
+    在 API33+ 被系统忽略(不弹框、granted=false) → 战报照片读不出显示白色。
+    保留 READ/WRITE_EXTERNAL_STORAGE 兼容 Android 12 及以下。
+    """
+    return [
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+    ]
 
 
 def main() -> None:

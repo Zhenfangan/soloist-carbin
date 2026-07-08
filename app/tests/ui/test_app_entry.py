@@ -84,37 +84,15 @@ class TestAppEntry:
         retrieved = get_clock()
         assert isinstance(retrieved, SystemClock)
 
-    def test_on_resume_refreshes_current_screen(self) -> None:
-        """回归(真机): 相机 Intent 返回前台后, Kivy 的 Clock/渲染有时不会
-        立即恢复正常, CheckinSuccessPanel 的 4.5s 自动关闭定时器卡死, 面板
-        永久盖住按钮 —— 用户唯一能恢复的办法是切到其他 Tab 再切回来, 因为
-        切 Tab 触发的 on_enter→refresh() 里有强制解挂面板的兜底逻辑。
+    def test_on_resume_refreshes_current_screen_via_clock(self) -> None:
+        """从后台恢复(相机 Intent 返回 / 切回前台)时刷新当前页, 但必须经
+        Clock.schedule_once 切回 Kivy 主线程。
 
-        Android 恢复前台会可靠触发 App.on_resume()(与本 App 已验证生效的
-        on_pause 备份钩子同一套生命周期机制), 这里复用同一个 refresh(),
-        让"切 Tab 才能恢复"的效果自动发生, 不需要用户手动操作。
-        """
-        with patch.dict(os.environ, {"KIVY_NO_ARGS": "1"}), \
-             patch("kivy.app.App.run", return_value=None):
-            from app.main import SoloistApp
-            app = SoloistApp()
-
-            mock_widget = MagicMock()
-            stub_sm = MagicMock()
-            stub_sm.current = "checkin"
-            stub_sm._screen_widgets = {"checkin": mock_widget}
-            app._sm = stub_sm
-
-            result = app.on_resume()
-
-            mock_widget.refresh.assert_called_once()
-            assert result is True
-
-    def test_on_resume_schedules_delayed_second_refresh(self) -> None:
-        """真机复现: 相机 Intent 返回瞬间, IconLabel 的像素图标纹理偶发渲染成
-        黑块(GL 上下文刚恢复的时机不稳定); 已知能自愈的办法是再触发一次
-        refresh()(如手动切 Tab)。on_resume 应自动补一次延迟 refresh, 不必
-        等用户手动切 Tab 才能修复黑块图标。
+        根因(2026-07-08 真机坐实): Android 的生命周期回调(onActivityResult/
+        onResume)运行在 Android UI 线程, 与 Kivy 渲染线程不是同一个; 在该线程
+        里直接 refresh()(含创建/移除 widget 等 graphics 操作)会抛
+        'Cannot change graphics instruction outside the main Kivy thread'。
+        故 on_resume 里绝不能同步直接调 refresh, 而要交给 Clock 在主线程下一帧跑。
         """
         with patch.dict(os.environ, {"KIVY_NO_ARGS": "1"}), \
              patch("kivy.app.App.run", return_value=None):
@@ -129,12 +107,11 @@ class TestAppEntry:
             stub_sm._screen_widgets = {"checkin": mock_widget}
             app._sm = stub_sm
 
-            app.on_resume()
-            assert mock_widget.refresh.call_count == 1  # 立即那次
-
-            for _ in range(60):
-                Clock.tick()
-            assert mock_widget.refresh.call_count == 2  # 延迟兜底那次
+            result = app.on_resume()
+            assert result is True
+            assert mock_widget.refresh.call_count == 0  # 未同步(否则真机非主线程炸)
+            Clock.tick()
+            assert mock_widget.refresh.call_count == 1  # 主线程下一帧执行
 
     def test_on_resume_before_build_does_not_crash(self) -> None:
         """App 尚未 build()(_sm 不存在, 如启动极早期恢复)时 on_resume 不应崩溃。"""
@@ -143,6 +120,18 @@ class TestAppEntry:
             from app.main import SoloistApp
             app = SoloistApp()
             assert app.on_resume() is True
+
+    def test_required_permissions_include_read_media_images(self) -> None:
+        """Android 13+ (targetSdk 34) 读取系统相机写入公共相册的打卡照片, 必须
+        持有 READ_MEDIA_IMAGES; 仅 READ_EXTERNAL_STORAGE 在 API33+ 被系统忽略
+        (granted=false 且不弹框), 导致战报照片读不出、显示白色 —— 2026-07-08
+        OPPO 真机 dumpsys 坐实。故运行时申请清单必须含 READ_MEDIA_IMAGES, 同时
+        保留 READ_EXTERNAL_STORAGE 兼容 Android 12-。"""
+        from app.main import _required_android_permissions
+        perms = _required_android_permissions()
+        assert "android.permission.READ_MEDIA_IMAGES" in perms
+        assert "android.permission.CAMERA" in perms
+        assert "android.permission.READ_EXTERNAL_STORAGE" in perms
 
     def test_first_launch_detection(self) -> None:
         """验证首次启动检测逻辑。"""
